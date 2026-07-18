@@ -1,0 +1,299 @@
+const fs = require("fs");
+const Resource = require("../models/Resource");
+const Notification = require("../models/Notification");
+const countPages = require("../utils/pageCounter");
+const sanitizeError = require("../utils/sanitizeError");
+const getPreviewSnippet = require("../utils/previewSnippet");
+const cloudinary = require("../config/cloudinary");
+
+function formatFileSize(bytes) {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatResource(resource) {
+  return {
+    id: resource._id,
+    title: resource.title,
+    type: resource.type,
+    department: resource.department,
+    course: resource.course,
+    level: resource.level,
+    semester: resource.semester,
+    session: resource.session,
+    fileName: resource.fileName,
+    fileExtension: resource.fileExtension,
+    pages: resource.pages,
+    size: formatFileSize(resource.fileSizeBytes),
+    downloads: resource.downloads,
+    status: resource.status,
+    uploader: resource.uploader?.fullName || undefined,
+    createdAt: resource.createdAt,
+  };
+}
+
+function getPagination(req) {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(req.query.limit) || 12));
+  return { page, limit, skip: (page - 1) * limit };
+}
+
+// @route POST /api/resources/upload
+async function uploadResource(req, res) {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: "A file is required" });
+    }
+
+    const { title, type, department, course, level, semester, session } = req.body;
+
+    const fileBuffer = fs.readFileSync(req.file.path);
+    const pages = await countPages(fileBuffer, req.file.originalname);
+    const previewResult = await getPreviewSnippet(fileBuffer, req.file.originalname);
+
+    const cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
+      resource_type: "raw",
+      folder: "sharef_resources",
+    });
+
+    fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
+
+    const resource = await Resource.create({
+      title, type, department, course, level, semester, session,
+      uploader: req.user.id,
+      fileName: req.file.originalname,
+      fileUrl: cloudinaryResult.secure_url,
+      cloudinaryPublicId: cloudinaryResult.public_id,
+      fileSizeBytes: req.file.size,
+      fileExtension: req.file.originalname.split(".").pop().toLowerCase(),
+      pages,
+      previewAvailable: previewResult.available,
+      previewSnippet: previewResult.available ? previewResult.snippet : "",
+      previewMessage: !previewResult.available ? previewResult.message : "",
+    });
+
+    await Notification.create({ resource: resource._id, recipient: null, type: "new_upload" });
+
+    return res.status(201).json({
+      success: true,
+      message: "Resource submitted for review. You'll be notified once it's approved.",
+      resource: {
+        id: resource._id, title: resource.title, type: resource.type,
+        course: resource.course, pages: resource.pages,
+        size: formatFileSize(resource.fileSizeBytes), status: resource.status,
+      },
+    });
+  } catch (err) {
+    if (req.file) fs.unlink(req.file.path, () => {});
+    return res.status(500).json({ success: false, message: "Upload failed", error: sanitizeError(err) });
+  }
+}
+
+// @route GET /api/resources
+// Public browse/search of approved resources with optional filters + pagination
+async function getResources(req, res) {
+  try {
+    const { department, course, level, semester, type, session, search, sort } = req.query;
+    const { page, limit, skip } = getPagination(req);
+
+    const filter = { status: "approved" };
+    if (department) filter.department = department;
+    if (course) filter.course = course;
+    if (level) filter.level = level;
+    if (semester) filter.semester = semester;
+    if (type) filter.type = type;
+    if (session) filter.session = session;
+    if (search) filter.title = { $regex: search.trim(), $options: "i" };
+
+    const sortOption = sort === "popular" ? { downloads: -1 } : { createdAt: -1 };
+
+    const [resources, total] = await Promise.all([
+      Resource.find(filter)
+        .populate("uploader", "fullName")
+        .sort(sortOption)
+        .skip(skip)
+        .limit(limit),
+      Resource.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: resources.length,
+      total,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      resources: resources.map(formatResource),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not fetch resources", error: sanitizeError(err) });
+  }
+}
+
+// @route GET /api/resources/my-uploads
+// Everything the logged-in user has uploaded, any status, optionally filtered by status
+async function getMyUploads(req, res) {
+  try {
+    const { page, limit, skip } = getPagination(req);
+
+    const filter = { uploader: req.user.id };
+    if (req.query.status) filter.status = req.query.status;
+
+    const [resources, total] = await Promise.all([
+      Resource.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Resource.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: resources.length,
+      total,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      resources: resources.map((r) => ({ ...formatResource(r), rejectionReason: r.rejectionReason })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not fetch your uploads", error: sanitizeError(err) });
+  }
+}
+
+// @route GET /api/resources/:id
+// Approved resources are visible to anyone; pending/rejected only to the uploader or an admin
+async function getResourceById(req, res) {
+  try {
+    const resource = await Resource.findById(req.params.id).populate("uploader", "fullName");
+    if (!resource) {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+
+    const isOwner = resource.uploader?._id?.toString() === req.user.id;
+    const isAdmin = req.user.role === "admin";
+    if (resource.status !== "approved" && !isOwner && !isAdmin) {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+
+    return res.status(200).json({ success: true, resource: formatResource(resource) });
+  } catch (err) {
+    if (err.name === "CastError") {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+    return res.status(500).json({ success: false, message: "Could not fetch resource", error: sanitizeError(err) });
+  }
+}
+
+// @route GET /api/resources/:id/download
+// Files live on Cloudinary (see resource.fileUrl / cloudinaryPublicId set during
+// upload) — there is no local file on disk, so we redirect to the hosted URL
+// rather than trying to stream a local path.
+async function downloadResource(req, res) {
+  try {
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+
+    const isOwner = resource.uploader.toString() === req.user.id;
+    const isAdmin = req.user.role === "admin";
+    if (resource.status !== "approved" && !isOwner && !isAdmin) {
+      return res.status(403).json({ success: false, message: "This resource is not available for download" });
+    }
+
+    if (!resource.fileUrl) {
+      return res.status(410).json({ success: false, message: "The file for this resource is no longer available" });
+    }
+
+    // Fire-and-forget so a slow counter update never delays the redirect
+    Resource.findByIdAndUpdate(resource._id, { $inc: { downloads: 1 } }).catch(() => {});
+
+    return res.redirect(resource.fileUrl);
+  } catch (err) {
+    if (err.name === "CastError") {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+    return res.status(500).json({ success: false, message: "Download failed", error: sanitizeError(err) });
+  }
+}
+
+// @route GET /api/resources/admin/pending  (admin only)
+async function getPendingResources(req, res) {
+  try {
+    const { page, limit, skip } = getPagination(req);
+
+    const [resources, total] = await Promise.all([
+      Resource.find({ status: "pending" })
+        .populate("uploader", "fullName email matricNumber")
+        .sort({ createdAt: 1 }) // oldest first, so the queue clears in order
+        .skip(skip)
+        .limit(limit),
+      Resource.countDocuments({ status: "pending" }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      count: resources.length,
+      total,
+      page,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      resources: resources.map((r) => ({ ...formatResource(r), uploader: r.uploader })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not fetch pending resources", error: sanitizeError(err) });
+  }
+}
+
+// @route PATCH /api/resources/:id/approve  (admin only)
+async function approveResource(req, res) {
+  try {
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+    if (resource.status === "approved") {
+      return res.status(400).json({ success: false, message: "Resource is already approved" });
+    }
+
+    resource.status = "approved";
+    resource.rejectionReason = "";
+    await resource.save();
+
+    return res.status(200).json({ success: true, message: "Resource approved", resource: formatResource(resource) });
+  } catch (err) {
+    if (err.name === "CastError") {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+    return res.status(500).json({ success: false, message: "Could not approve resource", error: sanitizeError(err) });
+  }
+}
+
+// @route PATCH /api/resources/:id/reject  (admin only)
+async function rejectResource(req, res) {
+  try {
+    const { reason } = req.body;
+
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+
+    resource.status = "rejected";
+    resource.rejectionReason = reason;
+    await resource.save();
+
+    return res.status(200).json({ success: true, message: "Resource rejected", resource: formatResource(resource) });
+  } catch (err) {
+    if (err.name === "CastError") {
+      return res.status(404).json({ success: false, message: "Resource not found" });
+    }
+    return res.status(500).json({ success: false, message: "Could not reject resource", error: sanitizeError(err) });
+  }
+}
+
+module.exports = {
+  uploadResource,
+  getResources,
+  getMyUploads,
+  getResourceById,
+  downloadResource,
+  getPendingResources,
+  approveResource,
+  rejectResource,
+};
