@@ -1,0 +1,82 @@
+/* ==========================================================================
+   Rejected Resources — page-specific styling
+   Builds on admin-moderation.css (tokens/shell) and approved-resources.css
+   (table, filters, file icons, modal base). Only rejection-specific
+   pieces live here: reason text, callout box, and warning/restore buttons.
+   ========================================================================== */
+
+/* ---- Rejection reason (table cell) ---- */
+.reason-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--red);
+}
+
+/* ---- Status badge variant ---- */
+.status-badge.rejected {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+}
+
+/* ---- Rejection Callout Box (details modal) ---- */
+.rejection-callout {
+  display: flex;
+  gap: 0.75rem;
+  background: rgba(248, 113, 113, 0.08);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin: 1.25rem 0;
+}
+.rejection-callout svg {
+  width: 20px;
+  height: 20px;
+  color: var(--red);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.callout-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--red);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.callout-reason {
+  display: block;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-pure);
+  margin: 0.2rem 0 0.35rem;
+}
+.callout-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---- Lifecycle icon variant for rejection ---- */
+.history-icon.danger {
+  background: rgba(248, 113, 113, 0.14);
+  color: var(--red);
+}
+
+/* ---- Warning / Recovery action row ---- */
+.action-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.action-row .btn-lg {
+  flex: 1;
+}
+.btn-warning {
+  background: rgba(245, 185, 66, 0.14);
+  color: var(--amber);
+}
+.btn-warning:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}

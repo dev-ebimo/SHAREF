@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Community | Sharef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="community.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <!-- SIDEBAR / MOBILE DRAWER -->
+      <nav class="sidebar-panel" id="sidebar" aria-label="Primary navigation">
+        <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close navigation">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <a class="logo" href="dashboard.html"><span>S</span>haref</a>
+
+        <div class="menu-list">
+          <div class="menu-section-label">Workspace</div>
+          <a href="dashboard.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path
+                d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+              />
+            </svg>
+            <span>Dashboard</span>
+          </a>
+          <a href="resources.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <span>Browse Resources</span>
+          </a>
+          <a href="past-questions.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span>Past Questions</span>
+          </a>
+          <a href="lecture-notes.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path
+                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+              />
+            </svg>
+            <span>Lecture Notes</span>
+          </a>
+
+          <div class="menu-section-label">Community</div>
+          <a href="community.html" class="menu-link" aria-current="page">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <span>Study Groups</span>
+          </a>
+
+          <div class="menu-section-label">Personal</div>
+          <a href="bookmarks.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
+            </svg>
+            <span>Bookmarks</span>
+          </a>
+          <a href="my-uploads.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            <span>My Uploads</span>
+          </a>
+
+          <div class="menu-section-label">Support</div>
+          <a href="help.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path
+                d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>Help Center</span>
+          </a>
+        </div>
+
+        <div class="momentum-widget">
+          <div class="momentum-ring" style="--pct: 68"><span>12d</span></div>
+          <div class="momentum-text">
+            <h4>Study streak</h4>
+            <p>Best yet — keep it going</p>
+          </div>
+        </div>
+      </nav>
+
+      <div class="scrim" id="scrim"></div>
+
+      <div class="main-column">
+        <!-- TOP NAV -->
+        <header class="top-nav">
+          <button
+            class="hamburger-btn"
+            id="hamburgerBtn"
+            aria-label="Open navigation"
+            aria-expanded="false"
+            aria-controls="sidebar"
+          >
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <a class="mobile-logo" href="dashboard.html"><span>S</span>haref</a>
+
+          <div class="search-wrapper" id="searchWrapper">
+            <div class="search-omnibar">
+              <svg class="icon-search" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                id="omnibarInput"
+                placeholder="Search resources (e.g., CSC 201, Past Questions)..."
+                autocomplete="off"
+              />
+              <span class="kbd-hint">⌘K</span>
+              <button type="button" class="mobile-search-close-btn" id="mobileSearchCloseBtn" aria-label="Close search">
+                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div class="search-overlay-dropdown" id="searchDropdown" aria-hidden="true">
+              <div id="searchStateDefault" class="search-panel-state">
+                <div class="dropdown-group">
+                  <div class="group-label">Recent Searches</div>
+                  <button class="dropdown-item recent-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>CSC 201</span>
+                  </button>
+                  <button class="dropdown-item recent-item">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Operating Systems</span>
+                  </button>
+                </div>
+
+                <div class="dropdown-group">
+                  <div class="group-label">Trending Today</div>
+                  <div class="trending-chips">
+                    <a href="#" class="trend-chip">CSC 202</a>
+                    <a href="#" class="trend-chip">MTH 202</a>
+                    <a href="#" class="trend-chip">GST Past Questions</a>
+                  </div>
+                </div>
+              </div>
+
+              <div id="searchStateResults" class="search-panel-state hidden">
+                <div class="dropdown-group">
+                  <div class="group-label">Resources</div>
+                  <a href="#" class="dropdown-item">
+                    <span class="badge-mini pdf">PDF</span>
+                    <span class="item-text">CSC 201 Data Structures Notes</span>
+                  </a>
+                  <a href="#" class="dropdown-item">
+                    <span class="badge-mini doc">DOCX</span>
+                    <span class="item-text">Database Systems Summary</span>
+                  </a>
+                </div>
+
+                <div class="dropdown-group">
+                  <div class="group-label">Courses</div>
+                  <a href="#" class="dropdown-item standard-result">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                      <path
+                        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                      />
+                    </svg>
+                    <span class="item-text">CSC 201 — Data Structures</span>
+                  </a>
+                </div>
+
+                <div class="dropdown-group">
+                  <div class="group-label">Tags</div>
+                  <div class="trending-chips">
+                    <a href="#" class="trend-chip tag-chip">#Database</a>
+                    <a href="#" class="trend-chip tag-chip">#Algorithms</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="nav-actions">
+            <button
+              class="icon-btn-badge mobile-search-btn"
+              id="mobileSearchTrigger"
+              aria-label="Open search"
+              aria-expanded="false"
+              aria-controls="searchWrapper"
+            >
+              <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+            <a href="notifications.html" class="icon-btn-badge" aria-label="Notifications, 3 unread" style="text-decoration: none">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              <span class="badge-dot" aria-hidden="true"></span>
+            </a>
+            <div class="account-menu-wrapper" id="accountMenuWrapper">
+              <button
+                class="avatar-frame avatar-visual"
+                id="accountMenuTrigger"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-controls="accountMenuPanel"
+                aria-label="Account menu for Ebimotimi Shadrack"
+              >
+                <span class="avatar-initials">EB</span>
+                <img class="avatar-image-el" alt="" />
+              </button>
+
+              <div class="account-dropdown" id="accountMenuPanel" role="menu" aria-hidden="true" aria-labelledby="accountMenuTrigger">
+                <div class="account-dropdown-header">
+                  <div class="account-dropdown-avatar avatar-visual" aria-hidden="true">
+                    <span class="avatar-initials">EB</span>
+                    <img class="avatar-image-el" alt="" />
+                  </div>
+                  <div class="account-dropdown-identity">
+                    <h4>Ebimotimi Shadrack</h4>
+                    <p>Computer Science • 200 Level</p>
+                  </div>
+                </div>
+
+                <div class="account-dropdown-divider"></div>
+
+                <a href="profile.html" class="account-dropdown-item" role="menuitem">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Profile</span>
+                </a>
+                <a href="bookmarks.html" class="account-dropdown-item" role="menuitem">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
+                  </svg>
+                  <span>Bookmarks</span>
+                </a>
+                <a href="settings.html" class="account-dropdown-item" role="menuitem">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Settings</span>
+                </a>
+                <a href="help.html" class="account-dropdown-item" role="menuitem">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path
+                      d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <span>Help</span>
+                </a>
+
+                <div class="account-dropdown-divider"></div>
+
+                <button type="button" class="account-dropdown-item account-logout-item" role="menuitem">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  <span>Log Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <!-- MAIN CONTENT -->
+        <main class="main-workspace community-workspace" id="main-content">
+          <div class="coming-soon-container">
+            <!-- Glowing Icon -->
+            <div class="icon-wrapper">
+              <div class="icon-glow"></div>
+              <svg
+                class="feature-icon"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                viewBox="0 0 24 24"
+              >
+                <path d="M17 6.1H3"></path>
+                <path d="M21 12.1H3"></path>
+                <path d="M15.1 18H3"></path>
+              </svg>
+            </div>
+
+            <h1>Study Groups &amp; Chat</h1>
+            <p class="subtitle">We're building a space for you to connect, ask questions, and collaborate with your peers. The Sharef community is launching soon.</p>
+
+            <div class="divider">
+              <span>While you wait, explore these areas</span>
+            </div>
+
+            <!-- Suggestion Cards -->
+            <div class="suggestions-grid" id="suggestionsGrid">
+              <a href="resources.html" class="suggestion-card">
+                <div class="card-icon">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h3>Find Resources</h3>
+                <p>Search for past questions and lecture notes for your current courses.</p>
+              </a>
+
+              <a href="upload.html" class="suggestion-card">
+                <div class="card-icon">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </div>
+                <h3>Share Knowledge</h3>
+                <p>Have some great notes? Upload them to help out your fellow students.</p>
+              </a>
+
+              <a href="dashboard.html" class="suggestion-card">
+                <div class="card-icon">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    />
+                  </svg>
+                </div>
+                <h3>Your Dashboard</h3>
+                <p>Head back home to view your study streak and recently added files.</p>
+              </a>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+    <script src="community.js"></script>
+  </body>
+</html>

@@ -1,0 +1,420 @@
+/* ==========================================================================
+   UPLOAD PAGE — built on top of dashboard.css tokens & shell.
+   Only page-specific components live here; colors, radii, fonts and the
+   sidebar/top-nav/account-menu styling all come from dashboard.css so both
+   pages stay visually consistent.
+   ========================================================================== */
+
+:root {
+  --success: #06d6a0;
+}
+
+/* Slightly narrower reading column than the dashboard's default 980px,
+   since a single-column form doesn't need the extra width. */
+.main-workspace--narrow {
+  max-width: 640px;
+}
+
+/* Back link, styled like the rest of the muted → purple-on-hover nav text
+   used across the dashboard (see .section-title .see-all-link). */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 1.1rem;
+  transition: color 0.2s ease;
+}
+.btn-back:hover {
+  color: var(--purple-soft);
+}
+.btn-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* ==========================================================================
+   FORM SECTIONS (fieldsets styled like .resource-card)
+   ========================================================================== */
+.form-section {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 1.25rem;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+.form-section legend {
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-pure);
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid var(--border-hair);
+  width: 100%;
+  padding-bottom: 0.65rem;
+}
+
+/* Form Controls */
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+.input-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+  position: relative;
+}
+.input-group:last-child {
+  margin-bottom: 0;
+}
+.input-group label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  margin-bottom: 0.45rem;
+}
+.input-group input,
+.input-group select,
+.input-group textarea {
+  background: var(--bg-void);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--radius-sm);
+  outline: none;
+  font-size: 0.9rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.input-group input::placeholder,
+.input-group textarea::placeholder {
+  color: var(--text-faint);
+}
+.input-group input:focus,
+.input-group select:focus,
+.input-group textarea:focus {
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+.input-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+.char-count {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  text-align: right;
+  margin-top: 0.35rem;
+}
+
+/* Validation Styles */
+.error-msg {
+  color: var(--red);
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+  display: none;
+}
+.input-group.invalid input,
+.input-group.invalid select {
+  border-color: var(--red);
+}
+.input-group.invalid .error-msg {
+  display: block;
+}
+
+/* ==========================================================================
+   DRAG & DROP AREA
+   ========================================================================== */
+.drop-zone {
+  border: 2px dashed var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 2.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.drop-zone:hover,
+.drop-zone.dragover {
+  border-color: var(--border-hover);
+  background: rgba(168, 85, 247, 0.05);
+}
+.drop-zone__icon {
+  width: 34px;
+  height: 34px;
+  display: block;
+  margin: 0 auto 0.85rem;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+.drop-zone:hover .drop-zone__icon,
+.drop-zone.dragover .drop-zone__icon {
+  color: var(--purple-soft);
+}
+.drop-zone__input {
+  display: none;
+}
+.drop-zone__prompt {
+  font-size: 0.9rem;
+  color: var(--text-lead);
+}
+.text-accent {
+  color: var(--purple-soft);
+  font-weight: 600;
+}
+.drop-zone__support-text {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+}
+
+/* File Preview */
+.file-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-void);
+  border: 1px solid var(--border-hair);
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-sm);
+  margin-top: 1rem;
+}
+.file-info-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.file-type-icon {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--surface-02);
+  color: var(--purple-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-type-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.file-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--text-pure);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-size {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.btn-remove {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--red);
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background 0.15s ease;
+}
+.btn-remove:hover {
+  background: rgba(248, 113, 113, 0.1);
+}
+.btn-remove svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ==========================================================================
+   INFO BOX
+   ========================================================================== */
+.info-box {
+  display: flex;
+  gap: 0.75rem;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.18);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+  align-items: flex-start;
+}
+.info-box svg {
+  color: var(--purple-soft);
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+.info-box p {
+  font-size: 0.85rem;
+  color: var(--text-lead);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ==========================================================================
+   BUTTONS
+   ========================================================================== */
+.btn-primary {
+  width: 100%;
+  padding: 0.9rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--purple);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #9333ea;
+}
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-outline {
+  width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-pure);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+.btn-outline:hover {
+  background: var(--surface-02);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+.action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   STATE MANAGEMENT (form → progress → success)
+   ========================================================================== */
+.state-section {
+  display: none;
+}
+.state-section.active {
+  display: block;
+  animation: uploadFadeIn 0.3s ease;
+}
+
+@keyframes uploadFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Progress & Success UI */
+.progress-container,
+.success-container {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 4rem 2rem;
+  text-align: center;
+}
+.progress-container h2,
+.success-container h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.progress-bar-bg {
+  width: 100%;
+  height: 8px;
+  background: var(--bg-void);
+  border: 1px solid var(--border-hair);
+  border-radius: 4px;
+  margin: 2rem 0 1rem;
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--purple), var(--pink));
+  width: 0%;
+  transition: width 0.2s ease;
+}
+.progress-text {
+  font-weight: 700;
+  font-size: 1.2rem;
+  color: var(--purple-soft);
+}
+.success-icon {
+  width: 60px;
+  height: 60px;
+  background: rgba(6, 214, 160, 0.1);
+  color: var(--success);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  border: 2px solid var(--success);
+}
+.success-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.success-container p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0.75rem 0 2rem;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 600px) {
+  .input-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .form-section {
+    padding: 1.15rem;
+  }
+  .progress-container,
+  .success-container {
+    padding: 3rem 1.25rem;
+  }
+}

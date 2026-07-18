@@ -1,0 +1,484 @@
+/* ==========================================================================
+   Users — page-specific styling
+   Builds on admin-moderation.css (tokens/shell/stat cards) and
+   approved-resources.css (dashboard-controls, table shell, status-badge
+   base, empty-state). This file adds: user table cells, avatars, the
+   contribution score card, and the right-anchored profile drawer.
+   ========================================================================== */
+
+/* ==========================================================================
+   Page Tabs (All Users / Transactions)
+   ========================================================================== */
+.page-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--border-hair);
+  margin-bottom: 1.5rem;
+}
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.75rem 0.25rem;
+  margin-right: 1.5rem;
+  font-family: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.tab-btn svg {
+  width: 17px;
+  height: 17px;
+}
+.tab-btn:hover {
+  color: var(--text-pure);
+}
+.tab-btn.is-active {
+  color: var(--purple-soft);
+  border-bottom-color: var(--purple);
+}
+.tab-panel.hidden {
+  display: none;
+}
+
+/* ==========================================================================
+   Transactions — category breakdown cards
+   ========================================================================== */
+.category-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.category-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.25rem;
+}
+.category-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+.category-card-header h4 {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-pure);
+}
+.category-card.active .status-badge { background: rgba(45, 212, 191, 0.12); color: var(--teal); }
+.category-card.suspended .status-badge { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+.category-card.inactive .status-badge { background: rgba(245, 185, 66, 0.14); color: var(--amber); }
+
+.category-card-volume {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-pure);
+  line-height: 1;
+  margin-bottom: 0.3rem;
+}
+.category-card-sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-bottom: 0.9rem;
+}
+.category-card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+  color: var(--text-lead);
+  border-top: 1px solid var(--border-hair);
+  padding-top: 0.65rem;
+}
+.category-card-meta strong {
+  color: var(--text-pure);
+  display: block;
+  font-size: 0.86rem;
+  margin-top: 0.15rem;
+}
+
+/* ---- Transactions table cells ---- */
+.transactions-table .amount-cell {
+  font-weight: 700;
+  color: var(--text-pure);
+}
+.transactions-table .amount-cell.is-debit {
+  color: var(--red);
+}
+.status-badge.successful {
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--teal);
+}
+.status-badge.failed {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+}
+
+@media (max-width: 860px) {
+  .category-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- User table ---- */
+.user-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.user-table th {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--surface-02);
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-hair);
+  white-space: nowrap;
+}
+.user-table td {
+  padding: 0.85rem 1rem;
+  font-size: 0.83rem;
+  color: var(--text-lead);
+  border-bottom: 1px solid var(--border-hair);
+  vertical-align: middle;
+}
+.user-table tr:last-child td {
+  border-bottom: none;
+}
+.user-table tbody tr {
+  transition: background 0.15s ease;
+}
+.user-table tbody tr:hover {
+  background: var(--surface-02);
+}
+
+/* ---- User identity cell ---- */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--indigo));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.avatar.large {
+  width: 64px;
+  height: 64px;
+  font-size: 1.4rem;
+  margin: 0 auto 0.75rem;
+}
+.user-info {
+  display: flex;
+  flex-direction: column;
+}
+.user-name {
+  font-weight: 600;
+  color: var(--text-pure);
+  font-size: 0.86rem;
+}
+.user-email {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+/* ---- Status badge variants specific to accounts ---- */
+.status-badge.active {
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--teal);
+}
+.status-badge.suspended {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--red);
+}
+.status-badge.pending {
+  background: rgba(245, 185, 66, 0.14);
+  color: var(--amber);
+}
+
+/* ---- btn-view (table action) ---- */
+.btn-view {
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--purple-soft);
+  border: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-view:hover {
+  background: rgba(168, 85, 247, 0.2);
+}
+
+/* ==========================================================================
+   Slide-out Profile Drawer
+   ========================================================================== */
+.slide-modal {
+  justify-content: flex-end;
+  padding: 0;
+}
+.slide-modal .profile-panel {
+  animation: slideIn 0.28s var(--ease-snap) forwards;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.profile-panel {
+  width: 420px;
+  max-width: 100%;
+  height: 100%;
+  background: #0f0e17;
+  border-left: 1px solid var(--border-hair);
+  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.5);
+  padding: 1.75rem;
+  overflow-y: auto;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+.close-btn {
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  color: var(--text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.close-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.close-btn:hover {
+  color: var(--text-pure);
+  border-color: var(--border-hover);
+}
+
+.profile-header {
+  text-align: center;
+  margin-bottom: 1.25rem;
+}
+.profile-header h2 {
+  margin: 0 0 0.3rem;
+  color: var(--text-pure);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.profile-header p {
+  color: var(--text-muted);
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+.join-date {
+  font-style: italic;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+/* ---- Contribution score card ---- */
+.admin-score-card {
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+.score-info {
+  display: flex;
+  flex-direction: column;
+}
+.score-label {
+  font-size: 0.68rem;
+  color: var(--purple-soft);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.score-rank {
+  font-size: 0.85rem;
+  color: var(--text-pure);
+  font-weight: 500;
+  margin-top: 0.15rem;
+}
+.score-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--purple-soft);
+  line-height: 1;
+}
+
+/* ---- Profile stats grid ---- */
+.profile-stats {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.stat-box {
+  flex: 1;
+  text-align: center;
+  background: var(--surface-01);
+  padding: 1rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hair);
+}
+.stat-num {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-pure);
+  margin-bottom: 0.2rem;
+}
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* ---- Recent uploads timeline ---- */
+.profile-section h3 {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-pure);
+  margin: 0 0 0.85rem;
+  border-bottom: 1px solid var(--border-hair);
+  padding-bottom: 0.5rem;
+}
+.upload-history {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+}
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border-hair);
+}
+.history-item:last-child {
+  border-bottom: none;
+}
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.resource-name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.83rem;
+  color: var(--text-pure);
+}
+.resource-date {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+/* ---- Profile actions ---- */
+.profile-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.profile-actions .btn-lg {
+  width: 100%;
+}
+
+/* ---- Suspension form ---- */
+.suspend-form {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: rgba(248, 113, 113, 0.08);
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+.suspend-form label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--red);
+  margin-bottom: 0.6rem;
+}
+.suspend-form .select-wrap {
+  display: flex;
+  margin-bottom: 0.85rem;
+}
+.suspend-form select {
+  width: 100%;
+  appearance: none;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.65rem 2.2rem 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.suspend-form select:focus {
+  border-color: var(--border-hover);
+  outline: none;
+}
+.confirm-btn {
+  width: 100%;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 860px) {
+  .table-container {
+    overflow-x: auto;
+  }
+  .user-table {
+    min-width: 700px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .filter-group select {
+    width: 100%;
+  }
+  .profile-panel {
+    width: 100%;
+  }
+}

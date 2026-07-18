@@ -1,0 +1,481 @@
+/* ==========================================================================
+   Approved Resources — page-specific styling
+   Inherits tokens, app-shell, nav, stat cards, buttons & modal base
+   from admin-moderation.css. This file only adds what's unique to
+   the resources table, filters, and details panel.
+   ========================================================================== */
+
+/* ---- Search + Filter Controls ---- */
+.dashboard-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.search-bar {
+  position: relative;
+  flex: 1;
+  min-width: 240px;
+}
+.search-bar svg {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.search-bar input {
+  width: 100%;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.65rem 0.9rem 0.65rem 2.5rem;
+  border-radius: var(--radius-sm);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.search-bar input::placeholder {
+  color: var(--text-muted);
+}
+.search-bar input:focus {
+  border-color: var(--border-hover);
+}
+
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+.filter-group select,
+.filter-group input[type="date"] {
+  appearance: none;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+  color-scheme: dark;
+}
+/* Add below '.filter-group select' to style the options and focus states */
+.filter-group select option {
+  background-color: #0f0e17;
+  color: var(--text-pure);
+}
+
+.filter-group select:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+.filter-group select:hover,
+.filter-group input[type="date"]:hover {
+  border-color: var(--border-hover);
+  color: var(--text-pure);
+}
+
+.select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.select-wrap select {
+  padding-right: 2.2rem;
+}
+.select-wrap svg {
+  position: absolute;
+  right: 0.75rem;
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* ---- Table Container ---- */
+.table-container {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.resource-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.resource-table thead th {
+  text-align: left;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  background: var(--surface-02);
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-hair);
+  white-space: nowrap;
+}
+.resource-table tbody td {
+  padding: 0.85rem 1rem;
+  font-size: 0.83rem;
+  color: var(--text-lead);
+  border-bottom: 1px solid var(--border-hair);
+  vertical-align: middle;
+}
+.resource-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.resource-table tbody tr {
+  transition: background 0.15s ease;
+}
+.resource-table tbody tr:hover {
+  background: var(--surface-02);
+}
+
+/* Cell formatting */
+.res-title { display: block; font-weight: 600; color: var(--text-pure); font-size: 0.86rem; }
+.res-type { font-size: 0.74rem; color: var(--text-muted); }
+.res-dept { display: block; font-weight: 500; color: var(--text-pure); font-size: 0.8rem; }
+.res-course { font-size: 0.74rem; color: var(--purple-soft); font-weight: 600; }
+
+/* ---- File Type Icon (SVG based, replaces text/emoji badges) ---- */
+.file-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.file-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.file-icon.pdf { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+.file-icon.doc { background: rgba(99, 102, 241, 0.14); color: var(--indigo); }
+.file-icon.img { background: rgba(45, 212, 191, 0.12); color: var(--teal); }
+
+.file-icon.large {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  margin: 0 auto 0.85rem;
+}
+.file-icon.large svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* ---- Status Badges ---- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+}
+.status-badge::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.status-badge.approved {
+  background: rgba(45, 212, 191, 0.12);
+  color: var(--teal);
+}
+.status-badge.inactive {
+  background: var(--surface-02);
+  color: var(--text-muted);
+}
+.status-badge.inactive::before {
+  display: none;
+}
+
+/* ---- Action Buttons (table row) ---- */
+.action-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.btn-icon {
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  color: var(--text-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.btn-icon:hover {
+  color: var(--text-pure);
+  border-color: var(--border-hover);
+}
+.btn-view {
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--purple-soft);
+  border: none;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-view:hover {
+  background: rgba(168, 85, 247, 0.2);
+}
+
+/* ---- Pagination ---- */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.15rem;
+  border-top: 1px solid var(--border-hair);
+  background: var(--surface-01);
+}
+.btn-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-sm);
+  background: var(--surface-02);
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-page svg {
+  width: 13px;
+  height: 13px;
+}
+.btn-page:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  color: var(--text-pure);
+}
+.btn-page:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.page-info {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ---- Empty State ---- */
+.empty-state {
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+.empty-state svg {
+  width: 32px;
+  height: 32px;
+  color: var(--text-faint);
+  margin-bottom: 0.75rem;
+}
+.empty-state p {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-lead);
+  margin-bottom: 0.25rem;
+}
+.empty-state span {
+  font-size: 0.82rem;
+}
+
+/* ---- Resource Details Modal ---- */
+.resource-surface {
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.profile-header {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.profile-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.profile-section {
+  margin: 1.5rem 0;
+}
+.profile-section h3 {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+.res-description {
+  font-size: 0.85rem;
+  color: var(--text-lead);
+  line-height: 1.6;
+  background: var(--surface-01);
+  padding: 0.85rem;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-sm);
+}
+
+.upload-history {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-sm);
+}
+.history-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--surface-02);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.history-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.history-icon.success {
+  background: rgba(45, 212, 191, 0.14);
+  color: var(--teal);
+}
+.history-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.resource-name {
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--text-pure);
+}
+.resource-date {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.profile-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1.75rem;
+}
+.profile-actions .btn-lg {
+  flex: 1;
+}
+
+/* ---- Removal confirmation form ---- */
+.suspend-form {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border-hair);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.suspend-form label {
+  font-size: 0.8rem;
+  color: var(--text-lead);
+  font-weight: 500;
+}
+.suspend-form .select-wrap {
+  display: flex;
+}
+.suspend-form select {
+  width: 100%;
+  appearance: none;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.65rem 2.2rem 0.65rem 0.9rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color-scheme: dark;
+}
+.suspend-form select:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+.suspend-form select option {
+  background-color: #0f0e17;
+  color: var(--text-pure);
+}
+.confirm-btn {
+  width: 100%;
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 860px) {
+  .table-container {
+    overflow-x: auto;
+  }
+  .resource-table {
+    min-width: 760px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+  .filter-group select,
+  .filter-group input[type="date"] {
+    width: 100%;
+  }
+  .profile-actions {
+    flex-direction: column;
+  }
+}

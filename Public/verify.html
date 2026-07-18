@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your Email | Sharef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="verify.css">
+</head>
+<body>
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="split-container">
+        <!-- Left Side: Visual Showcase Panel -->
+        <section class="visual-panel">
+            <div class="brand-and-text-zone">
+                <header class="panel-header">
+                    <a class="logo" href="/"><span>S</span>haref</a>
+                </header>
+                
+                <div class="panel-content">
+                    <span class="eyebrow">Security Portal</span>
+                    <h2>Let's Verify Your Email.</h2>
+                    <p>We take academic integrity and network security seriously. Verifying your student credentials ensures a bot-free ecosystem for fair resource voting.</p>
+                </div>
+            </div>
+            
+            <div class="illustration-scene" aria-hidden="true">
+                <div class="network-floor"></div>
+                
+                <svg class="network-grid-connections" viewBox="0 0 400 400">
+                    <path class="network-edge" d="M 120,280 L 200,160" />
+                    <path class="network-edge" d="M 280,240 L 200,160" />
+                    <circle class="glowing-data-packet packet-up" r="3" />
+                    <circle class="glowing-data-packet packet-down" r="3" />
+                </svg>
+
+                <div class="network-card layer-beta">
+                    <div class="card-icon font-docx">DOCX</div>
+                    <div class="card-lines">
+                        <div class="line long"></div>
+                        <div class="line short"></div>
+                    </div>
+                    <span class="scene-tag tag-pink">Past Qs</span>
+                </div>
+
+                <div class="network-card layer-gamma">
+                    <div class="card-icon font-notes">SUMMARY</div>
+                    <div class="card-lines">
+                        <div class="line short"></div>
+                        <div class="line long"></div>
+                    </div>
+                    <span class="scene-tag tag-blue">GST Summary</span>
+                </div>
+
+                <div class="network-card layer-alpha hero-focus-node">
+                    <div class="card-icon font-pdf">PDF</div>
+                    <div class="card-lines">
+                        <div class="line long"></div>
+                        <div class="line long"></div>
+                        <div class="line short"></div>
+                    </div>
+                    <span class="scene-tag tag-purple">CSC 201 Notes</span>
+                    <div class="indicator-pulse-ring"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Side: Clean Structured OTP Verification Hub -->
+        <main class="form-panel">
+            <div class="form-wrapper">
+                <div class="form-header">
+                    <a class="mobile-logo" href="/"><span>S</span>haref</a>
+                    <h1>Check your inbox</h1>
+                    <p>We sent a 6-digit verification code to your student email address. Enter it below to activate your academic profile.</p>
+                </div>
+
+                <form action="confirm.html" method="POST" id="otp-form">
+                    <fieldset class="form-section">
+                        <legend>Verification Code</legend>
+                        
+                        <div class="otp-component-frame">
+                            <div class="otp-container">
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required autocomplete="one-time-code">
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required>
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required>
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required>
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required>
+                                <input type="text" maxlength="1" pattern="[0-9]*" inputmode="numeric" required>
+                            </div>
+                        </div>
+                        
+                        <input type="hidden" name="full_otp" id="full-otp-input">
+                    </fieldset>
+
+                    <button type="submit" class="btn-submit">Verify Account</button>
+                    
+                    <div class="resend-wrapper">
+                        <p>Didn't receive the email? <button type="button" id="resend-btn" class="link-btn" disabled>Resend Code (<span id="timer">59</span>s)</button></p>
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="cooldown-progress"></div>
+                        </div>
+                    </div>
+
+                    <footer class="form-trust-note">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        <span>Verification takes less than a minute. Your email is exclusively utilized for securing institutional profile access.</span>
+                    </footer>
+                </form>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const inputs = document.querySelectorAll(".otp-container input");
+            const form = document.getElementById("otp-form");
+            const fullOtpInput = document.getElementById("full-otp-input");
+            const resendBtn = document.getElementById("resend-btn");
+            const timerSpan = document.getElementById("timer");
+            const progressFill = document.getElementById("cooldown-progress");
+
+            inputs[0].focus();
+
+            inputs.forEach((input, index) => {
+                input.addEventListener("input", (e) => {
+                    const value = e.target.value;
+                    if (!/^[0-9]$/.test(value)) {
+                        e.target.value = "";
+                        return;
+                    }
+                    
+                    input.classList.remove("filled");
+                    void input.offsetWidth; 
+                    input.classList.add("filled");
+
+                    if (value && index < inputs.length - 1) {
+                        inputs[index + 1].focus();
+                    }
+                    updateHiddenInput();
+                });
+
+                input.addEventListener("keydown", (e) => {
+                    if (e.key === "Backspace") {
+                        if (!input.value && index > 0) {
+                            inputs[index - 1].value = "";
+                            inputs[index - 1].focus();
+                            inputs[index - 1].classList.remove("filled");
+                        } else {
+                            input.value = "";
+                            input.classList.remove("filled");
+                        }
+                        updateHiddenInput();
+                    }
+                });
+
+                input.addEventListener("paste", (e) => {
+                    e.preventDefault();
+                    const pastedData = (e.clipboardData || window.clipboardData).getData("text").trim();
+                    if (/^\d{6}$/.test(pastedData)) {
+                        pastedData.split("").forEach((char, i) => {
+                            if (inputs[i]) {
+                                inputs[i].value = char;
+                                inputs[i].classList.add("filled");
+                            }
+                        });
+                        inputs[inputs.length - 1].focus();
+                        updateHiddenInput();
+                    }
+                });
+            });
+
+            function updateHiddenInput() {
+                let code = "";
+                inputs.forEach(input => code += input.value);
+                fullOtpInput.value = code;
+            }
+
+            const initialDuration = 59;
+            let secondsLeft = initialDuration;
+            
+            const cooldownInterval = setInterval(() => {
+                secondsLeft--;
+                const percentageRemaining = (secondsLeft / initialDuration) * 100;
+                progressFill.style.width = `${percentageRemaining}%`;
+
+                if (secondsLeft <= 0) {
+                    clearInterval(cooldownInterval);
+                    resendBtn.disabled = false;
+                    resendBtn.innerText = "Resend Code";
+                    progressFill.style.width = "0%";
+                } else {
+                    timerSpan.innerText = secondsLeft;
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

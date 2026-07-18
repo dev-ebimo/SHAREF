@@ -1,0 +1,186 @@
+/* ==========================================================================
+   COMMUNITY (Coming Soon) — styled on top of dashboard.css design tokens
+   ========================================================================== */
+
+.community-workspace {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - var(--topnav-height));
+}
+
+/* --- Coming Soon Container --- */
+.coming-soon-container {
+  max-width: 800px;
+  text-align: center;
+  width: 100%;
+  animation: fadeUp 0.6s ease forwards;
+}
+
+/* --- Glowing Icon Effect --- */
+.icon-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 2rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.icon-glow {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: var(--purple);
+  border-radius: 50%;
+  filter: blur(30px);
+  opacity: 0.3;
+  animation: pulse 3s infinite alternate;
+}
+.feature-icon {
+  position: relative;
+  z-index: 1;
+  width: 48px;
+  height: 48px;
+  color: var(--purple-soft);
+}
+
+/* --- Typography --- */
+.coming-soon-container h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 1rem;
+}
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+  max-width: 560px;
+  margin: 0 auto 2.75rem;
+  line-height: 1.65;
+}
+
+/* --- Divider --- */
+.divider {
+  position: relative;
+  text-align: center;
+  margin: 2.75rem 0;
+}
+.divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: 1px;
+  background: var(--border-hair);
+  z-index: 0;
+}
+.divider span {
+  position: relative;
+  background: var(--bg-void);
+  padding: 0 1.5rem;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  z-index: 1;
+}
+
+/* --- Suggestion Cards --- */
+.suggestions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1.1rem;
+}
+
+.suggestion-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 1.75rem 1.4rem;
+  text-decoration: none;
+  color: inherit;
+  text-align: left;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+  opacity: 0;
+  transform: translateY(20px);
+}
+.suggestion-card:hover {
+  transform: translateY(-5px);
+  border-color: rgba(168, 85, 247, 0.35);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  background: var(--surface-02);
+}
+
+.card-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: rgba(168, 85, 247, 0.1);
+  color: var(--purple-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.1rem;
+}
+.card-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.suggestion-card h3 {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: var(--text-pure);
+}
+.suggestion-card p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+/* --- Animations --- */
+@keyframes pulse {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scale(1.2);
+    opacity: 0.4;
+  }
+}
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- Responsive --- */
+@media (max-width: 860px) {
+  .community-workspace {
+    min-height: 0;
+    padding-top: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .coming-soon-container h1 {
+    font-size: 1.7rem;
+  }
+  .subtitle {
+    font-size: 0.92rem;
+    margin-bottom: 2rem;
+  }
+}

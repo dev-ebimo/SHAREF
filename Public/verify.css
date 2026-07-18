@@ -1,0 +1,505 @@
+/* ==========================================================================
+   1. COLOR SCHEME & COMPONENT BASE VARIABLES
+   ========================================================================== */
+:root {
+  --bg-dark: #070510;
+  --panel-bg: rgba(255, 255, 255, 0.03);
+  --input-bg: rgba(7, 5, 16, 0.4);
+  --border-light: rgba(255, 255, 255, 0.08);
+  --border-hover: rgba(168, 85, 247, 0.6);
+  
+  --text-pure: #ffffff;
+  --text-muted: #94a3b8;
+  --text-lead: #cbd5e1;
+  
+  --primary-gradient: linear-gradient(135deg, #6366f1, #a855f7, #6366f1);
+  --accent-purple: #8b5cf6;
+  --accent-pink: #d946ef;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-pure);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient Slow Breathing Atmospheric Background Globs */
+.bg {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(140px);
+  opacity: 0.1;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.bg1 {
+  width: 600px;
+  height: 600px;
+  background: var(--accent-purple);
+  top: -250px;
+  left: -150px;
+  animation: breatheBlob 12s ease-in-out infinite alternate;
+}
+
+.bg2 {
+  width: 500px;
+  height: 500px;
+  background: var(--accent-pink);
+  right: -200px;
+  bottom: -150px;
+  animation: breatheBlob 16s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes breatheBlob {
+  0% { transform: scale(1) translate(0, 0); opacity: 0.08; }
+  100% { transform: scale(1.15) translate(40px, 30px); opacity: 0.14; }
+}
+
+/* ==========================================================================
+   2. TWO-COLUMN SPLIT FRAMEWORK & PANEL DIVIDER
+   ========================================================================== */
+.split-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.visual-panel {
+  position: relative;
+  background: linear-gradient(180deg, rgba(26, 16, 60, 0.2) 0%, rgba(7, 5, 16, 0.6) 100%);
+  padding: 4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+}
+
+/* Chromatic Linear Structural Gradient Divider */
+.visual-panel::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 15%;
+  height: 70%;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(168, 85, 247, 0.35) 30%,
+    rgba(219, 70, 239, 0.35) 70%,
+    transparent
+  );
+}
+
+.brand-and-text-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.panel-header .logo {
+  text-decoration: none;
+  color: var(--text-pure);
+  font-weight: 800;
+  font-size: 2.2rem;
+  letter-spacing: -0.04em;
+}
+.panel-header .logo span { color: #a855f7; }
+
+.panel-content {
+  opacity: 0;
+  transform: translateY(15px);
+  animation: contentFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes contentFadeIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.eyebrow {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #c084fc;
+  font-size: 0.8rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.panel-content h2 {
+  font-size: clamp(1.8rem, 2.8vw, 2.4rem);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  background: linear-gradient(to right, #ffffff, #cbd5e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 1rem;
+}
+
+.panel-content p { color: var(--text-muted); font-size: 0.95rem; line-height: 1.65; max-width: 460px; }
+
+/* ==========================================================================
+   3. ISOMETRIC COMPOSITE KNOWLEDGE GRAPH
+   ========================================================================== */
+.illustration-scene {
+  position: relative;
+  width: 100%;
+  height: 320px; 
+  margin-top: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  perspective: 1400px;
+  transform-style: preserve-3d;
+}
+
+.network-floor {
+  position: absolute;
+  width: 460px;
+  height: 460px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.12) 0%, transparent 70%);
+  transform: rotateX(60deg) rotateZ(-45deg) translateZ(-50px);
+  border-radius: 50%;
+}
+
+.network-grid-connections {
+  position: absolute;
+  width: 380px;
+  height: 380px;
+  transform: rotateX(60deg) rotateZ(-45deg);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.network-edge {
+  fill: none;
+  stroke: rgba(168, 85, 247, 0.2);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+}
+
+.glowing-data-packet {
+  fill: #e0a7ff;
+  filter: drop-shadow(0 0 6px #a855f7);
+}
+
+.packet-up { offset-path: path("M 120,280 L 200,160"); animation: routeSignal 4s linear infinite; }
+.packet-down { offset-path: path("M 280,240 L 200,160"); animation: routeSignal 4s linear infinite 2s; }
+
+@keyframes routeSignal { 0% { offset-distance: 0%; } 100% { offset-distance: 100%; } }
+
+.network-card {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: -15px 15px 30px rgba(0, 0, 0, 0.5);
+  transform: rotateX(60deg) rotateZ(-45deg);
+  transform-style: preserve-3d;
+  transition: opacity 0.3s ease;
+}
+
+.card-icon { font-size: 0.75rem; font-weight: 800; padding: 4px 8px; border-radius: 6px; width: max-content; }
+.font-pdf { background: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
+.font-docx { background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }
+.font-notes { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.25); }
+
+.card-lines { display: flex; flex-direction: column; gap: 8px; margin: 10px 0; }
+.line { height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 2px; }
+.line.long { width: 90%; }
+.line.short { width: 50%; }
+
+.scene-tag {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-pure);
+  position: absolute;
+  padding: 4px 8px;
+  background: rgba(7, 5, 16, 0.9);
+  border-radius: 6px;
+  transform: translateZ(12px);
+}
+.tag-purple { border: 1px solid rgba(168, 85, 247, 0.5); top: -10px; right: -15px; }
+.tag-pink { border: 1px solid rgba(219, 70, 239, 0.25); bottom: 15px; left: -25px; }
+.tag-blue { border: 1px solid rgba(59, 130, 246, 0.25); top: 15px; left: -30px; }
+
+.layer-beta {
+  width: 170px;
+  height: 125px;
+  opacity: 0.45;
+  transform: rotateX(60deg) rotateZ(-45deg) translateZ(-20px) translateX(90px) translateY(80px);
+  animation: slowFloatBeta 9s ease-in-out infinite alternate;
+}
+
+.layer-gamma {
+  width: 170px;
+  height: 125px;
+  opacity: 0.45;
+  transform: rotateX(60deg) rotateZ(-45deg) translateZ(90px) translateX(60px) translateY(-80px);
+  animation: slowFloatGamma 8s ease-in-out infinite alternate;
+}
+
+.layer-alpha.hero-focus-node {
+  width: 200px;
+  height: 145px;
+  opacity: 1;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  box-shadow: -20px 20px 40px rgba(139, 92, 246, 0.2), -15px 15px 30px rgba(0, 0, 0, 0.6);
+  transform: rotateX(60deg) rotateZ(-45deg) translateZ(40px) translateX(-70px);
+  animation: dynamicFloatAlpha 5.5s ease-in-out infinite alternate;
+  z-index: 5;
+}
+
+.indicator-pulse-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(168, 85, 247, 0.6);
+  animation: corePulse 3s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes corePulse {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.12) translateZ(-10px); opacity: 0; }
+}
+
+@keyframes dynamicFloatAlpha {
+  0% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(35px) translateX(-70px); }
+  100% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(55px) translateX(-70px); }
+}
+@keyframes slowFloatBeta {
+  0% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(-25px) translateX(90px) translateY(80px); }
+  100% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(-15px) translateX(90px) translateY(80px); }
+}
+@keyframes slowFloatGamma {
+  0% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(85px) translateX(60px) translateY(-80px); }
+  100% { transform: rotateX(60deg) rotateZ(-45deg) translateZ(95px) translateX(60px) translateY(-80px); }
+}
+
+/* ==========================================================================
+   4. OTP HUD HOUSING MATRIX FRAME (Locked and Scaled)
+   ========================================================================== */
+.form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem; /* Reduced padding from 4rem to pull elements together */
+  background: rgba(7, 5, 16, 0.15);
+  backdrop-filter: blur(20px);
+}
+
+.form-wrapper { 
+  width: 100%;
+  max-width: 380px; /* Rigid constraint prevents layout bloating */
+}
+
+.form-header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 0.5rem; }
+.form-header p { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin-bottom: 2rem; }
+
+.form-section legend {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+.form-section {
+  border: none;
+}
+
+/* Cohesive Single Component Outer Frame */
+.otp-component-frame {
+  padding: 0.6rem; /* Shrunk padding down from 0.85rem */
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.otp-container {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr); /* Explicit column fractions prevent horizontal bloating */
+  gap: 0.5rem;
+}
+
+.otp-container input {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  text-align: center;
+  font-size: 1.25rem; /* Scaled typography size down from 1.5rem */
+  font-weight: 700;
+  background-color: var(--input-bg);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  color: var(--text-pure);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.otp-container input:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.8);
+  background-color: rgba(255, 255, 255, 0.05);
+  animation: activeInputPulse 2s infinite alternate;
+}
+
+@keyframes activeInputPulse {
+  0% { box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.1); }
+  100% { box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.25); }
+}
+
+.otp-component-frame:focus-within {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.12);
+}
+
+.otp-container input.filled {
+  animation: otpPop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes otpPop {
+  0% { transform: scale(0.92); }
+  65% { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+
+/* ==========================================================================
+   5. PREMIUM SUBMIT BUTTON ARCHITECTURE
+   ========================================================================== */
+.btn-submit {
+  width: 100%;
+  height: 52px; /* Proportional elegant footprint height down from 58px */
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  font-weight: 600;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  margin-top: 1.5rem;
+  background: var(--primary-gradient);
+  background-size: 200%;
+  color: var(--text-pure);
+  box-shadow: 0 4px 15px -5px rgba(139, 92, 246, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-submit::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  left: -150%;
+  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  animation: autoShineLoop 9s infinite ease-in-out;
+}
+
+@keyframes autoShineLoop {
+  0%, 80% { left: -150%; }
+  90%, 100% { left: 150%; }
+}
+
+.btn-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px -4px rgba(139, 92, 246, 0.55), 0 0 15px 2px rgba(219, 70, 239, 0.2);
+}
+
+/* ==========================================================================
+   6. COUNTDOWN LINE PROGRESS ELEMENT
+   ========================================================================== */
+.resend-wrapper {
+  text-align: center;
+  margin-top: 1.25rem;
+}
+
+.resend-wrapper p { font-size: 0.85rem; color: var(--text-muted); }
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #a855f7;
+  font-weight: 600;
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.link-btn:disabled { color: var(--text-muted); cursor: not-allowed; font-weight: 400; }
+
+.progress-bar-track {
+  width: 120px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  margin: 0.65rem auto 0 auto;
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to right, #8b5cf6, #d946ef);
+  transition: width 1s linear;
+}
+
+/* ==========================================================================
+   7. TRUST ANCHOR SECTION FOOTER GRID
+   ========================================================================== */
+.form-trust-note {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  gap: 0.75rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  align-items: start;
+}
+
+.form-trust-note svg {
+  color: rgba(168, 85, 247, 0.6);
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.form-trust-note span {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+/* ==========================================================================
+   8. MOBILITY SCALE CAPTURE RESPONSIVENESS
+   ========================================================================== */
+@media (max-width: 1120px) {
+  .split-container { grid-template-columns: 1fr; }
+  .visual-panel { display: none; }
+  .mobile-logo { display: inline-block; text-decoration: none; color: var(--text-pure); font-weight: 800; font-size: 2rem; margin-bottom: 1.5rem; }
+  .mobile-logo span { color: #a855f7; }
+  .form-panel { padding: 4rem 1.5rem; }
+}
+
+@media (max-width: 480px) {
+  .form-panel { padding: 2.5rem 1rem; }
+  .otp-component-frame { padding: 0.5rem; border-radius: 12px; }
+  .otp-container { gap: 0.35rem; }
+  .otp-container input { font-size: 1.15rem; border-radius: 6px; }
+  .form-header h1 { font-size: 1.6rem; }
+}

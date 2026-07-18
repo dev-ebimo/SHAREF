@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms of Service | Sharef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Reuses entire unified palette configuration styles -->
+    <link rel="stylesheet" href="verify.css">
+    <style>
+        /* Reusing exact same layout classes structural logic from privacy context */
+        .legal-container {
+            min-height: 100vh;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 4rem 1.5rem;
+        }
+
+        .legal-header {
+            text-align: center;
+            margin-bottom: 3.5rem;
+            max-width: 600px;
+        }
+
+        .legal-header .logo {
+            text-decoration: none;
+            color: var(--text-pure);
+            font-weight: 800;
+            font-size: 2.2rem;
+            letter-spacing: -0.04em;
+            display: inline-block;
+            margin-bottom: 1.5rem;
+        }
+        .legal-header .logo span { color: #a855f7; }
+
+        .legal-header h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 0.75rem;
+            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .legal-header .meta-date {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .legal-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            padding: 3.5rem;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 800px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .legal-section {
+            margin-bottom: 2.5rem;
+        }
+
+        .legal-section:last-of-type {
+            margin-bottom: 0;
+        }
+
+        .legal-section h2 {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--text-pure);
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .legal-section h2::before {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: #d946ef; /* Accent shift to Pink to separate personality slightly */
+            border-radius: 50%;
+            box-shadow: 0 0 8px #d946ef;
+        }
+
+        .legal-section p {
+            color: var(--text-lead);
+            font-size: 0.95rem;
+            line-height: 1.75;
+            margin-bottom: 1rem;
+        }
+
+        .legal-footer {
+            margin-top: 3rem;
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .legal-container { padding: 2.5rem 1rem; }
+            .legal-card { padding: 2rem 1.5rem; border-radius: 16px; }
+            .legal-header h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="legal-container">
+        <header class="legal-header">
+            <a class="logo" href="/"><span>S</span>haref</a>
+            <h1>Terms of Service</h1>
+            <p class="meta-date">Last Updated: July 2026</p>
+        </header>
+
+        <main class="legal-card">
+            <section class="legal-section">
+                <h2>1. Acceptable Ecosystem Use</h2>
+                <p>Sharef is an open academic space built for secure knowledge sharing and resource indexing. Users agree to access vault networks solely for authenticated educational experimentation, learning validation, and peer collaborative efforts. Malicious platform script injections are strictly prohibited.</p>
+            </section>
+
+            <section class="legal-section">
+                <h2>2. Intellectual Property & Rights</h2>
+                <p>You preserve full ownership rights over structural crowdsourced document uploads you index. By publishing assets on Sharef, you grant the peer network a perpetual, zero-royalty license to access, mirror, and vote on content inside relevant local institutional segments.</p>
+            </section>
+
+            <section class="legal-section">
+                <h2>3. Limitation of Liability</h2>
+                <p>Materials across our crowdsourced vaults are compiled for utility and tracking practice purposes. The workspace provides all service vectors on an "as-is" framework. Sharef assumes no administrative accountability for minor textual errors or institutional storage discrepancies.</p>
+            </section>
+
+            <footer class="legal-footer">
+                <a href="login.html" class="link-btn">Return to Authentication Hub</a>
+            </footer>
+        </main>
+    </div>
+</body>
+</html>

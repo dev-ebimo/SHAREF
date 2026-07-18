@@ -1,0 +1,234 @@
+/* ==========================================================================
+   BOOKMARKS — styled on top of dashboard.css design tokens
+   ========================================================================== */
+
+/* --- Controls bar --- */
+.controls-bar {
+  display: flex;
+  gap: 0.85rem;
+  margin-bottom: 2rem;
+}
+.controls-search {
+  position: relative;
+  flex: 1;
+}
+.controls-search svg.icon-search {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.controls-search input {
+  width: 100%;
+  height: 46px;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  font-family: inherit;
+  padding: 0 1rem 0 2.7rem;
+  border-radius: 10px;
+  outline: none;
+  font-size: 0.87rem;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.controls-search input::placeholder {
+  color: var(--text-muted);
+}
+.controls-search input:focus {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--surface-02);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12);
+}
+
+.controls-bar select {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  font-family: inherit;
+  height: 46px;
+  padding: 0 1rem;
+  border-radius: 10px;
+  outline: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  min-width: 180px;
+  
+  color-scheme: dark;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+.controls-bar select option {
+  background: #0f0e17;
+  color: var(--text-pure);
+}
+.controls-bar select:hover {
+  border-color: var(--border-hover);
+}
+.controls-bar select:focus {
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--surface-02);
+}
+
+/* --- Grid layout --- */
+.bookmarks-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.1rem;
+}
+
+/* --- Individual cards --- */
+.bookmark-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 1.4rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+.bookmark-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(168, 85, 247, 0.35);
+  background: var(--surface-02);
+}
+
+.card-body h3.card-title {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--text-pure);
+  margin-bottom: 0.5rem;
+  max-width: 90%;
+  line-height: 1.4;
+}
+.card-meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 1.4rem;
+}
+
+/* --- Action buttons --- */
+.card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+.btn-view {
+  color: var(--purple-soft);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+.btn-view:hover {
+  color: var(--text-pure);
+}
+
+.btn-unpin {
+  background: transparent;
+  border: none;
+  color: var(--purple-soft);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem;
+  border-radius: 6px;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+.btn-unpin svg {
+  width: 18px;
+  height: 18px;
+}
+.btn-unpin:hover {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.08);
+  transform: scale(1.08);
+}
+
+/* --- Empty state --- */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: var(--surface-01);
+  border: 1px dashed var(--border-hair);
+  border-radius: var(--radius-lg);
+}
+.empty-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 1.1rem;
+  border-radius: 50%;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+.empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.empty-state h3 {
+  color: var(--text-pure);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.empty-state p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 1.5rem;
+}
+.btn-primary-sm {
+  display: inline-block;
+  background: var(--purple);
+  color: #fff;
+  text-decoration: none;
+  padding: 0.65rem 1.3rem;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s var(--ease-snap);
+}
+.btn-primary-sm:hover {
+  background: #b55fe6;
+  transform: translateY(-1px);
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* --- Responsive --- */
+@media (max-width: 480px) {
+  .controls-bar {
+    flex-direction: column;
+  }
+  .controls-bar select {
+    width: 100%;
+  }
+  .bookmarks-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Announcements | Sharef Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="admin-moderation.css">
+    <link rel="stylesheet" href="admin-announcements.css">
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="app-shell">
+
+        <!-- Admin Sidebar / Mobile Drawer -->
+        <nav class="sidebar-panel" id="sidebar" aria-label="Primary navigation">
+            <button class="sidebar-close-btn" id="sidebarCloseBtn" aria-label="Close navigation">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <a class="logo" href="admin-moderation.html"><span>S</span>haref<span class="admin-tag">Admin</span></a>
+
+            <div class="menu-list">
+                <div class="menu-section-label">Moderation</div>
+                <a href="admin-moderation.html" class="menu-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Review Queue</span>
+                    <span class="menu-count" id="sidebarQueueCount">0</span>
+                </a>
+                <a href="approved-resources.html" class="menu-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Approved Resources</span>
+                </a>
+                <a href="rejected-resources.html" class="menu-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M15 9l-6 6m0-6l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Rejected Resources</span>
+                </a>
+
+                <div class="menu-section-label">Platform</div>
+                <a href="users.html" class="menu-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span>Users</span>
+                </a>
+                <a href="admin-announcements.html" class="menu-link is-active">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                    </svg>
+                    <span>Announcements</span>
+                </a>
+                <a href="admin-settings.html" class="menu-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span>Settings</span>
+                </a>
+                <a href="#" class="menu-link danger-link">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>Log Out</span>
+                </a>
+            </div>
+        </nav>
+
+        <div class="scrim" id="scrim"></div>
+
+        <div class="main-column">
+
+            <header class="top-nav">
+                <button class="hamburger-btn" id="hamburgerBtn" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                        <path d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+                <a class="mobile-logo" href="admin-moderation.html"><span>S</span>haref</a>
+
+                <div class="top-nav-heading">
+                    <h1>Announcements</h1>
+                    <p>Send platform-wide or targeted updates to students</p>
+                </div>
+
+                <div class="nav-actions">
+                    <div class="account-menu-wrapper" id="accountMenuWrapper">
+                        <button class="avatar-frame avatar-visual" id="accountMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="accountMenuPanel" aria-label="Account menu for Admin">
+                            <span class="avatar-initials">A</span>
+                        </button>
+                        <div class="account-dropdown" id="accountMenuPanel" role="menu" aria-hidden="true" aria-labelledby="accountMenuTrigger">
+                            <div class="account-dropdown-header">
+                                <div class="account-dropdown-avatar" aria-hidden="true">
+                                    <span class="avatar-initials">A</span>
+                                </div>
+                                <div class="account-dropdown-identity">
+                                    <h4>Admin</h4>
+                                    <p>Moderation Team</p>
+                                </div>
+                            </div>
+                            <div class="account-dropdown-divider"></div>
+                            <a href="admin-settings.html" class="account-dropdown-item" role="menuitem">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span>Settings</span>
+                            </a>
+                            <div class="account-dropdown-divider"></div>
+                            <button type="button" class="account-dropdown-item account-logout-item" role="menuitem">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                                </svg>
+                                <span>Log Out</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main class="main-workspace" id="main-content">
+
+                <header class="workspace-header">
+                    <h1>New Announcement</h1>
+                    <p class="contextual-insight">Reaches students immediately, in-app and by email, based on each student's own notification preferences.</p>
+                </header>
+
+                <!-- Composer -->
+                <section class="settings-card announcement-composer">
+                    <div class="form-row">
+                        <label for="annTitle">Title</label>
+                        <input type="text" id="annTitle" placeholder="e.g. Scheduled maintenance this weekend" maxlength="120">
+                    </div>
+
+                    <div class="form-row">
+                        <label for="annMessage">Message</label>
+                        <textarea id="annMessage" rows="5" placeholder="Write the full announcement here..."></textarea>
+                    </div>
+
+                    <div class="form-row-split">
+                        <div class="form-row">
+                            <label for="annDepartments">Departments <span class="hint">(leave empty for all)</span></label>
+                            <select id="annDepartments" multiple size="4"></select>
+                        </div>
+                        <div class="form-row">
+                            <label for="annLevels">Levels <span class="hint">(leave empty for all)</span></label>
+                            <select id="annLevels" multiple size="4">
+                                <option value="100">100 Level</option>
+                                <option value="200">200 Level</option>
+                                <option value="300">300 Level</option>
+                                <option value="400">400 Level</option>
+                                <option value="500">500 Level</option>
+                                <option value="600">600 Level</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="settings-save-row">
+                        <span class="save-confirm hidden" id="sendConfirm">
+                            <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>
+                            <span id="sendConfirmText">Sent</span>
+                        </span>
+                        <button type="button" class="settings-btn-primary" id="sendAnnouncementBtn">Send Announcement</button>
+                    </div>
+                </section>
+
+                <!-- History -->
+                <section class="settings-card">
+                    <h2 class="section-title">Sent Announcements</h2>
+                    <div class="announcement-history" id="announcementHistory">
+                        <!-- injected via JS -->
+                    </div>
+                    <div class="empty-state hidden" id="historyEmptyState">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6" /></svg>
+                        <p>No announcements sent yet.</p>
+                        <span>Your first one will show up here.</span>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+    </div>
+
+    <div class="settings-toast" id="announcementToast" role="status" aria-live="polite"></div>
+
+    <script src="admin-announcements.js"></script>
+</body>
+</html>

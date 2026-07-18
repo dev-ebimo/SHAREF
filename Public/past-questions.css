@@ -1,0 +1,524 @@
+/* ==========================================================================
+   PAST QUESTIONS PAGE — extends dashboard.css tokens (loaded first)
+   ========================================================================== */
+
+.pq-page {
+  max-width: 1100px;
+}
+
+/* --------------------------------------------------------------------------
+   SEARCH BAR (same pattern as Browse Resources)
+   -------------------------------------------------------------------------- */
+.pq-search-bar {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+.pq-search-bar svg {
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.pq-search-bar input {
+  width: 100%;
+  height: 50px;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 12px;
+  padding: 0 1rem 0 2.9rem;
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.92rem;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.pq-search-bar input:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--surface-02);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+/* --------------------------------------------------------------------------
+   FILTER BAR
+   -------------------------------------------------------------------------- */
+.pq-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.filter-field label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.filter-field select {
+  height: 42px;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0 0.75rem;
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+  color-scheme: dark;
+  transition: border-color 0.2s ease;
+}
+.filter-field select:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+}
+.filter-field select option {
+  background: #0f0e17;
+  color: var(--text-pure);
+}
+
+/* --------------------------------------------------------------------------
+   RESULTS META
+   -------------------------------------------------------------------------- */
+.results-meta-row {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+/* --------------------------------------------------------------------------
+   COURSE-GROUPED TIMELINE
+   -------------------------------------------------------------------------- */
+.course-group {
+  margin-bottom: 2.5rem;
+}
+.course-title-heading {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-pure);
+  letter-spacing: -0.01em;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-hair);
+}
+
+.timeline-track {
+  position: relative;
+  padding-left: 1.6rem;
+  border-left: 2px solid var(--border-hair);
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+.timeline-item {
+  position: relative;
+}
+.timeline-node {
+  position: absolute;
+  left: calc(-1.6rem - 5px);
+  top: 1.35rem;
+  width: 9px;
+  height: 9px;
+  background: var(--purple);
+  border-radius: 50%;
+  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.15);
+}
+
+.pq-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 1.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1.25rem;
+  transition: all 0.2s ease;
+}
+.pq-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--surface-02);
+  transform: translateX(3px);
+}
+
+.card-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+/* Document icon badge - replaces the previous file emoji */
+.file-icon-badge {
+  flex-shrink: 0;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--red);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.file-icon-badge svg {
+  width: 20px;
+  height: 20px;
+}
+
+.card-details h3 {
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: var(--text-pure);
+  margin-bottom: 0.3rem;
+  line-height: 1.35;
+}
+.card-metrics {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.card-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+.year-badge {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--purple-soft);
+  background: rgba(168, 85, 247, 0.08);
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.btn-preview {
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  color: var(--text-lead);
+  padding: 0.55rem 1.1rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-preview:hover {
+  border-color: var(--border-hover);
+  color: var(--text-pure);
+}
+
+.btn-download-icon {
+  width: 36px;
+  height: 36px;
+  background: rgba(168, 85, 247, 0.1);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: var(--purple-soft);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-download-icon:hover {
+  background: rgba(168, 85, 247, 0.18);
+}
+.btn-download-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   EMPTY STATE (icon replaces the previous file emoji)
+   -------------------------------------------------------------------------- */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+}
+.empty-state.hidden {
+  display: none;
+}
+.empty-state-icon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 0.85rem;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  color: var(--purple-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.empty-state-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.empty-state h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+.empty-state p {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.3rem;
+}
+.empty-state ul {
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  text-align: left;
+}
+.empty-state ul li::before {
+  content: "• ";
+  color: var(--purple-soft);
+}
+
+/* --------------------------------------------------------------------------
+   PREVIEW MODAL
+   -------------------------------------------------------------------------- */
+.modal-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 3, 8, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 300;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.modal-scrim.is-visible {
+  display: block;
+  opacity: 1;
+}
+
+.preview-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%);
+  width: min(92vw, 540px);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  padding: 1.5rem;
+  z-index: 301;
+}
+.preview-modal.is-visible {
+  display: block;
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+.modal-tag {
+  display: inline-block;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--purple-soft);
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+.modal-header h2 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.4;
+  margin-bottom: 0.2rem;
+}
+.modal-meta {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 8px;
+  color: var(--text-lead);
+  cursor: pointer;
+}
+.modal-close-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.info-strip {
+  display: flex;
+  gap: 1.5rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0.75rem 1.1rem;
+  margin-bottom: 1.25rem;
+}
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+.info-item .label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+.info-item .val {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-pure);
+}
+
+.doc-preview-placeholder {
+  background: var(--surface-01);
+  border: 1px dashed var(--border-hair);
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  border-radius: 10px;
+  margin-bottom: 1.4rem;
+  font-size: 0.8rem;
+}
+.doc-preview-placeholder svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-faint);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+.modal-cancel-btn {
+  height: 42px;
+  padding: 0 1.2rem;
+  background: none;
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-cancel-btn:hover {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.modal-save-btn {
+  height: 42px;
+  padding: 0 1.4rem;
+  background: var(--purple);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.modal-save-btn:hover {
+  background: #b55fe6;
+}
+
+/* --------------------------------------------------------------------------
+   TOAST (replaces the old alert() calls for download/bookmark)
+   -------------------------------------------------------------------------- */
+.settings-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 2rem;
+  transform: translate(-50%, 20px);
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0.75rem 1.25rem;
+  font-size: 0.85rem;
+  color: var(--text-pure);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s ease;
+  z-index: 400;
+}
+.settings-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .pq-filter-bar {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .pq-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .card-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-direction: row-reverse;
+  }
+}
+
+@media (max-width: 480px) {
+  .pq-filter-bar {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,837 @@
+/* ==========================================================================
+   PROFILE PAGE — extends dashboard.css tokens (loaded first in <head>)
+   ========================================================================== */
+
+.profile-page {
+  max-width: 1180px;
+}
+
+/* --------------------------------------------------------------------------
+   1. PROFILE HEADER
+   -------------------------------------------------------------------------- */
+.profile-header-card {
+  background: linear-gradient(
+    135deg,
+    rgba(168, 85, 247, 0.07) 0%,
+    rgba(99, 102, 241, 0.02) 100%
+  );
+  border: 1px solid rgba(168, 85, 247, 0.15);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.profile-header-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.profile-avatar-xl {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, var(--purple), var(--indigo));
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+/* Shared initials/image toggle — used by the top-nav avatar, the account
+   dropdown avatar, and the large profile avatar below */
+.avatar-visual .avatar-image-el {
+  display: none;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.avatar-visual.has-avatar-image .avatar-initials {
+  display: none;
+}
+.avatar-visual.has-avatar-image .avatar-image-el {
+  display: block;
+}
+
+.profile-avatar-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.avatar-upload-btn {
+  position: absolute;
+  bottom: 14px;
+  right: -4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--purple);
+  border: 2px solid #0c0a14;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+}
+.avatar-upload-btn:hover {
+  background: #b55fe6;
+  transform: translateY(-1px);
+}
+.avatar-upload-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.visually-hidden-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.avatar-remove-link {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.avatar-remove-link:hover {
+  color: var(--red);
+}
+.avatar-remove-link.hidden {
+  display: none;
+}
+
+.profile-identity {
+  flex: 1;
+  min-width: 0;
+}
+.profile-identity h1 {
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.3rem;
+}
+.profile-meta-line {
+  font-size: 0.88rem;
+  color: var(--text-lead);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+.profile-meta-line svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.profile-bio {
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  margin: 0.6rem 0 0.4rem;
+  max-width: 520px;
+  line-height: 1.5;
+}
+.profile-joined {
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
+.edit-profile-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 1.1rem;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.edit-profile-btn:hover {
+  border-color: var(--border-hover);
+  background: rgba(168, 85, 247, 0.08);
+}
+.edit-profile-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --------------------------------------------------------------------------
+   2. TWO-COLUMN LAYOUT
+   -------------------------------------------------------------------------- */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 2rem;
+  align-items: start;
+}
+
+.profile-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: calc(var(--topnav-height) + 1.5rem);
+}
+
+.aside-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
+.aside-card .section-title {
+  margin-bottom: 0.85rem;
+}
+
+/* --------------------------------------------------------------------------
+   3. CONTRIBUTION OVERVIEW — stat cards
+   -------------------------------------------------------------------------- */
+.stat-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+.stat-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  transition: all 0.2s ease;
+}
+.stat-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--surface-02);
+}
+.stat-card-accent {
+  border-color: rgba(168, 85, 247, 0.25);
+  background: rgba(168, 85, 247, 0.05);
+}
+.stat-card-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-pure);
+}
+.stat-card-accent .stat-card-value {
+  color: var(--purple-soft);
+}
+.stat-card-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Contribution score breakdown (native <details>) */
+.score-breakdown {
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 0.2rem 1rem;
+  background: var(--surface-01);
+}
+.score-breakdown summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-lead);
+  cursor: pointer;
+}
+.score-breakdown summary::-webkit-details-marker {
+  display: none;
+}
+.score-breakdown summary svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+  transition: transform 0.2s var(--ease-snap);
+}
+.score-breakdown[open] summary svg {
+  transform: rotate(180deg);
+}
+.score-breakdown-list {
+  list-style: none;
+  padding-bottom: 0.9rem;
+  border-top: 1px solid var(--border-hair);
+  padding-top: 0.75rem;
+}
+.score-breakdown-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0;
+}
+.score-breakdown-list strong {
+  color: var(--purple-soft);
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------------------------
+   4. ACHIEVEMENTS
+   -------------------------------------------------------------------------- */
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+}
+.achievement-badge {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1.1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  opacity: 0.4;
+  transition: all 0.2s ease;
+}
+.achievement-badge.is-earned {
+  opacity: 1;
+  border-color: rgba(168, 85, 247, 0.2);
+  background: rgba(168, 85, 247, 0.04);
+}
+.achievement-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+.achievement-badge h3 {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-lead);
+}
+.achievement-badge.is-earned h3 {
+  color: var(--text-pure);
+}
+
+/* --------------------------------------------------------------------------
+   5. RECENT ACTIVITY — timeline
+   -------------------------------------------------------------------------- */
+.timeline-stack {
+  position: relative;
+  padding-left: 1.4rem;
+}
+.timeline-stack::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--border-hair);
+}
+.timeline-item {
+  position: relative;
+  display: flex;
+  gap: 0.9rem;
+  padding-bottom: 1.3rem;
+}
+.timeline-item:last-child {
+  padding-bottom: 0;
+}
+.timeline-dot {
+  position: absolute;
+  left: -1.4rem;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-void);
+}
+.upload-dot {
+  background: var(--purple);
+}
+.bookmark-dot {
+  background: #60a5fa;
+}
+.download-dot {
+  background: #34d399;
+}
+.timeline-body p {
+  font-size: 0.88rem;
+  color: var(--text-lead);
+}
+.timeline-body strong {
+  color: var(--text-pure);
+  font-weight: 600;
+}
+.timeline-time {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------------------------------
+   6 & 12. MY UPLOADS + ANALYTICS
+   -------------------------------------------------------------------------- */
+.analytics-strip {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.1rem;
+  flex-wrap: wrap;
+}
+.analytics-pill {
+  flex: 1;
+  min-width: 140px;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 0.8rem 1rem;
+  display: flex;
+  flex-direction: column;
+}
+.analytics-pill strong {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--purple-soft);
+}
+.analytics-pill span {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+
+.upload-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.upload-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: all 0.2s ease;
+}
+.upload-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--surface-02);
+}
+.upload-card-main h3 {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0.4rem 0 0.4rem;
+}
+.upload-card-metrics {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* Kebab menu — same visual language as the account dropdown */
+.kebab-menu-wrapper {
+  position: relative;
+  flex-shrink: 0;
+}
+.kebab-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.kebab-btn:hover {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.kebab-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.kebab-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 170px;
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  padding: 0.4rem;
+  display: none;
+  flex-direction: column;
+  gap: 0.1rem;
+  z-index: 60;
+}
+.kebab-menu-wrapper.is-open .kebab-dropdown {
+  display: flex;
+}
+.kebab-menu-wrapper.is-open .kebab-btn {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+
+/* --------------------------------------------------------------------------
+   9. PROFILE COMPLETION
+   -------------------------------------------------------------------------- */
+.completion-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.completion-ring {
+  --pct: 80;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: conic-gradient(
+    var(--purple) calc(var(--pct) * 1%),
+    rgba(255, 255, 255, 0.06) 0
+  );
+  position: relative;
+}
+.completion-ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: #0c0a14;
+}
+.completion-ring span {
+  position: relative;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--purple-soft);
+}
+.completion-checklist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.completion-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.completion-checklist li::before {
+  content: "○";
+  color: var(--text-faint);
+  font-size: 0.7rem;
+}
+.completion-checklist li.is-done {
+  color: var(--text-lead);
+}
+.completion-checklist li.is-done::before {
+  content: "✓";
+  color: var(--purple-soft);
+}
+
+/* --------------------------------------------------------------------------
+   11. PUBLIC PROFILE TOGGLE — switch component
+   -------------------------------------------------------------------------- */
+.toggle-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.toggle-title {
+  margin-bottom: 0.2rem !important;
+}
+.toggle-description {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  max-width: 160px;
+}
+
+.switch {
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-lead);
+  transition: transform 0.2s var(--ease-snap), background 0.2s ease;
+}
+.switch.is-on {
+  background: var(--purple);
+}
+.switch.is-on .switch-knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   10. QUICK SETTINGS
+   -------------------------------------------------------------------------- */
+.quick-settings-list {
+  display: flex;
+  flex-direction: column;
+}
+.quick-setting-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.7rem 0.2rem;
+  font-size: 0.85rem;
+  color: var(--text-lead);
+  border-bottom: 1px solid var(--border-hair);
+  transition: color 0.15s ease;
+}
+.quick-setting-link:last-of-type {
+  border-bottom: none;
+}
+.quick-setting-link:hover {
+  color: var(--purple-soft);
+}
+.quick-setting-link svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+}
+.all-settings-link {
+  display: inline-block;
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--purple-soft);
+}
+.all-settings-link:hover {
+  color: var(--purple);
+}
+
+/* --------------------------------------------------------------------------
+   EDIT PROFILE MODAL
+   -------------------------------------------------------------------------- */
+.modal-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 3, 8, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 300;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.modal-scrim.is-visible {
+  display: block;
+  opacity: 1;
+}
+
+.edit-profile-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%);
+  width: min(90vw, 440px);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  padding: 1.5rem;
+  z-index: 301;
+}
+.edit-profile-modal.is-visible {
+  display: block;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+.modal-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 8px;
+  color: var(--text-lead);
+  cursor: pointer;
+}
+.modal-close-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-lead);
+}
+.modal-field input,
+.modal-field textarea {
+  font-family: inherit;
+  font-size: 0.87rem;
+  font-weight: 400;
+  color: var(--text-pure);
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  resize: vertical;
+}
+.modal-field input:focus,
+.modal-field textarea:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--surface-02);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+.modal-cancel-btn {
+  height: 42px;
+  padding: 0 1.2rem;
+  background: none;
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-cancel-btn:hover {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.modal-save-btn {
+  height: 42px;
+  padding: 0 1.4rem;
+  background: var(--purple);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.modal-save-btn:hover {
+  background: #b55fe6;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+  }
+  .profile-aside {
+    position: static;
+  }
+  .stat-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .profile-header-top {
+    flex-direction: column;
+  }
+  .edit-profile-btn {
+    align-self: stretch;
+    justify-content: center;
+  }
+  .achievement-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .analytics-strip {
+    flex-direction: column;
+  }
+  .upload-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .kebab-menu-wrapper {
+    align-self: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .stat-card-grid {
+    grid-template-columns: 1fr;
+  }
+}

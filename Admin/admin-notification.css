@@ -1,0 +1,266 @@
+/* ==========================================================================
+   Notifications — page-specific styling
+   Builds on admin-moderation.css for tokens, shell, buttons, and the
+   .modal-surface / .preview-surface pattern reused by the quick-review
+   modal. This file adds the tab toolbar and the notification feed itself.
+   ========================================================================== */
+
+/* ---- Toolbar: tabs + bulk action ---- */
+.notif-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.tab-group {
+  display: inline-flex;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 999px;
+  padding: 0.25rem;
+  gap: 0.15rem;
+}
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.tab-btn:hover {
+  color: var(--text-pure);
+}
+.tab-btn.is-active {
+  background: var(--purple);
+  color: #fff;
+}
+.tab-btn .tab-count {
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.05rem 0.45rem;
+  border-radius: 20px;
+  color: inherit;
+}
+.tab-btn:not(.is-active) .tab-count {
+  background: var(--surface-02);
+  color: var(--text-muted);
+}
+
+.btn-mark-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-mark-all svg {
+  width: 14px;
+  height: 14px;
+}
+.btn-mark-all:hover {
+  border-color: var(--border-hover);
+  color: var(--text-pure);
+}
+.btn-mark-all:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Notification feed ---- */
+.notif-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.notif-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.2rem;
+  transition: all 0.2s ease;
+}
+.notif-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--surface-02);
+}
+.notif-card.is-unread {
+  border-left-color: var(--purple);
+  background: rgba(168, 85, 247, 0.05);
+}
+.notif-card.is-unread:hover {
+  background: rgba(168, 85, 247, 0.08);
+}
+.notif-card.is-read {
+  opacity: 0.72;
+}
+
+.notif-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--purple-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.notif-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.notif-body {
+  flex: 1;
+  min-width: 0;
+}
+.notif-text {
+  font-size: 0.88rem;
+  color: var(--text-lead);
+  margin-bottom: 0.3rem;
+}
+.notif-card.is-unread .notif-text {
+  color: var(--text-pure);
+  font-weight: 500;
+}
+.notif-text strong {
+  color: var(--text-pure);
+  font-weight: 600;
+}
+.notif-meta {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.notif-meta .dot-sep {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--purple);
+  flex-shrink: 0;
+}
+
+.notif-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+.btn-mark-toggle {
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  color: var(--text-muted);
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-mark-toggle svg {
+  width: 15px;
+  height: 15px;
+}
+.btn-mark-toggle:hover {
+  color: var(--text-pure);
+  border-color: var(--border-hover);
+}
+.btn-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(168, 85, 247, 0.12);
+  color: var(--purple-soft);
+  border: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.55rem 0.95rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.btn-review svg {
+  width: 14px;
+  height: 14px;
+}
+.btn-review:hover {
+  background: rgba(168, 85, 247, 0.22);
+}
+
+/* ---- Quick review modal: full-review link in sticky bar ---- */
+.link-full-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+.link-full-review svg {
+  width: 13px;
+  height: 13px;
+}
+.link-full-review:hover {
+  color: var(--purple-soft);
+}
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 640px) {
+  .notif-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .tab-group {
+    justify-content: space-between;
+  }
+  .notif-card {
+    flex-wrap: wrap;
+  }
+  .notif-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

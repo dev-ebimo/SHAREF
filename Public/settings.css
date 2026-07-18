@@ -1,0 +1,577 @@
+/* ==========================================================================
+   SETTINGS PAGE — extends dashboard.css tokens (loaded first in <head>)
+   ========================================================================== */
+
+.settings-page {
+  max-width: 760px;
+}
+
+.workspace-header { margin-bottom: 1.75rem; }
+
+/* --------------------------------------------------------------------------
+   ACCOUNT STATUS
+   -------------------------------------------------------------------------- */
+.account-status-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  background: rgba(168, 85, 247, 0.05);
+  border: 1px solid rgba(168, 85, 247, 0.15);
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 2rem;
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-lead);
+}
+.status-item svg {
+  width: 16px;
+  height: 16px;
+  color: #34d399;
+  flex-shrink: 0;
+}
+.status-since {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* --------------------------------------------------------------------------
+   SETTINGS CARDS + ROWS
+   -------------------------------------------------------------------------- */
+.settings-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.settings-card .section-title {
+  margin-bottom: 0.25rem;
+  font-size: 0.95rem;
+  text-transform: none;
+  letter-spacing: -0.01em;
+  color: var(--text-pure);
+  font-weight: 700;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.1rem 0;
+  border-top: 1px solid var(--border-hair);
+}
+.settings-row-label h3 {
+  font-size: 0.87rem;
+  font-weight: 600;
+  color: var(--text-pure);
+  margin-bottom: 0.2rem;
+}
+.settings-row-label p {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  max-width: 340px;
+  line-height: 1.4;
+}
+.email-status {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #34d399 !important;
+  font-weight: 500;
+}
+.email-status svg {
+  width: 12px;
+  height: 12px;
+}
+.email-status.is-unverified {
+  color: var(--amber) !important;
+}
+.email-status.is-unverified svg {
+  display: none;
+}
+
+.settings-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(8px);
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.25s ease,
+    transform 0.25s ease;
+}
+.settings-toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.settings-row-control {
+  flex-shrink: 0;
+}
+.settings-row-control input[type="text"],
+.settings-row-control input[type="email"],
+.settings-row-control select {
+  width: 240px;
+  height: 42px;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0 0.85rem;
+  color: var(--text-pure);
+  font-family: inherit;
+  font-size: 0.85rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.settings-row-control select {
+  /* Tells the browser to render its native dropdown popup (and the options
+     inside it) using a dark palette — without this, most browsers render
+     the option list on a plain white background, and since the option text
+     inherits our light theme color, it's invisible until hover applies a
+     highlight color behind it. */
+  color-scheme: dark;
+}
+.settings-row-control select option {
+  background: #0f0e17;
+  color: var(--text-pure);
+}
+.settings-row-control input:focus,
+.settings-row-control select:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+
+/* Native <select> popups often ignore your CSS and fall back to the OS
+   theme, which can render white-on-white until an option is hovered.
+   color-scheme tells the browser to draw its native controls (including
+   the option list) using a dark palette instead. */
+.settings-row-control select {
+  color-scheme: dark;
+}
+.settings-row-control select option {
+  background-color: #0f0e17;
+  color: var(--text-pure);
+}
+.readonly-value {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.settings-save-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  padding: 1.1rem 0 1.25rem;
+  border-top: 1px solid var(--border-hair);
+}
+.save-confirm {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #34d399;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+.save-confirm.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-btn-primary,
+.settings-btn-secondary,
+.settings-btn-danger {
+  height: 42px;
+  padding: 0 1.25rem;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.settings-btn-primary {
+  background: var(--purple);
+  border: none;
+  color: #fff;
+}
+.settings-btn-primary:hover {
+  background: #b55fe6;
+}
+.settings-btn-secondary {
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  color: var(--text-pure);
+}
+.settings-btn-secondary:hover {
+  border-color: var(--border-hover);
+}
+.settings-btn-danger {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: var(--red);
+}
+.settings-btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  color: #fff;
+}
+.settings-btn-danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --------------------------------------------------------------------------
+   APPEARANCE — segmented control
+   -------------------------------------------------------------------------- */
+.segmented-control {
+  display: flex;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0.2rem;
+  gap: 0.2rem;
+}
+.segment-btn {
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+.segment-btn.is-active {
+  background: var(--purple);
+  color: #fff;
+}
+.segment-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.soon-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+}
+
+/* --------------------------------------------------------------------------
+   NOTIFICATIONS — two switches per row
+   -------------------------------------------------------------------------- */
+.notif-row {
+  align-items: flex-start;
+}
+.notif-toggle-pair {
+  display: flex;
+  gap: 1.5rem;
+  flex-shrink: 0;
+}
+.notif-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.notif-toggle span {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* --------------------------------------------------------------------------
+   SWITCH COMPONENT (duplicated here so this page doesn't depend on
+   profile.css — same visual language as the public-profile toggle)
+   -------------------------------------------------------------------------- */
+.switch {
+  width: 42px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-lead);
+  transition:
+    transform 0.2s var(--ease-snap),
+    background 0.2s ease;
+}
+.switch.is-on {
+  background: var(--purple);
+}
+.switch.is-on .switch-knob {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* --------------------------------------------------------------------------
+   DANGER ZONE
+   -------------------------------------------------------------------------- */
+.danger-zone-card {
+  border-color: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.03);
+}
+.danger-title {
+  color: var(--red) !important;
+}
+
+/* --------------------------------------------------------------------------
+   MODALS (Change Password / Delete Account) — duplicated from profile.css
+   so this page has no dependency on it
+   -------------------------------------------------------------------------- */
+.modal-scrim {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 3, 8, 0.65);
+  backdrop-filter: blur(3px);
+  z-index: 300;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.modal-scrim.is-visible {
+  display: block;
+  opacity: 1;
+}
+
+.edit-profile-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%);
+  width: min(90vw, 440px);
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  padding: 1.5rem;
+  z-index: 301;
+}
+.edit-profile-modal.is-visible {
+  display: block;
+}
+.edit-profile-modal.danger-modal {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+.modal-header h2 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.modal-close-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  border-radius: 8px;
+  color: var(--text-lead);
+  cursor: pointer;
+}
+.modal-close-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.danger-modal-warning {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 1.2rem;
+}
+
+.modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-lead);
+}
+.modal-field input,
+.modal-field textarea {
+  font-family: inherit;
+  font-size: 0.87rem;
+  font-weight: 400;
+  color: var(--text-pure);
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  resize: vertical;
+}
+.modal-field input:focus,
+.modal-field textarea:focus {
+  outline: none;
+  border-color: rgba(168, 85, 247, 0.55);
+  background: var(--surface-02);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+}
+.danger-modal .modal-field input:focus {
+  border-color: rgba(239, 68, 68, 0.55);
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+/* Password field with an eye-icon show/hide toggle */
+.password-input-wrap {
+  position: relative;
+}
+.password-input-wrap input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+.password-toggle-btn {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.password-toggle-btn:hover {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.password-toggle-btn svg {
+  width: 17px;
+  height: 17px;
+}
+.password-toggle-btn .hidden {
+  display: none;
+}
+
+.modal-error {
+  font-size: 0.78rem;
+  color: var(--red);
+  margin: -0.5rem 0 1rem;
+}
+.modal-error.hidden {
+  display: none;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.4rem;
+}
+.modal-cancel-btn {
+  height: 42px;
+  padding: 0 1.2rem;
+  background: none;
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-cancel-btn:hover {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.modal-save-btn {
+  height: 42px;
+  padding: 0 1.4rem;
+  background: var(--purple);
+  border: none;
+  border-radius: 10px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.modal-save-btn:hover {
+  background: #b55fe6;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 640px) {
+  .settings-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .settings-row-control {
+    width: 100%;
+  }
+  .settings-row-control input[type="text"],
+  .settings-row-control input[type="email"],
+  .settings-row-control select {
+    width: 100%;
+  }
+  .status-since {
+    margin-left: 0;
+  }
+  .notif-toggle-pair {
+    align-self: flex-start;
+  }
+}

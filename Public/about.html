@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Our Community | Sharef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="about.css">
+</head>
+<body>
+    <!-- Ambient Background Lighting Glows -->
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <header class="container">
+        <a class="logo" href="login.html"><span>S</span>haref</a>
+        <nav aria-label="Main Navigation">
+            <a href="login.html">Home</a>
+            <a href="login.html">Resources</a>
+            <a href="signup.html" class="nav-btn">Join Now</a>
+        </nav>
+    </header>
+
+    <main class="container hero" id="hero-zone">
+        <section class="content">
+            <span class="eyebrow">Student Knowledge Network</span>
+            <h1>Build the library you wish existed when you started.</h1>
+            <p class="lead">Every note, summary, and past question you share helps another student skip the guesswork and move forward.</p>
+            
+            <div class="actions">
+                <a href="signup.html" class="btn primary">Create Free Account</a>
+                <a href="login.html" class="btn secondary">Explore Resources</a>
+            </div>
+            
+            <div class="stats">
+                <div class="stat-item"><strong>12k+</strong><span>Resources</span></div>
+                <div class="stat-item"><strong>3.5k+</strong><span>Students</span></div>
+                <div class="stat-item"><strong>150+</strong><span>Courses</span></div>
+            </div>
+        </section>
+
+        <!-- Isometric Illustration Zone -->
+        <section class="illustration" aria-hidden="true">
+            <div class="scene" id="isom-scene">
+                <div class="floor-shadow"></div>
+
+                <div class="doc-card layer-1">
+                    <div class="line short"></div>
+                    <div class="line long"></div>
+                    <div class="floating-tag tag1">CSC 201</div>
+                </div>
+                <div class="doc-card layer-2">
+                    <div class="line long"></div>
+                    <div class="line long"></div>
+                    <div class="floating-tag tag2">Past Questions</div>
+                </div>
+                <div class="doc-card layer-3">
+                    <div class="line long"></div>
+                    <div class="line short"></div>
+                    <div class="floating-tag tag3">Lecture Notes</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <section class="container trust">
+        <p>Trusted by students across multiple faculties</p>
+        <div class="departments">
+            <div class="track">
+                <span>Computer Science</span>
+                <span>Engineering</span>
+                <span>Mathematics</span>
+                <span>Accounting</span>
+                <span>Biology</span>
+                <span>Computer Science</span>
+                <span>Engineering</span>
+                <span>Mathematics</span>
+                <span>Accounting</span>
+                <span>Biology</span>
+            </div>
+        </div>
+    </section>
+
+    <section class="container features" aria-label="Platform Features">
+        <article class="feature-card">
+            <div class="icon-holder"><span class="icon-book"></span></div>
+            <h3>Organised Learning</h3>
+            <p>Find notes, assignments, and past questions instantly in one searchable university library.</p>
+        </article>
+        <article class="feature-card">
+            <div class="icon-holder"><span class="icon-bolt"></span></div>
+            <h3>Student Driven</h3>
+            <p>Content is directly contributed by top peers who have already passed the exact same courses.</p>
+        </article>
+        <article class="feature-card">
+            <div class="icon-holder"><span class="icon-grow"></span></div>
+            <h3>Built to Grow</h3>
+            <p>Every single upload expands the database, compounding the collective value for everyone.</p>
+        </article>
+    </section>
+
+    <section class="container cta-section">
+        <div class="cta-inner">
+            <h2>Knowledge becomes more valuable when it is shared.</h2>
+            <p>Help build an academic platform that future students can rely on.</p>
+            <a href="signup.html" class="btn primary">Get Started Today</a>
+        </div>
+    </section>
+
+    <footer class="container">
+        <small>&copy; 2026 Sharef. All rights reserved.</small>
+        <nav aria-label="Legal">
+            <a href="privacy.html">Privacy Policy</a>
+            <a href="terms.html">Terms of Service</a>
+        </nav>
+    </footer>
+
+    <!-- Interactive Mouse-Parallax Engine -->
+    <script>
+        const heroZone = document.getElementById('hero-zone');
+        const scene = document.getElementById('isom-scene');
+
+        if (heroZone && scene) {
+            heroZone.addEventListener('mousemove', (e) => {
+                const rect = heroZone.getBoundingClientRect();
+                // Normalize positions between -1 and 1
+                const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                const y = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+
+                // Subtle dynamic modifications to the root CSS perspective variables
+                scene.style.transform = `rotateX(${54.7 + (y * 4)}deg) rotateZ(${-45 + (x * 6)}deg)`;
+            });
+
+            heroZone.addEventListener('mouseleave', () => {
+                // Smooth snapback reset
+                scene.style.transform = `rotateX(54.7deg) rotateZ(-45deg)`;
+            });
+        }
+    </script>
+</body>
+</html>

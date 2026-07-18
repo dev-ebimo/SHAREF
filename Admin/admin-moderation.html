@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Moderation Queue | Sharef Admin</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="admin-moderation.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="app-shell">
+      <!-- Admin Sidebar / Mobile Drawer -->
+      <nav class="sidebar-panel" id="sidebar" aria-label="Primary navigation">
+        <button
+          class="sidebar-close-btn"
+          id="sidebarCloseBtn"
+          aria-label="Close navigation"
+        >
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <a class="logo" href="admin-moderation.html"
+          ><span>S</span>haref<span class="admin-tag">Admin</span></a
+        >
+
+        <div class="menu-list">
+          <div class="menu-section-label">Moderation</div>
+          <a href="admin-moderation.html" class="menu-link" aria-current="page">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <span>Review Queue</span>
+            <span class="menu-count" id="sidebarQueueCount">18</span>
+          </a>
+          <a href="approved-resources.html" class="menu-link">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Approved Resources</span>
+          </a>
+          <a href="rejected-resources.html" class="menu-link">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M15 9l-6 6m0-6l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Rejected Resources</span>
+          </a>
+
+          <div class="menu-section-label">Platform</div>
+          <a href="users.html" class="menu-link">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+              />
+            </svg>
+            <span>Users</span>
+          </a>
+          <a href="admin-announcements.html" class="menu-link is-active">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"
+              />
+            </svg>
+            <span>Announcements</span>
+          </a>
+          <a href="admin-settings.html" class="menu-link">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+              />
+              <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Settings</span>
+          </a>
+          <a href="#" class="menu-link danger-link">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
+            </svg>
+            <span>Log Out</span>
+          </a>
+        </div>
+
+        <div class="queue-health-widget">
+          <div class="queue-health-ring" style="--pct: 40"><span>18</span></div>
+          <div class="queue-health-text">
+            <h4>Queue backlog</h4>
+            <p>1 item aging 4+ days</p>
+          </div>
+        </div>
+      </nav>
+
+      <div class="scrim" id="scrim"></div>
+
+      <div class="main-column">
+        <header class="top-nav">
+          <button
+            class="hamburger-btn"
+            id="hamburgerBtn"
+            aria-label="Open navigation"
+            aria-expanded="false"
+            aria-controls="sidebar"
+          >
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              viewBox="0 0 24 24"
+            >
+              <path d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <a class="mobile-logo" href="admin-moderation.html"
+            ><span>S</span>haref</a
+          >
+
+          <div class="top-nav-heading">
+            <h1>Moderation Overview</h1>
+            <p>Review and action pending uploads</p>
+          </div>
+
+          <div class="nav-actions">
+            <a
+              href="admin-notification.html"
+              class="icon-btn-badge"
+              aria-label="Notifications, 5 unread"
+            >
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                />
+              </svg>
+              <span class="badge-dot" aria-hidden="true"></span>
+            </a>
+            <div class="account-menu-wrapper" id="accountMenuWrapper">
+              <button
+                class="avatar-frame avatar-visual"
+                id="accountMenuTrigger"
+                type="button"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-controls="accountMenuPanel"
+                aria-label="Account menu for Admin"
+              >
+                <span class="avatar-initials">A</span>
+              </button>
+
+              <div
+                class="account-dropdown"
+                id="accountMenuPanel"
+                role="menu"
+                aria-hidden="true"
+                aria-labelledby="accountMenuTrigger"
+              >
+                <div class="account-dropdown-header">
+                  <div class="account-dropdown-avatar" aria-hidden="true">
+                    <span class="avatar-initials">A</span>
+                  </div>
+                  <div class="account-dropdown-identity">
+                    <h4>Admin</h4>
+                    <p>Moderation Team</p>
+                  </div>
+                </div>
+
+                <div class="account-dropdown-divider"></div>
+
+                <a
+                  href="admin-settings.html"
+                  class="account-dropdown-item"
+                  role="menuitem"
+                >
+                  <svg
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <span>Settings</span>
+                </a>
+
+                <div class="account-dropdown-divider"></div>
+
+                <button
+                  type="button"
+                  class="account-dropdown-item account-logout-item"
+                  role="menuitem"
+                >
+                  <svg
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                  <span>Log Out</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main class="main-workspace" id="main-content">
+          <header class="workspace-header">
+            <h1>Moderation Queue</h1>
+            <p class="contextual-insight">
+              <span id="statPending">18</span> resources are waiting on your
+              review right now.
+            </p>
+          </header>
+
+          <!-- Core Statistics -->
+          <div class="stats-micro-grid">
+            <div class="stat-card pending-stat">
+              <div class="stat-icon">
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M20 13V7a2 2 0 00-2-2H6a2 2 0 00-2 2v6m16 0l-1.5 5.5a2 2 0 01-1.94 1.5H7.44a2 2 0 01-1.94-1.5L4 13m16 0h-4.28a1 1 0 00-.95.68l-.44 1.32a1 1 0 01-.95.68h-2.76a1 1 0 01-.95-.68l-.44-1.32a1 1 0 00-.95-.68H4"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3>Pending Review</h3>
+                <div class="stat-value" id="statPendingCard">18</div>
+              </div>
+            </div>
+            <div class="stat-card approved-stat">
+              <div class="stat-icon">
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3>Approved Today</h3>
+                <div class="stat-value" id="statApproved">24</div>
+              </div>
+            </div>
+            <div class="stat-card rejected-stat">
+              <div class="stat-icon">
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M15 9l-6 6m0-6l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3>Rejected Today</h3>
+                <div class="stat-value" id="statRejected">6</div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h3>Total Resources</h3>
+                <div class="stat-value">1,284</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Moderation Queue -->
+          <section class="dashboard-section">
+            <div class="section-title">
+              <span>Pending Reviews</span>
+              <div class="queue-filters">
+                <select id="sortQueue">
+                  <option value="oldest">Oldest First (Recommended)</option>
+                  <option value="newest">Newest First</option>
+                </select>
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+
+            <div class="moderation-queue" id="moderationQueue">
+              <!-- Queue items injected via JS -->
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <!-- 1. Preview Modal -->
+    <div class="modal-overlay hidden" id="previewModal">
+      <div class="modal-surface preview-surface">
+        <button
+          class="modal-close"
+          id="closePreviewModal"
+          aria-label="Close preview"
+        >
+          <svg
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            viewBox="0 0 24 24"
+          >
+            <path d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        <div class="modal-scroll-content">
+          <div class="modal-header">
+            <span class="modal-tag" id="previewType">Lecture Note</span>
+            <h2 id="previewTitle">Document Title</h2>
+            <p id="previewMeta">Department • Course • Semester • Level</p>
+          </div>
+
+          <div class="metadata-grid">
+            <div class="meta-item">
+              <span class="label">Uploader</span
+              ><span class="val" id="previewUploader">Name</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Upload Date</span
+              ><span class="val" id="previewDate">Date</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">File Size</span
+              ><span class="val" id="previewSize">Size</span>
+            </div>
+            <div class="meta-item">
+              <span class="label">Session</span
+              ><span class="val" id="previewSession">Session</span>
+            </div>
+          </div>
+
+          <div class="doc-preview-placeholder">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <p>Document interactive sandbox preview frame</p>
+          </div>
+        </div>
+
+        <!-- Sticky Action Bar -->
+        <div class="sticky-action-bar">
+          <div class="keyboard-hints">
+            Shortcuts: <kbd>A</kbd> Approve <kbd>R</kbd> Reject
+          </div>
+          <div class="action-buttons">
+            <button class="btn-lg btn-danger" id="btnPreviewReject">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Reject
+            </button>
+            <button class="btn-lg btn-success" id="btnPreviewApprove">
+              <svg
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+                viewBox="0 0 24 24"
+              >
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+              Approve
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Approve Confirmation Modal -->
+    <div class="modal-overlay hidden" id="approveModal">
+      <div class="modal-surface mini-surface">
+        <h2>Approve Resource?</h2>
+        <p>This will make the resource instantly available to all students.</p>
+        <div class="modal-footer">
+          <button class="btn-lg btn-secondary" id="cancelApprove">
+            Cancel
+          </button>
+          <button class="btn-lg btn-success" id="confirmApprove">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              viewBox="0 0 24 24"
+            >
+              <path d="M5 13l4 4L19 7" />
+            </svg>
+            Yes, Approve
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. Reject Reason Modal -->
+    <div class="modal-overlay hidden" id="rejectModal">
+      <div class="modal-surface">
+        <h2>Reject Resource</h2>
+        <p class="subtitle">
+          Please provide a reason. This will be sent to the uploader.
+        </p>
+
+        <form id="rejectForm" class="reject-options">
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="duplicate" required />
+            Duplicate Resource</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="wrong_course" /> Wrong
+            Course Code</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="wrong_dept" /> Wrong
+            Department</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="poor_quality" /> Poor
+            Quality (e.g., blurry scans)</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="incomplete" /> Incomplete
+            Material</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="corrupted" /> Corrupted or
+            Unreadable File</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="unsupported" />
+            Unsupported File Type</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="not_academic" /> Not
+            Academic Material</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="spam" /> Spam /
+            Irrelevant</label
+          >
+          <label class="radio-label"
+            ><input type="radio" name="reason" value="other" /> Other</label
+          >
+
+          <textarea
+            class="other-reason hidden"
+            id="otherReasonText"
+            placeholder="Please specify..."
+          ></textarea>
+        </form>
+
+        <div class="modal-footer">
+          <button class="btn-lg btn-secondary" id="cancelReject">Cancel</button>
+          <button class="btn-lg btn-danger" id="confirmReject">
+            <svg
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              viewBox="0 0 24 24"
+            >
+              <path d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            Confirm Rejection
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script src="admin-moderation.js"></script>
+  </body>
+</html>
