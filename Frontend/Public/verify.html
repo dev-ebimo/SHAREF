@@ -75,10 +75,12 @@
                 <div class="form-header">
                     <a class="mobile-logo" href="/"><span>S</span>haref</a>
                     <h1>Check your inbox</h1>
-                    <p>We sent a 6-digit verification code to your student email address. Enter it below to activate your academic profile.</p>
+                    <p>We sent a 6-digit verification code to <strong id="verify-email-display">your student email address</strong>. Enter it below to activate your academic profile.</p>
                 </div>
 
                 <form action="confirm.html" method="POST" id="otp-form">
+                    <div class="status-toast" id="otp-error" style="display:none; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #f87171; line-height: 1.5;"></div>
+
                     <fieldset class="form-section">
                         <legend>Verification Code</legend>
                         
@@ -114,89 +116,7 @@
         </main>
     </div>
 
-    <script>
-        document.addEventListener("DOMContentLoaded", () => {
-            const inputs = document.querySelectorAll(".otp-container input");
-            const form = document.getElementById("otp-form");
-            const fullOtpInput = document.getElementById("full-otp-input");
-            const resendBtn = document.getElementById("resend-btn");
-            const timerSpan = document.getElementById("timer");
-            const progressFill = document.getElementById("cooldown-progress");
-
-            inputs[0].focus();
-
-            inputs.forEach((input, index) => {
-                input.addEventListener("input", (e) => {
-                    const value = e.target.value;
-                    if (!/^[0-9]$/.test(value)) {
-                        e.target.value = "";
-                        return;
-                    }
-                    
-                    input.classList.remove("filled");
-                    void input.offsetWidth; 
-                    input.classList.add("filled");
-
-                    if (value && index < inputs.length - 1) {
-                        inputs[index + 1].focus();
-                    }
-                    updateHiddenInput();
-                });
-
-                input.addEventListener("keydown", (e) => {
-                    if (e.key === "Backspace") {
-                        if (!input.value && index > 0) {
-                            inputs[index - 1].value = "";
-                            inputs[index - 1].focus();
-                            inputs[index - 1].classList.remove("filled");
-                        } else {
-                            input.value = "";
-                            input.classList.remove("filled");
-                        }
-                        updateHiddenInput();
-                    }
-                });
-
-                input.addEventListener("paste", (e) => {
-                    e.preventDefault();
-                    const pastedData = (e.clipboardData || window.clipboardData).getData("text").trim();
-                    if (/^\d{6}$/.test(pastedData)) {
-                        pastedData.split("").forEach((char, i) => {
-                            if (inputs[i]) {
-                                inputs[i].value = char;
-                                inputs[i].classList.add("filled");
-                            }
-                        });
-                        inputs[inputs.length - 1].focus();
-                        updateHiddenInput();
-                    }
-                });
-            });
-
-            function updateHiddenInput() {
-                let code = "";
-                inputs.forEach(input => code += input.value);
-                fullOtpInput.value = code;
-            }
-
-            const initialDuration = 59;
-            let secondsLeft = initialDuration;
-            
-            const cooldownInterval = setInterval(() => {
-                secondsLeft--;
-                const percentageRemaining = (secondsLeft / initialDuration) * 100;
-                progressFill.style.width = `${percentageRemaining}%`;
-
-                if (secondsLeft <= 0) {
-                    clearInterval(cooldownInterval);
-                    resendBtn.disabled = false;
-                    resendBtn.innerText = "Resend Code";
-                    progressFill.style.width = "0%";
-                } else {
-                    timerSpan.innerText = secondsLeft;
-                }
-            }, 1000);
-        });
-    </script>
+    <script src="api-config.js"></script>
+    <script src="verify.js"></script>
 </body>
 </html>

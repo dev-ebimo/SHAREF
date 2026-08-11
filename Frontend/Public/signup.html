@@ -87,7 +87,8 @@
                     <p>Already have an account? <a href="login.html" class="link-btn">Log In</a></p>
                 </div>
 
-                <form action="/api/register" method="POST" class="signup-form">
+                <form action="/api/register" method="POST" class="signup-form" id="signup-form">
+                    <div class="status-toast" id="signup-error" style="display:none; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #f87171; line-height: 1.5;"></div>
                     
                     <!-- Section 1: Core Credentials -->
                     <fieldset class="form-section">
@@ -112,9 +113,9 @@
                             <label for="gender">Gender</label>
                             <select id="gender" name="gender" required>
                                 <option value="" disabled selected>Select your gender</option>
-                                <option value="male">Male</option>
-                                <option value="female">Female</option>
-                                <option value="prefer-not-to-say">Prefer not to say</option>
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Prefer not to say</option>
                             </select>
                         </div>
                     </fieldset>
@@ -187,5 +188,8 @@
             </div>
         </main>
     </div>
+
+    <script src="api-config.js"></script>
+    <script src="signup.js"></script>
 </body>
 </html>
