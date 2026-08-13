@@ -1,17 +1,16 @@
-const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+
+const FROM = {
+  email: process.env.SENDGRID_FROM_EMAIL,
+  name: process.env.SENDGRID_FROM_NAME || "Sharef",
+};
 
 async function sendVerificationEmail(toEmail, fullName, otp) {
-  const mailOptions = {
-    from: `"Sharef" <${process.env.EMAIL_USER}>`,
+  await sgMail.send({
     to: toEmail,
+    from: FROM,
     subject: "Verify your Sharef account",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
@@ -21,14 +20,13 @@ async function sendVerificationEmail(toEmail, fullName, otp) {
         <p>This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
       </div>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 }
+
 async function sendPasswordResetEmail(toEmail, fullName, otp) {
-  const mailOptions = {
-    from: `"Sharef" <${process.env.EMAIL_USER}>`,
+  await sgMail.send({
     to: toEmail,
+    from: FROM,
     subject: "Reset your Sharef password",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
@@ -38,15 +36,14 @@ async function sendPasswordResetEmail(toEmail, fullName, otp) {
         <p>This code expires in 10 minutes. If you didn't request this, you can safely ignore this email — your password will not be changed.</p>
       </div>
     `,
-  };
-
-  await transporter.sendMail(mailOptions);
+  });
 }
+
 async function sendResourceStatusEmail(toEmail, fullName, resourceTitle, status, reason) {
   const isApproved = status === "approved";
-  const mailOptions = {
-    from: `"Sharef" <${process.env.EMAIL_USER}>`,
+  await sgMail.send({
     to: toEmail,
+    from: FROM,
     subject: isApproved ? "Your upload was approved" : "Your upload was not approved",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
@@ -58,13 +55,13 @@ async function sendResourceStatusEmail(toEmail, fullName, resourceTitle, status,
         ${!isApproved ? "<p>You're welcome to review the file and re-upload it if the issue can be fixed.</p>" : ""}
       </div>
     `,
-  };
-  await transporter.sendMail(mailOptions);
+  });
 }
+
 async function sendAnnouncementEmail(toEmail, fullName, title, message) {
-  const mailOptions = {
-    from: `"Sharef" <${process.env.EMAIL_USER}>`,
+  await sgMail.send({
     to: toEmail,
+    from: FROM,
     subject: `Sharef Announcement: ${title}`,
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
@@ -73,8 +70,7 @@ async function sendAnnouncementEmail(toEmail, fullName, title, message) {
         <p style="white-space: pre-wrap;">${message}</p>
       </div>
     `,
-  };
-  await transporter.sendMail(mailOptions);
+  });
 }
 
 module.exports = { sendVerificationEmail, sendPasswordResetEmail, sendResourceStatusEmail, sendAnnouncementEmail };

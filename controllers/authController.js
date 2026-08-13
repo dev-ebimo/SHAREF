@@ -34,7 +34,12 @@ async function register(req, res) {
       verificationOTPExpires: otpExpires,
     });
 
-    await sendVerificationEmail(user.email, user.fullName, otp);
+    // Don't let a slow/unreachable email provider block the response or
+    // fail an already-successful registration — resend-otp covers the
+    // recovery path if this particular email doesn't land.
+    sendVerificationEmail(user.email, user.fullName, otp).catch((err) => {
+      console.error(`Failed to send verification email to ${user.email}:`, err.message);
+    });
 
     return res.status(201).json({
       success: true,
@@ -109,7 +114,9 @@ async function resendOTP(req, res) {
     user.verificationOTPExpires = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
     await user.save();
 
-    await sendVerificationEmail(user.email, user.fullName, otp);
+    sendVerificationEmail(user.email, user.fullName, otp).catch((err) => {
+      console.error(`Failed to send verification email to ${user.email}:`, err.message);
+    });
 
     return res.status(200).json({ success: true, message: "A new verification code has been sent to your email" });
   } catch (err) {
@@ -181,7 +188,9 @@ async function forgotPassword(req, res) {
     user.resetPasswordOTPExpires = new Date(Date.now() + RESET_OTP_EXPIRY_MINUTES * 60 * 1000);
     await user.save();
 
-    await sendPasswordResetEmail(user.email, user.fullName, otp);
+    sendPasswordResetEmail(user.email, user.fullName, otp).catch((err) => {
+      console.error(`Failed to send password reset email to ${user.email}:`, err.message);
+    });
 
     return res.status(200).json({
       success: true,

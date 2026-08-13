@@ -71,7 +71,9 @@ async function approveResource(req, res) {
         await Notification.create({ resource: resource._id, recipient: uploader._id, type: "resource_approved" });
       }
       if (uploader.preferences.notifications.uploadStatus.email) {
-        await sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "approved");
+        sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "approved").catch((err) => {
+          console.error(`Failed to send status email to ${uploader.email}:`, err.message);
+        });
       }
     }
 
@@ -106,7 +108,9 @@ async function rejectResource(req, res) {
         await Notification.create({ resource: resource._id, recipient: uploader._id, type: "resource_rejected" });
       }
       if (uploader.preferences.notifications.uploadStatus.email) {
-        await sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "rejected", reason);
+        sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "rejected", reason).catch((err) => {
+          console.error(`Failed to send status email to ${uploader.email}:`, err.message);
+        });
       }
     }
     await Notification.deleteOne({ resource: resource._id });
