@@ -12,17 +12,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inline SVG markup used in place of emoji icons, matching the app-wide stroke-icon set
     const DOC_ICON_SVG = `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
 
-    // Tiered pricing: 1-5 pages flat ₦200; 6-24 pages add ₦20/page; 25+
-    // pages add ₦10/page. Kept in sync with the backend's utils/pricing.js —
-    // the server always computes the real charge independently, this is
-    // purely for accurate display before the user confirms payment.
-    function calculateResourceCost(pages) {
-        if (pages <= 5) return 200;
-        if (pages <= 24) return 200 + (pages - 5) * 20;
-        return 580 + (pages - 24) * 10;
-    }
+    // Pricing follows the ₦10/page model — cost travels with the resource
+    // itself rather than being recomputed ad hoc, so it's easy to swap in
+    // a per-resource "downloadPrice" field from the backend later without
+    // touching this math everywhere it's used.
+    const PRICE_PER_PAGE = 10;
     function getResourceCost(note) {
-        return calculateResourceCost(note.pages);
+        return note.pages * PRICE_PER_PAGE;
     }
 
     // DOM Elements
@@ -255,14 +251,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Runs the wallet charge, then a success callback if funds were enough.
-    // The wallet itself opens the Insufficient Balance modal when they're
-    // not, so callers just need to stop the download when this returns false.
+    // NOTE: charge() is now async and expects a real backend resource id —
+    // this page still uses mock note.id values, so charges here will fail
+    // against the real API (404, resource not found) until this page gets
+    // its own real-data wiring pass. That's expected for now; the goal here
+    // is just matching the new signature so this doesn't crash or falsely
+    // report success while the promise is still pending.
     function attemptDownload(note, onSuccess) {
         const cost = getResourceCost(note);
-        const charged = window.SharefWallet.charge(cost, `${note.course} — ${note.title}`);
-        if (!charged) return;
-        window.SharefWallet.showToast(`${window.SharefWallet.formatNaira(cost)} deducted · "${note.title}" download started.`);
-        if (onSuccess) onSuccess();
+        window.SharefWallet.charge(note.id, `${note.course} — ${note.title}`).then((data) => {
+            if (!data.success) return;
+            if (data.fileUrl) window.open(data.fileUrl, "_blank");
+            window.SharefWallet.showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${note.title}" download started.`);
+            if (onSuccess) onSuccess();
+        });
     }
 
     // Delegated listener: covers cards in #notesContainer AND the

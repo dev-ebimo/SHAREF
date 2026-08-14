@@ -24,17 +24,13 @@ document.addEventListener("DOMContentLoaded", function () {
     { id: 16, title: "MTH 202 Lab Manual - Numerical Methods", courseCode: "MTH 202", courseName: "Differential Equations", department: "Mathematics", semester: "Second", type: "Lab Manual", fileType: "PDF", uploadedDaysAgo: 14, rating: 3.9, downloads: 187, pages: 20, fileSizeMB: 1.7, uploader: "Zainab Bello", description: "Worked examples of Euler's method and Runge-Kutta approximations for solving ODEs numerically." },
   ];
 
-  // Tiered pricing: 1-5 pages flat ₦200; 6-24 pages add ₦20/page; 25+
-  // pages add ₦10/page. Kept in sync with the backend's utils/pricing.js —
-  // the server always computes the real charge independently, this is
-  // purely for accurate display before the user confirms payment.
-  function calculateResourceCost(pages) {
-    if (pages <= 5) return 200;
-    if (pages <= 24) return 200 + (pages - 5) * 20;
-    return 580 + (pages - 24) * 10;
-  }
+  // Pricing follows the ₦10/page model used across the app — cost is
+  // derived from `pages` rather than hardcoded, so it stays in sync if the
+  // mock data changes and swaps in cleanly for a real per-resource price
+  // field later.
+  var PRICE_PER_PAGE = 10;
   function getResourceCost(r) {
-    return calculateResourceCost(r.pages);
+    return r.pages * PRICE_PER_PAGE;
   }
 
   var PAGE_SIZE = 6;
@@ -452,14 +448,17 @@ document.addEventListener("DOMContentLoaded", function () {
     var resource = findResourceById(currentPreviewId);
     if (!resource) return;
     var cost = getResourceCost(resource);
-    // SharefWallet.charge() opens the Insufficient Balance modal itself and
-    // returns false when the wallet can't cover it — nothing else to do here.
-    var charged = window.SharefWallet.charge(cost, resource.courseCode + " \u2014 " + resource.title);
-    if (!charged) return;
-    resource.downloads += 1;
-    showToast(window.SharefWallet.formatNaira(cost) + " deducted \u00b7 \"" + resource.title + "\" download started.");
-    closePreview();
-    render();
+    // NOTE: charge() is now async and expects a real backend resource id —
+    // this page still uses mock numeric ids, so charges here will fail
+    // against the real API until this page gets its own real-data wiring.
+    window.SharefWallet.charge(resource.id, resource.courseCode + " \u2014 " + resource.title).then(function (data) {
+      if (!data.success) return;
+      if (data.fileUrl) window.open(data.fileUrl, "_blank");
+      resource.downloads += 1;
+      showToast(window.SharefWallet.formatNaira(data.amountCharged || cost) + " deducted \u00b7 \"" + resource.title + "\" download started.");
+      closePreview();
+      render();
+    });
   });
 
   resourceGrid.addEventListener("click", function (e) {
@@ -479,13 +478,16 @@ document.addEventListener("DOMContentLoaded", function () {
       var dResource = findResourceById(did);
       if (dResource) {
         var dCost = getResourceCost(dResource);
-        // SharefWallet.charge() opens the Insufficient Balance modal itself
-        // and returns false when the wallet can't cover it.
-        var dCharged = window.SharefWallet.charge(dCost, dResource.courseCode + " \u2014 " + dResource.title);
-        if (!dCharged) return;
-        dResource.downloads += 1;
-        showToast(window.SharefWallet.formatNaira(dCost) + " deducted \u00b7 \"" + dResource.title + "\" download started.");
-        render();
+        // NOTE: charge() is now async and expects a real backend resource
+        // id — this page still uses mock numeric ids, so charges here will
+        // fail against the real API until this page gets real-data wiring.
+        window.SharefWallet.charge(dResource.id, dResource.courseCode + " \u2014 " + dResource.title).then(function (data) {
+          if (!data.success) return;
+          if (data.fileUrl) window.open(data.fileUrl, "_blank");
+          dResource.downloads += 1;
+          showToast(window.SharefWallet.formatNaira(data.amountCharged || dCost) + " deducted \u00b7 \"" + dResource.title + "\" download started.");
+          render();
+        });
       }
       return;
     }

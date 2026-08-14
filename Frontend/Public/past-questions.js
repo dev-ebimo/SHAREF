@@ -39,17 +39,13 @@ document.addEventListener("DOMContentLoaded", () => {
     toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2600);
   }
 
-  // Tiered pricing: 1-5 pages flat ₦200; 6-24 pages add ₦20/page; 25+
-  // pages add ₦10/page. Kept in sync with the backend's utils/pricing.js —
-  // the server always computes the real charge independently, this is
-  // purely for accurate display before the user confirms payment.
-  function calculateResourceCost(pages) {
-    if (pages <= 5) return 200;
-    if (pages <= 24) return 200 + (pages - 5) * 20;
-    return 580 + (pages - 24) * 10;
-  }
+  // Pricing follows the ₦10/page model used across the app — cost is
+  // derived from `pages` rather than hardcoded, so it stays in sync if the
+  // mock data changes and swaps in cleanly for a real per-resource price
+  // field later.
+  const PRICE_PER_PAGE = 10;
   function getResourceCost(item) {
-    return calculateResourceCost(item.pages);
+    return item.pages * PRICE_PER_PAGE;
   }
 
   // The reusable document-icon SVG markup (replaces the old 📄 emoji)
@@ -115,12 +111,15 @@ document.addEventListener("DOMContentLoaded", () => {
   modalDownloadBtn.addEventListener("click", () => {
     if (!currentPreviewItem) return;
     const cost = getResourceCost(currentPreviewItem);
-    // SharefWallet.charge() opens the Insufficient Balance modal itself and
-    // returns false when the wallet can't cover it — nothing else to do here.
-    const charged = window.SharefWallet.charge(cost, `${currentPreviewItem.course} — ${currentPreviewItem.title}`);
-    if (!charged) return;
-    showToast(`${window.SharefWallet.formatNaira(cost)} deducted · "${currentPreviewItem.title}" download started.`);
-    closePreviewModal();
+    // NOTE: charge() is now async and expects a real backend resource id —
+    // this page still uses mock item.id values, so charges here will fail
+    // against the real API until this page gets its own real-data wiring.
+    window.SharefWallet.charge(currentPreviewItem.id, `${currentPreviewItem.course} — ${currentPreviewItem.title}`).then((data) => {
+      if (!data.success) return;
+      if (data.fileUrl) window.open(data.fileUrl, "_blank");
+      showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${currentPreviewItem.title}" download started.`);
+      closePreviewModal();
+    });
   });
 
   modalBookmarkBtn.addEventListener("click", () => {
@@ -224,9 +223,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
         itemRowNode.querySelector(".download-trigger").addEventListener("click", () => {
           const cost = getResourceCost(item);
-          const charged = window.SharefWallet.charge(cost, `${item.course} — ${item.title}`);
-          if (!charged) return;
-          showToast(`${window.SharefWallet.formatNaira(cost)} deducted · "${item.title}" download started.`);
+          window.SharefWallet.charge(item.id, `${item.course} — ${item.title}`).then((data) => {
+            if (!data.success) return;
+            if (data.fileUrl) window.open(data.fileUrl, "_blank");
+            showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${item.title}" download started.`);
+          });
         });
 
         trackTimeline.appendChild(itemRowNode);

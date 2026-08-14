@@ -1,6 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const API_BASE = "http://localhost:5000/api";
-  const token = localStorage.getItem("token");
+  // API_BASE now comes from the shared api-config.js (points at the real
+  // Render URL) instead of being hardcoded to localhost here.
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
 
   /* ---- Shared shell behaviour (sidebar drawer + account menu) ---- */
   const sidebar = document.getElementById("sidebar");
@@ -53,9 +57,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---- Populate department options dynamically (reuses the resources filter-options endpoint) ---- */
   const deptSelect = document.getElementById("annDepartments");
-  fetch(`${API_BASE}/admin/resources/filter-options`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  authFetch(`${API_BASE}/admin/resources/filter-options`)
     .then((res) => res.json())
     .then((data) => {
       if (!data.success) return;
@@ -91,12 +93,9 @@ document.addEventListener("DOMContentLoaded", () => {
     sendBtn.disabled = true;
     sendBtn.textContent = "Sending...";
 
-    fetch(`${API_BASE}/admin/announcements`, {
+    authFetch(`${API_BASE}/admin/announcements`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, message, departments, levels }),
     })
       .then((res) => res.json())
@@ -139,9 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function loadHistory() {
-    fetch(`${API_BASE}/admin/announcements`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    authFetch(`${API_BASE}/admin/announcements`)
       .then((res) => res.json())
       .then((data) => {
         if (!data.success) return;

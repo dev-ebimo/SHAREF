@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirming Payment | Sharef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="verify.css">
+    <style>
+        .callback-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            width: 100%;
+            padding: 2rem;
+        }
+        .callback-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            padding: 3rem 2.5rem;
+            border-radius: 20px;
+            width: 100%;
+            max-width: 440px;
+            text-align: center;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+        .icon-wrapper {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+        }
+        .icon-wrapper.is-pending {
+            background: rgba(168, 85, 247, 0.1);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+        }
+        .icon-wrapper.is-success {
+            background: rgba(45, 212, 191, 0.1);
+            border: 1px solid rgba(45, 212, 191, 0.25);
+        }
+        .icon-wrapper.is-error {
+            background: rgba(248, 113, 113, 0.1);
+            border: 1px solid rgba(248, 113, 113, 0.25);
+        }
+        .icon-wrapper svg {
+            width: 36px;
+            height: 36px;
+        }
+        .icon-wrapper.is-success svg { color: #2dd4bf; }
+        .icon-wrapper.is-error svg { color: #f87171; }
+
+        .spinner {
+            width: 32px;
+            height: 32px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #a855f7;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .callback-card h1 {
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.75rem;
+            color: var(--text-pure);
+        }
+        .callback-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+        .manual-link {
+            display: none;
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #a855f7;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .manual-link:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+    <div class="bg bg1" aria-hidden="true"></div>
+    <div class="bg bg2" aria-hidden="true"></div>
+
+    <div class="callback-container">
+        <main class="callback-card">
+            <div class="icon-wrapper is-pending" id="status-icon">
+                <div class="spinner"></div>
+            </div>
+
+            <h1 id="status-title">Confirming Your Payment</h1>
+            <p id="status-message">Hold on while we confirm your payment with Paystack — this only takes a moment.</p>
+
+            <a href="dashboard.html" class="manual-link" id="manual-link">Go to Dashboard</a>
+        </main>
+    </div>
+
+    <script src="api-config.js"></script>
+    <script src="auth-guard.js"></script>
+    <script src="payment-callback.js"></script>
+</body>
+</html>

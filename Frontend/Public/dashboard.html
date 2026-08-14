@@ -579,118 +579,18 @@
 
           <section class="dashboard-section">
             <h2 class="section-title">
-              Trending in Computer Science
+              Trending Today
               <a class="see-all-link" href="resources.html">See all</a>
             </h2>
-            <div class="resource-grid">
-              <article class="resource-card">
-                <div class="card-top-meta">
-                  <span class="type-tag pdf-type">PDF</span>
-                  <button
-                    class="icon-btn-badge"
-                    style="padding: 0.2rem"
-                    aria-label="Bookmark this resource"
-                  >
-                    <svg
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"
-                      />
-                    </svg>
-                  </button>
-                </div>
-                <div class="card-body-zone">
-                  <h3>CSC 201 Mid Semester Exam Notes</h3>
-                  <span class="course-code-sub">CSC 201</span>
-                </div>
-                <div class="card-bottom-metrics">
-                  <span>★★★★★</span>
-                  <div class="metric-node">
-                    <svg
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                    <span>1.2k</span>
-                  </div>
-                </div>
-              </article>
-              <article class="resource-card">
-                <div class="card-top-meta">
-                  <span class="type-tag exam-type">Exam Archive</span>
-                  <button
-                    class="icon-btn-badge"
-                    style="padding: 0.2rem"
-                    aria-label="Bookmark this resource"
-                  >
-                    <svg
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"
-                      />
-                    </svg>
-                  </button>
-                </div>
-                <div class="card-body-zone">
-                  <h3>Past Questions — CSC 202</h3>
-                  <span class="course-code-sub">CSC 202</span>
-                </div>
-                <div class="card-bottom-metrics">
-                  <span>★★★★☆</span>
-                  <div class="metric-node">
-                    <svg
-                      fill="none"
-                      stroke="currentColor"
-                      stroke-width="2"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                      />
-                    </svg>
-                    <span>860</span>
-                  </div>
-                </div>
-              </article>
+            <div class="resource-grid" id="trendingGrid">
+              <!-- Trending cards are rendered by dashboard.js from GET /api/resources/trending -->
             </div>
           </section>
 
           <section class="dashboard-section">
             <h2 class="section-title">Recently Added</h2>
             <div class="feed-stack" id="recentFeedStack">
-              <div class="feed-item">
-                <div class="item-info">
-                  <h3>Operating Systems Notes</h3>
-                  <p>Added 2 hours ago • PDF Document</p>
-                </div>
-                <div class="item-control-links">
-                  <a href="#" class="feed-inline-link">Download</a>
-                  <a href="#" class="feed-inline-link">Preview</a>
-                </div>
-              </div>
-              <div class="feed-item">
-                <div class="item-info">
-                  <h3>Database Systems Summary</h3>
-                  <p>Added 3 days ago • Revision Sheet</p>
-                </div>
-                <div class="item-control-links">
-                  <a href="#" class="feed-inline-link">Download</a>
-                  <a href="#" class="feed-inline-link">Preview</a>
-                </div>
-              </div>
+              <!-- Feed items are rendered by dashboard.js from GET /api/resources/recent -->
             </div>
 
             <!-- See More interaction panel -->
@@ -728,6 +628,8 @@
       <span class="fab-label">Upload</span>
     </a>
 
+    <script src="api-config.js"></script>
+    <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

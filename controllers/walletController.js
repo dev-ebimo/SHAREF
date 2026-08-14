@@ -150,7 +150,7 @@ async function chargeForDownload(req, res) {
       resource.downloads += 1;
       await resource.save();
       await DownloadLog.create({ user: req.user.id, resource: resourceId });
-      return res.status(200).json({ success: true, alreadyOwned: true, message: "Download starting" });
+      return res.status(200).json({ success: true, alreadyOwned: true, fileUrl: resource.fileUrl, message: "Download starting" });
     }
 
     const cost = calculateResourceCost(resource.pages);
@@ -185,6 +185,7 @@ async function chargeForDownload(req, res) {
     return res.status(200).json({
       success: true,
       alreadyOwned: false,
+      fileUrl: resource.fileUrl,
       amountCharged: cost,
       newBalance: user.walletBalance,
       message: "Payment successful, download starting",

@@ -1,4 +1,13 @@
+// Runs immediately (before DOMContentLoaded) — requireAuth() only touches
+// localStorage, no DOM needed. Every section below bails out early if this
+// is null, since requireAuth() has already redirected away in that case.
+var currentUser = requireAuth();
+
 document.addEventListener("DOMContentLoaded", function () {
+  if (!currentUser) return;
+
+  wireLogoutButton();
+
   var sidebar = document.getElementById("sidebar");
   var scrim = document.getElementById("scrim");
   var openBtn = document.getElementById("hamburgerBtn");
@@ -47,47 +56,109 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ==========================================================================
-  // 2. DYNAMIC MOCK CONTENTS & FEED TOGGLE ("SEE MORE")
+  // 2. RECENTLY ADDED + TRENDING — real data from the backend
   // ==========================================================================
   var recentFeedStack = document.getElementById("recentFeedStack");
   var feedMoreBtn = document.getElementById("feedMoreBtn");
+  var trendingGrid = document.getElementById("trendingGrid");
 
-  // Simulated hidden elements to preserve visual clarity on load
-  var additionalItems = [
-    {
-      title: "CSC 204 Computer Architecture Notes",
-      meta: "Added 5 days ago • PDF Document",
-    },
-    {
-      title: "MTH 202 Differential Equations Guide",
-      meta: "Added 1 week ago • Text File",
-    },
-  ];
+  // Shared with section 7 (download modal) so it can look up a resource's
+  // full data (id, pages, etc.) by whatever's rendered on screen, without
+  // a second network call when a card/feed-item is clicked.
+  window.__dashboardResourceCache = {};
 
-  // Only run this on pages that actually have the feed (i.e. the dashboard) —
-  // without this guard, calling appendChild on a null recentFeedStack throws
-  // on every other page, which silently stops the rest of this handler
-  // (including the search/hamburger wiring further down) from running.
-  if (recentFeedStack) {
-    // Inject hidden secondary nodes into layout stack
-    additionalItems.forEach(function (item) {
+  var FEED_ICON_SVG =
+    '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>';
+
+  function timeAgoLabel(isoDate) {
+    var diffMs = Date.now() - new Date(isoDate).getTime();
+    var mins = Math.floor(diffMs / 60000);
+    var hours = Math.floor(diffMs / 3600000);
+    var days = Math.floor(diffMs / 86400000);
+    if (mins < 60) return mins <= 1 ? "Just now" : mins + " minutes ago";
+    if (hours < 24) return hours + (hours === 1 ? " hour ago" : " hours ago");
+    if (days === 1) return "Yesterday";
+    return days + " days ago";
+  }
+
+  function renderRecentFeed(resources) {
+    if (!recentFeedStack) return;
+    recentFeedStack.innerHTML = "";
+
+    resources.forEach(function (resource, index) {
+      window.__dashboardResourceCache[resource.id] = resource;
+
       var itemEl = document.createElement("div");
-      itemEl.className = "feed-item hidden";
-      itemEl.innerHTML = `
-            <div class="item-info">
-                <h3>${item.title}</h3>
-                <p>${item.meta}</p>
-            </div>
-            <div class="item-control-links">
-                <a href="#" class="feed-inline-link">Download</a>
-                <a href="#" class="feed-inline-link">Preview</a>
-            </div>
-        `;
+      itemEl.className = "feed-item" + (index >= 2 ? " hidden" : "");
+      itemEl.dataset.resourceId = resource.id;
+      itemEl.innerHTML =
+        '<div class="item-info">' +
+        "<h3>" + resource.title + "</h3>" +
+        "<p>Added " + timeAgoLabel(resource.date) + " • " + resource.type + "</p>" +
+        "</div>" +
+        '<div class="item-control-links">' +
+        '<a href="#" class="feed-inline-link" data-action="download">Download</a>' +
+        '<a href="#" class="feed-inline-link" data-action="preview">Preview</a>' +
+        "</div>";
       recentFeedStack.appendChild(itemEl);
+    });
+
+    if (feedMoreBtn) {
+      feedMoreBtn.style.display = resources.length > 2 ? "" : "none";
+    }
+  }
+
+  function renderTrending(resources) {
+    if (!trendingGrid) return;
+    trendingGrid.innerHTML = "";
+
+    resources.forEach(function (resource) {
+      window.__dashboardResourceCache[resource.id] = resource;
+
+      var card = document.createElement("article");
+      card.className = "resource-card";
+      card.dataset.resourceId = resource.id;
+      card.innerHTML =
+        '<div class="card-top-meta">' +
+        '<span class="type-tag pdf-type">' + resource.type + "</span>" +
+        '<button class="icon-btn-badge" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
+        '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
+        "</button>" +
+        "</div>" +
+        '<div class="card-body-zone">' +
+        "<h3>" + resource.title + "</h3>" +
+        '<span class="course-code-sub">' + resource.course + "</span>" +
+        "</div>" +
+        '<div class="card-bottom-metrics">' +
+        '<div class="metric-node">' +
+        '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
+        "<span>" + resource.recentDownloads + "</span>" +
+        "</div>" +
+        "</div>";
+      trendingGrid.appendChild(card);
     });
   }
 
-  // Toggle logic for showing hidden items cleanly
+  if (recentFeedStack) {
+    authFetch(API_BASE + "/resources/recent?limit=10")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.success) renderRecentFeed(data.resources);
+      })
+      .catch(function (err) { console.error("Could not load recent resources:", err); });
+  }
+
+  if (trendingGrid) {
+    authFetch(API_BASE + "/resources/trending?limit=6")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.success) renderTrending(data.resources);
+      })
+      .catch(function (err) { console.error("Could not load trending resources:", err); });
+  }
+
+  // Toggle logic for showing hidden feed items — unchanged from before,
+  // still just operates on whatever .feed-item elements exist at click time.
   if (feedMoreBtn) {
     feedMoreBtn.addEventListener("click", function () {
       var hiddenItems = recentFeedStack.querySelectorAll(".feed-item.hidden");
@@ -95,18 +166,14 @@ document.addEventListener("DOMContentLoaded", function () {
       var labelSpan = feedMoreBtn.querySelector("span");
 
       if (hiddenItems.length > 0) {
-        // Reveal items
         hiddenItems.forEach(function (el) {
           el.classList.remove("hidden");
         });
         labelSpan.textContent = "See less updates";
         feedMoreBtn.classList.add("expanded");
       } else {
-        // Re-hide added mock items dynamically
         allItems.forEach(function (el, index) {
-          if (index >= 2) {
-            el.classList.add("hidden");
-          }
+          if (index >= 2) el.classList.add("hidden");
         });
         labelSpan.textContent = "See more updates";
         feedMoreBtn.classList.remove("expanded");
@@ -296,62 +363,48 @@ document.addEventListener("click", function (event) {
   }
 });
 // ==========================================================================
-// 6. STUDY WALLET — shared mock payment system
+// 6. STUDY WALLET — real backend-backed payment system
 //    Runs on every page that loads dashboard.js. Injects a wallet balance
 //    chip into the nav, plus a Fund Wallet modal and an Insufficient
 //    Balance modal (both built once and appended to <body>, so no page's
 //    HTML needs to be touched). Resource pages call window.SharefWallet
-//    instead of touching localStorage directly.
+//    instead of touching the API directly.
 //
-//    NOTE: this is a frontend-only mock for the prototype stage. In a real
-//    deployment the backend must own the balance check + deduction — the
-//    frontend should never be trusted to decide whether a user can afford
-//    something (see the "Security" section of the payment flow plan).
+//    The backend is always the source of truth for balance and cost —
+//    this file never decides whether a charge succeeds, it only displays
+//    what the server tells it and reacts to the response.
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", function () {
-  var WALLET_KEY = "sharef.walletBalance";
-  var TX_KEY = "sharef.walletTransactions";
-  var STARTER_BALANCE = 500; // so the flow is testable without funding first
-  var MIN_FUND = 100;
-  var MAX_BALANCE = 50000;
+  if (!currentUser) return;
 
+  var MIN_FUND = 100;
   var chipAmountEl = null;
+  var cachedBalance = 0;
 
   function formatNaira(amount) {
     return "₦" + Math.round(amount).toLocaleString("en-NG");
   }
 
-  function getBalance() {
-    var stored = window.localStorage.getItem(WALLET_KEY);
-    if (stored === null) {
-      window.localStorage.setItem(WALLET_KEY, String(STARTER_BALANCE));
-      return STARTER_BALANCE;
-    }
-    return Number(stored) || 0;
+  function updateChipDisplay(balance) {
+    cachedBalance = balance;
+    if (chipAmountEl) chipAmountEl.textContent = formatNaira(balance);
   }
 
-  function setBalance(next) {
-    window.localStorage.setItem(WALLET_KEY, String(next));
-    if (chipAmountEl) chipAmountEl.textContent = formatNaira(next);
-  }
-
-  function getTransactions() {
-    try {
-      return JSON.parse(window.localStorage.getItem(TX_KEY)) || [];
-    } catch (err) {
-      return [];
-    }
-  }
-
-  function logTransaction(entry) {
-    var txs = getTransactions();
-    txs.unshift(entry);
-    window.localStorage.setItem(TX_KEY, JSON.stringify(txs.slice(0, 10)));
+  function fetchBalance() {
+    return authFetch(API_BASE + "/wallet/balance")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.success) updateChipDisplay(data.balance);
+        return data.success ? data.balance : cachedBalance;
+      })
+      .catch(function (err) {
+        console.error("Could not fetch wallet balance:", err);
+        return cachedBalance;
+      });
   }
 
   // ------------------------------------------------------------------
-  // Wallet chip (nav) — inserted right before the account menu so it
-  // reads naturally as part of the account cluster on every page.
+  // Wallet chip (nav)
   // ------------------------------------------------------------------
   var navActions = document.querySelector(".nav-actions");
   var accountWrapper = document.getElementById("accountMenuWrapper");
@@ -368,7 +421,7 @@ document.addEventListener("DOMContentLoaded", function () {
       '<path d="M20 7H6a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM16 5H4a2 2 0 00-2 2v9" />' +
       '<circle cx="16.5" cy="13.5" r="1.1" fill="currentColor" stroke="none" />' +
       "</svg>" +
-      "<span id=\"walletChipAmount\"></span>";
+      "<span id=\"walletChipAmount\">…</span>";
 
     if (accountWrapper && accountWrapper.parentNode === navActions) {
       navActions.insertBefore(chip, accountWrapper);
@@ -377,7 +430,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     chipAmountEl = chip.querySelector("#walletChipAmount");
-    chipAmountEl.textContent = formatNaira(getBalance());
+    fetchBalance();
 
     chip.addEventListener("click", function () {
       openFundModal();
@@ -403,7 +456,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ------------------------------------------------------------------
-  // Fund Wallet modal
+  // Fund Wallet modal — now redirects to Paystack's real checkout
   // ------------------------------------------------------------------
   var fundOverlay = document.createElement("div");
   fundOverlay.className = "wallet-modal-overlay";
@@ -420,21 +473,16 @@ document.addEventListener("DOMContentLoaded", function () {
   var fundModalCloseBtn = fundOverlay.querySelector("#fundModalCloseBtn");
 
   function renderFundForm() {
-    var balance = getBalance();
     fundModalBody.innerHTML =
       '<h3 class="wallet-modal-title" id="fundModalTitle">Fund Study Wallet</h3>' +
       '<div class="wallet-balance-row"><span>Current Balance</span><strong>' +
-      formatNaira(balance) +
+      formatNaira(cachedBalance) +
       "</strong></div>" +
       '<label class="wallet-field-label" for="fundAmountInput">Amount</label>' +
       '<input type="number" id="fundAmountInput" class="wallet-amount-input" placeholder="Enter amount" min="' +
       MIN_FUND +
       '" step="50" />' +
-      '<p class="wallet-hint">Minimum: ' +
-      formatNaira(MIN_FUND) +
-      " &middot; Maximum Wallet Balance: " +
-      formatNaira(MAX_BALANCE) +
-      "</p>" +
+      '<p class="wallet-hint">Minimum: ' + formatNaira(MIN_FUND) + "</p>" +
       '<p class="wallet-field-error" id="fundAmountError"></p>' +
       '<div class="wallet-modal-actions">' +
       '<button type="button" class="btn-wallet-primary" id="fundContinueBtn">Continue Payment</button>' +
@@ -446,52 +494,44 @@ document.addEventListener("DOMContentLoaded", function () {
 
     continueBtn.addEventListener("click", function () {
       var amount = Number(input.value);
-      var currentBalance = getBalance();
 
       if (!amount || amount < MIN_FUND) {
         errorEl.textContent = "Enter at least " + formatNaira(MIN_FUND) + ".";
         return;
       }
-      if (currentBalance + amount > MAX_BALANCE) {
-        errorEl.textContent =
-          "That would exceed the maximum wallet balance of " + formatNaira(MAX_BALANCE) + ".";
-        return;
-      }
 
-      // Mock "payment": credited instantly for the prototype. A real
-      // integration would call a payment provider here and only credit
-      // the wallet once the backend confirms the charge succeeded.
-      var newBalance = currentBalance + amount;
-      setBalance(newBalance);
-      logTransaction({
-        type: "deposit",
-        amount: amount,
-        description: "Wallet Funding",
-        date: "Just now",
-      });
-      renderFundSuccess(newBalance);
+      errorEl.textContent = "";
+      continueBtn.disabled = true;
+      continueBtn.textContent = "Redirecting to Paystack...";
+
+      authFetch(API_BASE + "/wallet/fund/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: amount }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.success) {
+            errorEl.textContent = data.message || "Could not start payment. Please try again.";
+            continueBtn.disabled = false;
+            continueBtn.textContent = "Continue Payment";
+            return;
+          }
+          // Hand off to Paystack's hosted checkout — the browser leaves
+          // this page entirely and comes back via payment-callback.html
+          window.location.href = data.authorizationUrl;
+        })
+        .catch(function (err) {
+          errorEl.textContent = "Network error — could not reach the server.";
+          continueBtn.disabled = false;
+          continueBtn.textContent = "Continue Payment";
+          console.error(err);
+        });
     });
 
     input.addEventListener("keydown", function (e) {
       if (e.key === "Enter") continueBtn.click();
     });
-  }
-
-  function renderFundSuccess(newBalance) {
-    fundModalBody.innerHTML =
-      '<h3 class="wallet-modal-title">Thank You!</h3>' +
-      '<p class="wallet-modal-subtitle">Your wallet has been credited.</p>' +
-      '<div class="wallet-balance-row"><span>Current Balance</span><strong>' +
-      formatNaira(newBalance) +
-      "</strong></div>" +
-      '<p class="wallet-modal-subtitle">You can now continue downloading resources.</p>' +
-      '<div class="wallet-modal-actions">' +
-      '<button type="button" class="btn-wallet-primary" id="fundSuccessContinueBtn">Continue</button>' +
-      "</div>";
-
-    fundModalBody
-      .querySelector("#fundSuccessContinueBtn")
-      .addEventListener("click", closeFundModal);
   }
 
   function openFundModal() {
@@ -516,7 +556,8 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ------------------------------------------------------------------
-  // Insufficient Balance modal
+  // Insufficient Balance modal — now populated from the server's 402
+  // response instead of a client-side balance check
   // ------------------------------------------------------------------
   var insufficientOverlay = document.createElement("div");
   insufficientOverlay.className = "wallet-modal-overlay";
@@ -572,79 +613,62 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ------------------------------------------------------------------
-  // Public API for resource pages (lecture-notes.js, past-questions.js)
+  // Public API for resource pages
   // ------------------------------------------------------------------
   window.SharefWallet = {
-    getBalance: getBalance,
     formatNaira: formatNaira,
-    getTransactions: getTransactions,
     showToast: showWalletToast,
     openFundModal: openFundModal,
+    refreshBalance: fetchBalance,
 
-    // Attempts to charge `cost` for `description`. Returns true and
-    // deducts the balance if funds are sufficient. Otherwise it opens
-    // the Insufficient Balance modal itself and returns false, so the
-    // caller just needs to bail out of the download when it gets false.
-    charge: function (cost, description) {
-      var balance = getBalance();
-      if (balance < cost) {
-        openInsufficientModal(cost, balance);
-        return false;
-      }
-      setBalance(balance - cost);
-      logTransaction({
-        type: "download",
-        amount: -cost,
-        description: description,
-        date: "Just now",
-      });
-      return true;
+    // Charges for a resource by id — the backend computes the real cost
+    // from the resource's page count, never trusts a client-supplied
+    // amount. Returns a Promise resolving to the server's response object
+    // ({ success, alreadyOwned, fileUrl, ... } or { success:false,
+    // insufficientBalance:true, ... }), so callers must use .then()/await
+    // instead of treating this as an instant synchronous result.
+    charge: function (resourceId, description) {
+      return authFetch(API_BASE + "/wallet/charge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resourceId: resourceId }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+        .then(function (result) {
+          var data = result.data;
+
+          if (!data.success) {
+            if (data.insufficientBalance) {
+              openInsufficientModal(data.required, data.currentBalance);
+            } else {
+              showWalletToast(data.message || "Could not process download.");
+            }
+            return data;
+          }
+
+          if (typeof data.newBalance === "number") updateChipDisplay(data.newBalance);
+          return data;
+        })
+        .catch(function (err) {
+          showWalletToast("Network error — could not process download.");
+          console.error(err);
+          return { success: false };
+        });
     },
   };
 });
 
 // ==========================================================================
 // 7. RESOURCE DOWNLOAD MODAL — payment popup for the dashboard
-//    (Recently Added feed + Trending resource cards).
-//
-//    Same pay-per-page logic as past-questions.js: cost is derived from a
-//    `pages` count using the tiered pricing formula (see calculateResourceCost
-//    below) and charged through the shared window.SharefWallet.charge()
-//    from section 6 above — which already
-//    handles the Insufficient Balance flow, so this section never has to
-//    duplicate the balance check itself.
+//    (Recently Added feed + Trending resource cards). Resource data comes
+//    from window.__dashboardResourceCache, populated by section 2's
+//    fetch of /api/resources/recent and /trending — both already return
+//    everything this modal needs (course, type, size, pages, downloads),
+//    so no second network call is needed just to open it.
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", function () {
+  if (!currentUser) return;
   if (!window.SharefWallet) return; // section 6 should always run first, but stay safe
-
-  // Mock per-resource metadata, keyed by the title already rendered in the
-  // DOM — mirrors the shape of past-questions.js's mockResources, just
-  // without needing to touch dashboard.html to attach it.
-  var feedResourceData = {
-    "Operating Systems Notes": { course: "CSC 304", type: "PDF Document", size: "3.4 MB", pages: 10, downloads: 640 },
-    "Database Systems Summary": { course: "CSC 308", type: "Revision Sheet", size: "1.2 MB", pages: 4, downloads: 275 },
-    "CSC 204 Computer Architecture Notes": { course: "CSC 204", type: "PDF Document", size: "2.6 MB", pages: 9, downloads: 410 },
-    "MTH 202 Differential Equations Guide": { course: "MTH 202", type: "Text File", size: "1.8 MB", pages: 6, downloads: 190 },
-  };
-
-  var trendingResourceData = {
-    "CSC 201 Mid Semester Exam Notes": { course: "CSC 201", type: "PDF", size: "2.0 MB", pages: 7, downloads: "1.2k" },
-    "Past Questions — CSC 202": { course: "CSC 202", type: "Exam Archive", size: "2.8 MB", pages: 11, downloads: "860" },
-  };
-
-  // Tiered pricing: 1-5 pages flat ₦200; 6-24 pages add ₦20/page; 25+
-  // pages add ₦10/page. Kept in sync with the backend's utils/pricing.js —
-  // the server always computes the real charge independently, this is
-  // purely for accurate display before the user confirms payment.
-  function calculateResourceCost(pages) {
-    if (pages <= 5) return 200;
-    if (pages <= 24) return 200 + (pages - 5) * 20;
-    return 580 + (pages - 24) * 10;
-  }
-
-  function getResourceCost(item) {
-    return calculateResourceCost(item.pages);
-  }
 
   // ------------------------------------------------------------------
   // Modal markup — built once and appended to <body>, same pattern as
@@ -668,6 +692,7 @@ document.addEventListener("DOMContentLoaded", function () {
     '<div class="stat-item"><span class="label">Downloads</span><span class="val" id="downloadModalDownloads"></span></div>' +
     '<div class="stat-item price-stat"><span class="label">Price</span><span class="val" id="downloadModalPrice"></span></div>' +
     "</div>" +
+    '<p class="wallet-hint" id="downloadModalPreview">Loading preview…</p>' +
     '<div class="wallet-modal-actions">' +
     '<button type="button" class="btn-wallet-secondary" id="downloadModalCancelBtn">Cancel</button>' +
     '<button type="button" class="btn-wallet-primary" id="downloadModalConfirmBtn">Download File</button>' +
@@ -685,32 +710,57 @@ document.addEventListener("DOMContentLoaded", function () {
   var downloadPagesEl = downloadOverlay.querySelector("#downloadModalPages");
   var downloadDownloadsEl = downloadOverlay.querySelector("#downloadModalDownloads");
   var downloadPriceEl = downloadOverlay.querySelector("#downloadModalPrice");
+  var downloadPreviewEl = downloadOverlay.querySelector("#downloadModalPreview");
   var DOWNLOAD_BTN_DEFAULT_TEXT = "Download File";
 
-  var currentDownloadItem = null; // { title, data }
+  var currentResource = null;
 
-  function openDownloadModal(title, data) {
-    currentDownloadItem = { title: title, data: data };
-    var cost = getResourceCost(data);
+  // The real per-bracket formula, mirrored here purely for display before
+  // the user confirms — the backend recomputes this independently from
+  // the resource's actual page count and is the only source that matters
+  // for what actually gets charged.
+  function calculateResourceCost(pages) {
+    if (pages <= 5) return 200;
+    if (pages <= 24) return 200 + (pages - 5) * 20;
+    return 580 + (pages - 24) * 10;
+  }
 
-    downloadTagEl.textContent = data.type || "Resource";
-    downloadTitleEl.textContent = title;
-    downloadMetaEl.textContent = data.course || "";
-    downloadSizeEl.textContent = data.size;
-    downloadPagesEl.textContent = data.pages + " Pages";
-    downloadDownloadsEl.textContent = data.downloads;
+  function openDownloadModal(resource) {
+    currentResource = resource;
+    var cost = calculateResourceCost(resource.pages);
+
+    downloadTagEl.textContent = resource.type || "Resource";
+    downloadTitleEl.textContent = resource.title;
+    downloadMetaEl.textContent = resource.course || "";
+    downloadSizeEl.textContent = resource.size;
+    downloadPagesEl.textContent = resource.pages + " Pages";
+    downloadDownloadsEl.textContent = resource.downloads;
     downloadPriceEl.textContent = window.SharefWallet.formatNaira(cost);
     downloadConfirmBtn.textContent = "Download File · " + window.SharefWallet.formatNaira(cost);
+    downloadConfirmBtn.disabled = false;
+    downloadPreviewEl.textContent = "Loading preview…";
 
     downloadOverlay.classList.add("is-open");
     document.body.style.overflow = "hidden";
     downloadCloseBtn.focus();
+
+    authFetch(API_BASE + "/resources/" + resource.id + "/preview")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (currentResource !== resource) return; // modal moved on to something else
+        downloadPreviewEl.textContent = data.available
+          ? '"' + data.snippet + '"'
+          : (data.message || "Preview not available for this file type.");
+      })
+      .catch(function () {
+        downloadPreviewEl.textContent = "Preview not available right now.";
+      });
   }
 
   function closeDownloadModal() {
     downloadOverlay.classList.remove("is-open");
     document.body.style.overflow = "";
-    currentDownloadItem = null;
+    currentResource = null;
     downloadConfirmBtn.textContent = DOWNLOAD_BTN_DEFAULT_TEXT;
   }
 
@@ -726,46 +776,54 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   downloadConfirmBtn.addEventListener("click", function () {
-    if (!currentDownloadItem) return;
-    var cost = getResourceCost(currentDownloadItem.data);
-    var description =
-      (currentDownloadItem.data.course ? currentDownloadItem.data.course + " — " : "") + currentDownloadItem.title;
+    if (!currentResource) return;
+    var resource = currentResource;
 
-    // Exactly the same charge flow as past-questions.js: charge() deducts
-    // and returns true, or opens the Insufficient Balance modal itself and
-    // returns false — nothing else to do here in that case.
-    var charged = window.SharefWallet.charge(cost, description);
-    if (!charged) return;
+    downloadConfirmBtn.disabled = true;
+    downloadConfirmBtn.textContent = "Processing...";
 
-    window.SharefWallet.showToast(
-      window.SharefWallet.formatNaira(cost) + ' deducted · "' + currentDownloadItem.title + '" download started.'
-    );
-    closeDownloadModal();
+    window.SharefWallet.charge(resource.id, resource.course + " — " + resource.title).then(function (data) {
+      downloadConfirmBtn.disabled = false;
+
+      if (!data.success) {
+        // Insufficient-balance case already opened its own modal inside
+        // charge() — just restore this modal's button text and stop here.
+        downloadConfirmBtn.textContent = DOWNLOAD_BTN_DEFAULT_TEXT;
+        return;
+      }
+
+      if (data.fileUrl) window.open(data.fileUrl, "_blank");
+
+      window.SharefWallet.showToast(
+        data.alreadyOwned
+          ? '"' + resource.title + '" download started.'
+          : window.SharefWallet.formatNaira(data.amountCharged) + ' deducted · "' + resource.title + '" download started.'
+      );
+      closeDownloadModal();
+    });
   });
 
   // ------------------------------------------------------------------
   // Triggers: "Download" / "Preview" links in Recently Added, and the
-  // Trending resource cards (clicking the card previews it, same as
-  // tapping "Preview" does on the Past Questions page).
+  // Trending resource cards — both look up the real resource by id from
+  // the shared cache populated in section 2.
   // ------------------------------------------------------------------
   document.addEventListener("click", function (e) {
     var feedLink = e.target.closest(".feed-inline-link");
     if (feedLink) {
       e.preventDefault();
       var feedItem = feedLink.closest(".feed-item");
-      var feedTitleEl = feedItem && feedItem.querySelector("h3");
-      var feedTitle = feedTitleEl ? feedTitleEl.textContent.trim() : null;
-      var feedData = feedTitle && feedResourceData[feedTitle];
-      if (feedData) openDownloadModal(feedTitle, feedData);
+      var feedId = feedItem && feedItem.dataset.resourceId;
+      var feedResource = feedId && window.__dashboardResourceCache[feedId];
+      if (feedResource) openDownloadModal(feedResource);
       return;
     }
 
     var card = e.target.closest(".resource-card");
     if (card && !e.target.closest(".icon-btn-badge")) {
-      var cardTitleEl = card.querySelector(".card-body-zone h3");
-      var cardTitle = cardTitleEl ? cardTitleEl.textContent.trim() : null;
-      var cardData = cardTitle && trendingResourceData[cardTitle];
-      if (cardData) openDownloadModal(cardTitle, cardData);
+      var cardId = card.dataset.resourceId;
+      var cardResource = cardId && window.__dashboardResourceCache[cardId];
+      if (cardResource) openDownloadModal(cardResource);
     }
   });
 });
