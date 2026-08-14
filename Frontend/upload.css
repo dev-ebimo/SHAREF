@@ -9,6 +9,13 @@
   --success: #06d6a0;
 }
 
+/* Generic hidden utility — nothing on this page actually defined this,
+   so toggling the "hidden" class on #filePreview / #dropZone had no
+   visual effect at all. */
+.hidden {
+  display: none !important;
+}
+
 /* Slightly narrower reading column than the dashboard's default 980px,
    since a single-column form doesn't need the extra width. */
 .main-workspace--narrow {
