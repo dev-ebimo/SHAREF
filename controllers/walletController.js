@@ -42,7 +42,7 @@ async function initializeFunding(req, res) {
       email: req.user.email,
       amountNaira: amount,
       reference,
-      callbackUrl: `${process.env.FRONTEND_URL}/payment-callback`,
+      callbackUrl: `${process.env.FRONTEND_URL}/payment-callback.html`,
     });
 
     return res.status(200).json({
