@@ -574,18 +574,18 @@
                     <label for="resourceType">Resource Type</label>
                     <select id="resourceType" required>
                       <option value="" disabled selected>Select type...</option>
-                      <option value="notes">Lecture Notes</option>
-                      <option value="pq">Past Questions</option>
-                      <option value="assignments">Assignments</option>
-                      <option value="slides">Slides</option>
-                      <option value="manual">Lab Manual</option>
-                      <option value="summary">Summary</option>
+                      <option value="Lecture Note">Lecture Notes</option>
+                      <option value="Past Question">Past Questions</option>
+                      <option value="Assignment Material">Assignments</option>
+                      <option value="Textbook">Textbook</option>
+                      <option value="Revision Sheet">Revision Sheet</option>
+                      <option value="Other">Other</option>
                     </select>
                     <span class="error-msg">Resource type is required.</span>
                   </div>
                   <div class="input-group">
                     <label for="academicSession">Academic Session</label>
-                    <select id="academicSession">
+                    <select id="academicSession" required>
                       <option value="" disabled selected>
                         Select session...
                       </option>
@@ -603,20 +603,12 @@
                 <div class="input-row">
                   <div class="input-group">
                     <label for="department">Department</label>
-                    <select id="department" required>
-                      <option value="" disabled selected>Select dept...</option>
-                      <option value="csc">Computer Science</option>
-                    </select>
+                    <input type="text" id="department" placeholder="e.g. Computer Science" required />
                     <span class="error-msg">Department is required.</span>
                   </div>
                   <div class="input-group">
                     <label for="course">Course</label>
-                    <select id="course" required>
-                      <option value="" disabled selected>
-                        Select course...
-                      </option>
-                      <option value="csc201">CSC 201</option>
-                    </select>
+                    <input type="text" id="course" placeholder="e.g. CSC 201" required />
                     <span class="error-msg">Course is required.</span>
                   </div>
                 </div>
@@ -628,8 +620,8 @@
                       <option value="" disabled selected>
                         Select semester...
                       </option>
-                      <option value="first">First Semester</option>
-                      <option value="second">Second Semester</option>
+                      <option value="First">First Semester</option>
+                      <option value="Second">Second Semester</option>
                     </select>
                     <span class="error-msg">Semester is required.</span>
                   </div>
@@ -734,6 +726,8 @@
       </div>
     </div>
 
+    <script src="api-config.js"></script>
+    <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
     <script src="upload.js"></script>
   </body>

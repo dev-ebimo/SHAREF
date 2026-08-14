@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
+    if (!currentUser) return; // dashboard.js already ran requireAuth() at the top of the file
+
     // DOM Elements
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');
@@ -137,37 +139,87 @@ document.addEventListener('DOMContentLoaded', () => {
         charCount.textContent = this.value.length;
     });
 
-    // --- 4. Submit & Mock Upload Process ---
+    // --- 4. Submit & Real Upload ---
+    let uploadError = document.getElementById('uploadError');
+    if (!uploadError) {
+        uploadError = document.createElement('p');
+        uploadError.id = 'uploadError';
+        uploadError.className = 'error-msg';
+        uploadError.style.textAlign = 'center';
+        uploadError.style.marginTop = '0.75rem';
+        form.parentNode.insertBefore(uploadError, form.nextSibling);
+    }
+
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        if (submitBtn.disabled) return;
+        if (submitBtn.disabled || !currentFile) return;
 
-        // Transition to Uploading State
+        uploadError.style.display = 'none';
         switchState(stateForm, stateProgress);
-        mockUploadProcess();
+        realUploadProcess();
     });
 
-    function mockUploadProcess() {
+    function realUploadProcess() {
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
+
+        // authFetch (plain fetch under the hood) can't report real byte
+        // progress, so this animates a smooth crawl up to 90% while the
+        // request is in flight, then jumps to 100% once the server
+        // actually responds — same visual reassurance without extra
+        // XHR plumbing.
         let progress = 0;
+        const crawl = setInterval(() => {
+            progress = Math.min(progress + Math.random() * 8 + 2, 90);
+            progressBar.style.width = `${Math.round(progress)}%`;
+            progressText.textContent = `${Math.round(progress)}%`;
+        }, 250);
 
-        const interval = setInterval(() => {
-            // Random chunk simulation
-            progress += Math.floor(Math.random() * 15) + 5; 
-            if (progress > 100) progress = 100;
+        const formData = new FormData();
+        formData.append('file', currentFile);
+        formData.append('title', resourceTitle.value.trim());
+        formData.append('type', document.getElementById('resourceType').value);
+        formData.append('department', document.getElementById('department').value.trim());
+        formData.append('course', document.getElementById('course').value.trim());
+        formData.append('level', document.getElementById('level').value);
+        formData.append('semester', document.getElementById('semester').value);
+        formData.append('session', document.getElementById('academicSession').value);
+        formData.append('description', description.value.trim());
 
-            progressBar.style.width = `${progress}%`;
-            progressText.textContent = `${progress}%`;
+        authFetch(`${API_BASE}/resources/upload`, {
+            method: 'POST',
+            body: formData, // no Content-Type header — the browser sets the multipart boundary automatically
+        })
+            .then((res) => res.json().then((data) => ({ status: res.status, data })))
+            .then(({ data }) => {
+                clearInterval(crawl);
 
-            if (progress === 100) {
-                clearInterval(interval);
+                if (!data.success) {
+                    progressBar.style.width = '0%';
+                    progressText.textContent = '0%';
+                    switchState(stateProgress, stateForm);
+                    uploadError.textContent = data.errors
+                        ? data.errors.map((e) => e.message).join(' ')
+                        : (data.message || 'Upload failed. Please try again.');
+                    uploadError.style.display = 'block';
+                    return;
+                }
+
+                progressBar.style.width = '100%';
+                progressText.textContent = '100%';
                 setTimeout(() => {
-                    // Transition to Success State
                     switchState(stateProgress, stateSuccess);
-                }, 500);
-            }
-        }, 300); // Update every 300ms
+                }, 400);
+            })
+            .catch((err) => {
+                clearInterval(crawl);
+                progressBar.style.width = '0%';
+                progressText.textContent = '0%';
+                switchState(stateProgress, stateForm);
+                uploadError.textContent = 'Network error — could not reach the server. Please try again.';
+                uploadError.style.display = 'block';
+                console.error(err);
+            });
     }
 
     // --- 5. Reset Flow ---
