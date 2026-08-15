@@ -1,49 +1,40 @@
 document.addEventListener('DOMContentLoaded', () => {
-    
-    // --- Mock Database Response ---
-    // When your backend is ready, this array will be populated via a fetch() call to your API.
-    const mockUploads = [
-        {
-            id: 1,
-            title: "Intro to Data Structures",
-            course: "CSC 201",
-            type: "Lecture Notes",
-            date: "Oct 12, 2025",
-            status: "approved"
-        },
-        {
-            id: 2,
-            title: "Calculus II Past Questions",
-            course: "MTH 202",
-            type: "Past Questions",
-            date: "Oct 15, 2025",
-            status: "approved"
-        },
-        {
-            id: 3,
-            title: "Java OOP Assignment Solution",
-            course: "CSC 203",
-            type: "Assignments",
-            date: "Oct 18, 2025",
-            status: "pending"
-        },
-        {
-            id: 4,
-            title: "Physics Lab Manual 2",
-            course: "PHY 102",
-            type: "Lab Manual",
-            date: "Oct 01, 2025",
-            status: "rejected",
-            rejectReason: "Blurry scan. Please re-upload with clear pages."
-        }
-    ];
+    if (!currentUser) return; // dashboard.js already ran requireAuth() at the top of the file
+
+    let uploads = [];
 
     const uploadsGrid = document.getElementById('uploadsGrid');
     const emptyState = document.getElementById('emptyState');
     const tabButtons = document.querySelectorAll('.tab-btn');
 
+    function formatDate(isoString) {
+        const d = new Date(isoString);
+        return d.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
+    }
+
+    function loadUploads() {
+        uploadsGrid.innerHTML = '<p class="uploads-loading">Loading your uploads…</p>';
+        emptyState.classList.add('hidden');
+
+        authFetch(API_BASE + '/resources/my-uploads')
+            .then((res) => res.json())
+            .then((data) => {
+                if (!data.success) {
+                    uploadsGrid.innerHTML = '';
+                    return;
+                }
+                uploads = data.resources;
+                const activeTab = document.querySelector('.tab-btn.active');
+                renderUploads(activeTab ? activeTab.getAttribute('data-filter') : 'all');
+            })
+            .catch((err) => {
+                console.error('Could not load uploads:', err);
+                uploadsGrid.innerHTML = '<p class="uploads-error">Could not load your uploads. Please refresh the page.</p>';
+            });
+    }
+
     // --- Initial Render ---
-    renderUploads('all');
+    loadUploads();
 
     // --- Tab Switching Logic ---
     tabButtons.forEach(btn => {
@@ -52,7 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tabButtons.forEach(b => b.classList.remove('active'));
             // Add active class to clicked
             e.target.classList.add('active');
-            
+
             // Get filter value and render
             const filter = e.target.getAttribute('data-filter');
             renderUploads(filter);
@@ -63,9 +54,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderUploads(filter) {
         // Clear current grid
         uploadsGrid.innerHTML = '';
-        
+
         // Filter the data
-        const filteredData = mockUploads.filter(item => {
+        const filteredData = uploads.filter(item => {
             if (filter === 'all') return true;
             return item.status === filter;
         });
@@ -85,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         filteredData.forEach(item => {
             const card = document.createElement('div');
             card.className = 'resource-card';
-            
+
             // Generate HTML string for the card
             let cardHTML = `
                 <div class="card-header">
@@ -98,14 +89,14 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
 
             // If rejected, inject the reason
-            if (item.status === 'rejected' && item.rejectReason) {
-                cardHTML += `<div class="rejection-reason"><strong>Note:</strong> ${item.rejectReason}</div>`;
+            if (item.status === 'rejected' && item.rejectionReason) {
+                cardHTML += `<div class="rejection-reason"><strong>Note:</strong> ${item.rejectionReason}</div>`;
             }
 
             cardHTML += `
                 <div class="card-footer">
-                    <span class="card-meta">Uploaded: ${item.date}</span>
-                    ${item.status === 'rejected' ? `<button class="btn-primary-sm" onclick="alert('Trigger re-upload flow for ID: ${item.id}')">Re-upload</button>` : ''}
+                    <span class="card-meta">Uploaded: ${formatDate(item.createdAt)}</span>
+                    ${item.status === 'rejected' ? `<a href="upload.html" class="btn-primary-sm">Re-upload</a>` : ''}
                 </div>
             `;
 

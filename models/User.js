@@ -72,10 +72,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["active", "suspended", "inactive"],
       default: "active",
-      lastLoginAt: { type: Date },
-      suspensionReason: { type: String, default: "" },
-      suspendedAt: { type: Date },
     },
+    lastLoginAt: { type: Date },
+    suspensionReason: { type: String, default: "" },
+    suspendedAt: { type: Date },
     isVerified: {
       type: Boolean,
       default: false,

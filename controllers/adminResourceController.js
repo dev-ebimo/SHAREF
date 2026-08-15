@@ -28,6 +28,7 @@ function shapeAdminResource(r, extra = {}) {
     session: r.session,
     description: r.description,
     fileExtension: r.fileExtension,
+    fileUrl: r.fileUrl,
     size: formatFileSize(r.fileSizeBytes),
     downloads: r.downloads,
     uploader: r.uploader?.fullName || "Unknown",

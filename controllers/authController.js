@@ -152,6 +152,9 @@ async function login(req, res) {
       });
     }
 
+    user.lastLoginAt = new Date();
+    await user.save();
+
     const token = generateToken(user._id, user.role);
 
     return res.status(200).json({

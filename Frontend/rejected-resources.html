@@ -305,9 +305,7 @@
             <div class="filter-group">
               <select id="filterDept" aria-label="Filter by Department">
                 <option value="">All Departments</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Physics">Physics</option>
+                <!-- populated dynamically by JS, see below -->
               </select>
 
               <select id="filterType" aria-label="Filter by Type">
@@ -441,7 +439,7 @@
 
             <!-- Pagination -->
             <div class="pagination">
-              <button class="btn-page" disabled>
+              <button class="btn-page" id="prevPageBtn" disabled>
                 <svg
                   fill="none"
                   stroke="currentColor"
@@ -452,8 +450,8 @@
                 </svg>
                 Previous
               </button>
-              <span class="page-info">Page 1 of 4</span>
-              <button class="btn-page">
+              <span class="page-info" id="pageInfo">Page 1 of 1</span>
+              <button class="btn-page" id="nextPageBtn">
                 Next
                 <svg
                   fill="none"
@@ -621,7 +619,7 @@
         <div class="profile-actions">
           <button
             class="btn-lg btn-secondary"
-            onclick="previewResource('res_89')"
+            onclick="previewResource(window.__currentModalResourceId)"
           >
             <svg
               fill="none"
@@ -640,7 +638,7 @@
         <div class="action-row">
           <button
             class="btn-lg btn-warning"
-            onclick="restoreToPending('res_89')"
+            onclick="restoreToPending(window.__currentModalResourceId)"
           >
             <svg
               fill="none"
@@ -656,7 +654,7 @@
           </button>
           <button
             class="btn-lg btn-danger"
-            onclick="confirmPermanentDelete('res_89')"
+            onclick="confirmPermanentDelete(window.__currentModalResourceId)"
           >
             <svg
               fill="none"

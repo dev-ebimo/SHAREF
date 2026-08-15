@@ -180,4 +180,21 @@ async function suspendUser(req, res) {
   }
 }
 
-module.exports = { getUserFilterOptions, getUsers, getUserProfile, suspendUser };
+// @route POST /api/admin/users/:id/reactivate
+async function reactivateUser(req, res) {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    user.accountStatus = "active";
+    user.suspensionReason = "";
+    user.suspendedAt = undefined;
+    await user.save();
+
+    return res.status(200).json({ success: true, message: "Account reactivated successfully" });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not reactivate user", error: err.message });
+  }
+}
+
+module.exports = { getUserFilterOptions, getUsers, getUserProfile, suspendUser, reactivateUser };

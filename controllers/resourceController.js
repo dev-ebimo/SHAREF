@@ -180,118 +180,22 @@ async function getResourceById(req, res) {
   }
 }
 
-// @route GET /api/resources/:id/download
-async function downloadResource(req, res) {
-  try {
-    const resource = await Resource.findById(req.params.id);
-    if (!resource) {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
+// Note: resource downloads go through walletController.chargeForResource
+// (POST /api/wallet/charge), which already returns the Cloudinary fileUrl
+// directly — there's no separate file-streaming download route. An older
+// downloadResource() used to live here but referenced a local `filePath`
+// that no longer exists now that uploads go straight to Cloudinary, plus a
+// missing `path` import; it was dead code (never routed) and has been
+// removed rather than fixed, since chargeForResource already covers this.
 
-    const isOwner = resource.uploader.toString() === req.user.id;
-    const isAdmin = req.user.role === "admin";
-    if (resource.status !== "approved" && !isOwner && !isAdmin) {
-      return res.status(403).json({ success: false, message: "This resource is not available for download" });
-    }
-
-    const filePath = path.resolve(resource.filePath);
-    if (!fs.existsSync(filePath)) {
-      return res.status(410).json({ success: false, message: "The file for this resource is no longer available" });
-    }
-
-    // Fire-and-forget so a slow counter update never delays the file transfer
-    Resource.findByIdAndUpdate(resource._id, { $inc: { downloads: 1 } }).catch(() => {});
-
-    return res.download(filePath, resource.fileName);
-  } catch (err) {
-    if (err.name === "CastError") {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
-    return res.status(500).json({ success: false, message: "Download failed", error: sanitizeError(err) });
-  }
-}
-
-// @route GET /api/resources/admin/pending  (admin only)
-async function getPendingResources(req, res) {
-  try {
-    const { page, limit, skip } = getPagination(req);
-
-    const [resources, total] = await Promise.all([
-      Resource.find({ status: "pending" })
-        .populate("uploader", "fullName email matricNumber")
-        .sort({ createdAt: 1 }) // oldest first, so the queue clears in order
-        .skip(skip)
-        .limit(limit),
-      Resource.countDocuments({ status: "pending" }),
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      count: resources.length,
-      total,
-      page,
-      totalPages: Math.max(1, Math.ceil(total / limit)),
-      resources: resources.map((r) => ({ ...formatResource(r), uploader: r.uploader })),
-    });
-  } catch (err) {
-    return res.status(500).json({ success: false, message: "Could not fetch pending resources", error: sanitizeError(err) });
-  }
-}
-
-// @route PATCH /api/resources/:id/approve  (admin only)
-async function approveResource(req, res) {
-  try {
-    const resource = await Resource.findById(req.params.id);
-    if (!resource) {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
-    if (resource.status === "approved") {
-      return res.status(400).json({ success: false, message: "Resource is already approved" });
-    }
-
-    resource.status = "approved";
-    resource.rejectionReason = "";
-    await resource.save();
-
-    return res.status(200).json({ success: true, message: "Resource approved", resource: formatResource(resource) });
-  } catch (err) {
-    if (err.name === "CastError") {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
-    return res.status(500).json({ success: false, message: "Could not approve resource", error: sanitizeError(err) });
-  }
-}
-
-// @route PATCH /api/resources/:id/reject  (admin only)
-async function rejectResource(req, res) {
-  try {
-    const { reason } = req.body;
-
-    const resource = await Resource.findById(req.params.id);
-    if (!resource) {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
-
-    resource.status = "rejected";
-    resource.rejectionReason = reason;
-    await resource.save();
-
-    return res.status(200).json({ success: true, message: "Resource rejected", resource: formatResource(resource) });
-  } catch (err) {
-    if (err.name === "CastError") {
-      return res.status(404).json({ success: false, message: "Resource not found" });
-    }
-    return res.status(500).json({ success: false, message: "Could not reject resource", error: sanitizeError(err) });
-  }
-}
+// Note: approve/reject for pending resources is handled by
+// moderationController.js (mounted at /api/admin/moderation), which is what
+// admin-moderation.html actually calls. The versions that used to live here
+// were unrouted duplicates and have been removed to avoid confusion.
 
 module.exports = {
   uploadResource,
   getResources,
   getMyUploads,
   getResourceById,
-  downloadResource,
-  getPendingResources,
-  approveResource,
-  rejectResource,
 };

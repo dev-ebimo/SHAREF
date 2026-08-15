@@ -304,9 +304,7 @@
             <div class="filter-group">
               <select id="filterDept" aria-label="Filter by Department">
                 <option value="">All Departments</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Physics">Physics</option>
+                <!-- populated dynamically by JS, see below -->
               </select>
 
               <select id="filterType" aria-label="Filter by Type">
@@ -430,7 +428,7 @@
 
             <!-- Pagination -->
             <div class="pagination">
-              <button class="btn-page" disabled>
+              <button class="btn-page" id="prevPageBtn" disabled>
                 <svg
                   fill="none"
                   stroke="currentColor"
@@ -441,8 +439,8 @@
                 </svg>
                 Previous
               </button>
-              <span class="page-info">Page 1 of 12</span>
-              <button class="btn-page">
+              <span class="page-info" id="pageInfo">Page 1 of 1</span>
+              <button class="btn-page" id="nextPageBtn">
                 Next
                 <svg
                   fill="none"
@@ -596,7 +594,7 @@
         <div class="profile-actions">
           <button
             class="btn-lg btn-secondary"
-            onclick="previewResource('res_1')"
+            onclick="previewResource(window.__currentModalResourceId)"
           >
             <svg
               fill="none"
@@ -647,7 +645,7 @@
               <option value="unsupported">Unsupported File Type</option>
               <option value="not_academic">Not Academic Material</option>
               <option value="spam">Spam / Irrelevant</option>
-              <option value="">Other</option>
+              <option value="other">Other</option>
             </select>
             <svg
               fill="none"

@@ -16,76 +16,182 @@ document.addEventListener("DOMContentLoaded", () => {
     spam: "Spam",
     other: "Other",
   };
-  
-  fetch(`${API_BASE}/admin/resources/filter-options`, {
-  headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-})
-  .then((res) => res.json())
-  .then((data) => {
-    if (!data.success) return;
-    const courseSelect = document.getElementById("filterCourse");
-    data.courses.forEach((course) => {
-      const opt = document.createElement("option");
-      opt.value = course;
-      opt.textContent = course;
-      courseSelect.appendChild(opt);
+
+  const FILE_ICON_TYPES = { pdf: "pdf", doc: "doc", docx: "doc", ppt: "ppt", pptx: "ppt" };
+
+  /* ---- Filter options (departments + courses) ---- */
+  authFetch(`${API_BASE}/admin/resources/filter-options`)
+    .then((res) => res.json())
+    .then((data) => {
+      if (!data.success) return;
+      const deptSelect = document.getElementById("filterDept");
+      data.departments.forEach((dept) => {
+        const opt = document.createElement("option");
+        opt.value = dept;
+        opt.textContent = dept;
+        deptSelect.appendChild(opt);
+      });
+      const courseSelect = document.getElementById("filterCourse");
+      data.courses.forEach((course) => {
+        const opt = document.createElement("option");
+        opt.value = course;
+        opt.textContent = course;
+        courseSelect.appendChild(opt);
+      });
+    })
+    .catch((err) => console.error("Could not load filter options:", err));
+
+  /* ---- Shared shell behaviour is already wired by dashboard.js ---- */
+
+  /* ---- Search / filters / sort / pagination — real backend data ---- */
+  const searchInput = document.getElementById("resourceSearch");
+  const filterDept = document.getElementById("filterDept");
+  const filterType = document.getElementById("filterType");
+  const filterCourse = document.getElementById("filterCourse");
+  const filterApprovalDate = document.getElementById("filterApprovalDate");
+  const sortResources = document.getElementById("sortResources");
+  const tableBody = document.getElementById("resourceTableBody");
+  const tableContainer = tableBody.closest("table");
+  const emptyState = document.getElementById("emptyState");
+  const statTotalResources = document.getElementById("statTotalResources");
+  const prevPageBtn = document.getElementById("prevPageBtn");
+  const nextPageBtn = document.getElementById("nextPageBtn");
+  const pageInfo = document.getElementById("pageInfo");
+
+  let resourceCache = {}; // id -> resource, refreshed on every table load
+  let currentPage = 1;
+  let totalPages = 1;
+  let searchDebounce = null;
+
+  function buildQuery() {
+    const params = new URLSearchParams();
+    if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
+    if (filterDept.value) params.set("department", filterDept.value);
+    if (filterType.value) params.set("type", filterType.value);
+    if (filterCourse.value) params.set("course", filterCourse.value);
+    if (filterApprovalDate.value) params.set("approvalDate", filterApprovalDate.value);
+    params.set("sort", sortResources.value);
+    params.set("page", currentPage);
+    return params.toString();
+  }
+
+  function fileIconClass(ext) {
+    return FILE_ICON_TYPES[(ext || "").toLowerCase()] || "generic";
+  }
+
+  function loadApprovedResources() {
+    tableBody.innerHTML = `<tr><td colspan="9" class="table-loading">Loading resources…</td></tr>`;
+    tableContainer.style.display = "table";
+    emptyState.style.display = "none";
+
+    authFetch(`${API_BASE}/admin/resources/approved?${buildQuery()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          tableBody.innerHTML = "";
+          return;
+        }
+
+        resourceCache = {};
+        data.resources.forEach((r) => { resourceCache[r.id] = r; });
+
+        if (statTotalResources) statTotalResources.textContent = data.totalApproved.toLocaleString();
+
+        totalPages = data.pagination.pages || 1;
+        currentPage = data.pagination.page || 1;
+        if (pageInfo) pageInfo.textContent = `Page ${currentPage} of ${Math.max(1, totalPages)}`;
+        if (prevPageBtn) prevPageBtn.disabled = currentPage <= 1;
+        if (nextPageBtn) nextPageBtn.disabled = currentPage >= totalPages;
+
+        renderTable(data.resources);
+      })
+      .catch((err) => {
+        console.error("Could not load approved resources:", err);
+        tableBody.innerHTML = `<tr><td colspan="9" class="table-error">Could not load resources. Please refresh the page.</td></tr>`;
+      });
+  }
+
+  function renderTable(resources) {
+    tableBody.innerHTML = "";
+
+    if (resources.length === 0) {
+      tableContainer.style.display = "none";
+      emptyState.style.display = "block";
+      return;
+    }
+
+    tableContainer.style.display = "table";
+    emptyState.style.display = "none";
+
+    resources.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>
+          <div class="file-icon ${fileIconClass(r.fileExtension)}">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+        </td>
+        <td>
+          <span class="res-title">${r.title}</span>
+          <span class="res-type">${r.type}</span>
+        </td>
+        <td>
+          <span class="res-dept">${r.department}</span>
+          <span class="res-course">${r.course}</span>
+        </td>
+        <td>${r.uploader}</td>
+        <td>${r.reviewedBy}</td>
+        <td>${r.date}</td>
+        <td>${r.downloads}</td>
+        <td><span class="status-badge approved">Approved</span></td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-icon" title="Preview" aria-label="Preview document" onclick="previewResource('${r.id}')">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            </button>
+            <button class="btn-view" onclick="openResourceDetails('${r.id}')">Details</button>
+          </div>
+        </td>
+      `;
+      tableBody.appendChild(tr);
+    });
+  }
+
+  window.__approvedResourceCache = () => resourceCache;
+  window.__reasonLabels = REASON_LABELS;
+
+  loadApprovedResources();
+
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => {
+      currentPage = 1;
+      loadApprovedResources();
+    }, 350);
+  });
+
+  [filterDept, filterType, filterCourse, filterApprovalDate, sortResources].forEach((el) => {
+    el.addEventListener("change", () => {
+      currentPage = 1;
+      loadApprovedResources();
     });
   });
-  /* ---- Shared shell behaviour (sidebar drawer + account menu) ---- */
-  const sidebar = document.getElementById("sidebar");
-  const scrim = document.getElementById("scrim");
-  const hamburgerBtn = document.getElementById("hamburgerBtn");
-  const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
 
-  function openSidebar() {
-    sidebar.classList.add("is-open");
-    scrim.classList.add("is-visible");
-    hamburgerBtn.setAttribute("aria-expanded", "true");
+  if (prevPageBtn) {
+    prevPageBtn.addEventListener("click", () => {
+      if (currentPage > 1) { currentPage -= 1; loadApprovedResources(); }
+    });
   }
-  function closeSidebar() {
-    sidebar.classList.remove("is-open");
-    scrim.classList.remove("is-visible");
-    hamburgerBtn.setAttribute("aria-expanded", "false");
+  if (nextPageBtn) {
+    nextPageBtn.addEventListener("click", () => {
+      if (currentPage < totalPages) { currentPage += 1; loadApprovedResources(); }
+    });
   }
-  hamburgerBtn?.addEventListener("click", openSidebar);
-  sidebarCloseBtn?.addEventListener("click", closeSidebar);
-  scrim?.addEventListener("click", closeSidebar);
-
-  const accountWrapper = document.getElementById("accountMenuWrapper");
-  const accountTrigger = document.getElementById("accountMenuTrigger");
-  const accountPanel = document.getElementById("accountMenuPanel");
-
-  accountTrigger?.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = accountWrapper.classList.toggle("is-open");
-    accountTrigger.setAttribute("aria-expanded", String(isOpen));
-    accountPanel.setAttribute("aria-hidden", String(!isOpen));
-  });
-  document.addEventListener("click", (e) => {
-    if (accountWrapper && !accountWrapper.contains(e.target)) {
-      accountWrapper.classList.remove("is-open");
-      accountTrigger?.setAttribute("aria-expanded", "false");
-      accountPanel?.setAttribute("aria-hidden", "true");
-    }
-  });
-
-  /* ---- Search UI Logic (Frontend Prototype) ---- */
-  const searchInput = document.getElementById("resourceSearch");
-  const tableBody = document.getElementById("resourceTableBody");
-  const emptyState = document.getElementById("emptyState");
-
-  searchInput.addEventListener("input", (e) => {
-    const term = e.target.value.toLowerCase();
-
-    // Simulate empty state for the frontend MVP
-    if (term === "empty") {
-      tableBody.parentNode.style.display = "none";
-      emptyState.style.display = "block";
-    } else {
-      tableBody.parentNode.style.display = "table";
-      emptyState.style.display = "none";
-    }
-  });
 
   /* ---- Modal Overlay Dismissal ---- */
   const modalOverlay = document.getElementById("resourceDetailsModal");
@@ -104,28 +210,80 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!selectedReason) {
       e.preventDefault();
-      alert(
-        "Action denied: you must select a reason for removing this resource.",
-      );
+      alert("Action denied: you must select a reason for removing this resource.");
       reasonSelect.focus();
       return;
     }
 
-    // Log intent (ready to pass to Express routing)
-    console.log(`Action: REMOVE Resource. Reason: ${selectedReason}`);
-    alert(`Resource removed successfully for reason: ${selectedReason}`);
+    const id = window.__currentModalResourceId;
+    if (!id) return;
 
-    closeResourceDetails();
-    // In production, also remove the row from the DOM or refetch the table data here.
+    confirmRemoveBtn.disabled = true;
+    const originalText = confirmRemoveBtn.textContent;
+    confirmRemoveBtn.textContent = "Removing...";
+
+    authFetch(`${API_BASE}/admin/resources/${id}/remove`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason: selectedReason }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        confirmRemoveBtn.disabled = false;
+        confirmRemoveBtn.textContent = originalText;
+
+        if (!data.success) {
+          alert(data.message || "Could not remove this resource.");
+          return;
+        }
+
+        closeResourceDetails();
+        loadApprovedResources();
+      })
+      .catch((err) => {
+        confirmRemoveBtn.disabled = false;
+        confirmRemoveBtn.textContent = originalText;
+        console.error(err);
+        alert("Network error — could not remove this resource.");
+      });
   });
 });
 
 /* ---- Modal Controls ---- */
 function openResourceDetails(resourceId) {
-  // Fetch logic for your Node backend goes here
+  const cache = window.__approvedResourceCache ? window.__approvedResourceCache() : {};
+  const r = cache[resourceId];
+  if (!r) return;
+
+  window.__currentModalResourceId = resourceId;
 
   const modal = document.getElementById("resourceDetailsModal");
   modal.classList.remove("hidden");
+
+  document.getElementById("modalResTitle").textContent = r.title;
+
+  const metaVals = modal.querySelectorAll(".metadata-grid .val");
+  if (metaVals.length >= 8) {
+    metaVals[0].textContent = r.type;
+    metaVals[1].textContent = r.course;
+    metaVals[2].textContent = r.department;
+    metaVals[3].textContent = `${r.level} Level`;
+    metaVals[4].textContent = `${r.semester} Semester`;
+    metaVals[5].textContent = r.session;
+    metaVals[6].textContent = r.size;
+    metaVals[7].textContent = r.downloads;
+  }
+
+  const descEl = modal.querySelector(".res-description");
+  if (descEl) descEl.textContent = r.description || "No description provided.";
+
+  const historyItems = modal.querySelectorAll(".history-text");
+  if (historyItems.length >= 2) {
+    historyItems[0].querySelector(".resource-name").textContent = `Uploaded by ${r.uploader}`;
+    historyItems[0].querySelector(".resource-date").textContent = r.uploadedDate;
+    historyItems[1].querySelector(".resource-name").textContent = `Approved by ${r.reviewedBy}`;
+    historyItems[1].querySelector(".resource-date").textContent = r.date;
+  }
 
   // Reset removal form
   document.getElementById("removeForm").classList.add("hidden");
@@ -135,6 +293,7 @@ function openResourceDetails(resourceId) {
 
 function closeResourceDetails() {
   document.getElementById("resourceDetailsModal").classList.add("hidden");
+  window.__currentModalResourceId = null;
 }
 
 function toggleRemoveForm() {
@@ -143,8 +302,11 @@ function toggleRemoveForm() {
 }
 
 function previewResource(resourceId) {
-  // Opens the document preview in a new tab per moderation preferences
-  console.log(`Opening preview for ${resourceId} in a new tab...`);
-  // window.open(`/api/resources/preview/${resourceId}`, '_blank');
-  alert("Preview would open the document safely in a new tab.");
+  const cache = window.__approvedResourceCache ? window.__approvedResourceCache() : {};
+  const r = cache[resourceId];
+  if (!r || !r.fileUrl) {
+    alert("Preview is not available for this resource.");
+    return;
+  }
+  window.open(r.fileUrl, "_blank");
 }
