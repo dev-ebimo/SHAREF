@@ -133,8 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('previewSize').textContent = item.size;
         document.getElementById('previewSession').textContent = item.session;
 
-        previewModal.classList.remove('hidden');
-
         const previewTextEl = document.getElementById('docPreviewText');
         if (previewTextEl) {
             previewTextEl.textContent = 'Loading preview…';
@@ -147,6 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .catch(() => { previewTextEl.textContent = 'Preview not available right now.'; });
         }
+
+        previewModal.classList.remove('hidden');
     };
 
     window.quickApprove = (id) => {
