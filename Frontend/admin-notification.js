@@ -1,4 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
 
   /* ---- Shared shell behaviour (sidebar drawer + account menu) ---- */
   const sidebar = document.getElementById('sidebar');

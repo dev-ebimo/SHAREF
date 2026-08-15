@@ -1,4 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
+
   const REASON_LABELS = {
     duplicate: "Duplicate Resource",
     wrong_course: "Wrong Course",

@@ -2,11 +2,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // ==========================================================================
   // 0. ROLE-BASED RENDER CONTROLLER
   // ==========================================================================
-  // Temporarily hardcoded for frontend UI development.
-  // Change to "student" to test the standard user view.
-  const currentUser = {
-    role: "admin",
-  };
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
 
   if (currentUser.role === "admin") {
     document.querySelectorAll(".admin-only").forEach(function (el) {

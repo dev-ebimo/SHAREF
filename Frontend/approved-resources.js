@@ -1,4 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
+
   const REASON_LABELS = {
     duplicate: "Duplicate Resource",
     wrong_course: "Wrong Course",
@@ -12,7 +17,7 @@ document.addEventListener("DOMContentLoaded", () => {
     other: "Other",
   };
   
-  fetch("http://localhost:5000/api/admin/resources/filter-options", {
+  fetch(`${API_BASE}/admin/resources/filter-options`, {
   headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
 })
   .then((res) => res.json())

@@ -1,5 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
-  fetch("http://localhost:5000/api/admin/resources/filter-options", {
+  const currentUser = requireAuth("admin"); // redirects away if not a logged-in admin
+  if (!currentUser) return;
+
+  wireLogoutButton();
+
+  fetch(`${API_BASE}/admin/users/filter-options`, {
     headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
   })
     .then((res) => res.json())
