@@ -1,33 +1,59 @@
 document.addEventListener("DOMContentLoaded", function () {
   // ==========================================================================
-  // 0. MOCK DATA
-  //    Stands in for a real API response. Swap this for a fetch() call once
-  //    there's a backend — the rendering logic below doesn't care where the
-  //    array comes from.
+  // 0. REAL DATA — fetched from GET /api/resources
+  //    The backend has no rating system, so the "rating"/stars feature that
+  //    used to live here has been removed rather than faked. fileSizeMB has
+  //    likewise been dropped in favor of the backend's already-formatted
+  //    `size` string (e.g. "3.1 MB").
   // ==========================================================================
-  var RESOURCES = [
-    { id: 1, title: "CSC 201 Data Structures Lecture Notes", courseCode: "CSC 201", courseName: "Data Structures", department: "Computer Science", semester: "First", type: "Lecture Notes", fileType: "PDF", uploadedDaysAgo: 3, rating: 4.6, downloads: 1245, pages: 42, fileSizeMB: 3.1, uploader: "Ebimotimi Shadrack", description: "Comprehensive notes covering arrays, linked lists, stacks, queues, and trees, with worked examples for each." },
-    { id: 2, title: "CSC 202 Past Questions (2021-2024)", courseCode: "CSC 202", courseName: "Computer Architecture", department: "Computer Science", semester: "Second", type: "Past Questions", fileType: "PDF", uploadedDaysAgo: 1, rating: 4.8, downloads: 980, pages: 18, fileSizeMB: 1.4, uploader: "Chidera Okafor", description: "Four years of past exam questions compiled and organized by topic, with an answer key at the back." },
-    { id: 3, title: "Operating Systems Summary Sheet", courseCode: "CSC 301", courseName: "Operating Systems", department: "Computer Science", semester: "First", type: "Summary", fileType: "DOCX", uploadedDaysAgo: 6, rating: 4.2, downloads: 612, pages: 9, fileSizeMB: 0.8, uploader: "Tamuno Wilcox", description: "A condensed revision sheet covering processes, scheduling algorithms, and memory management." },
-    { id: 4, title: "Database Systems Lab Manual", courseCode: "CSC 301", courseName: "Database Systems", department: "Computer Science", semester: "Second", type: "Lab Manual", fileType: "PDF", uploadedDaysAgo: 10, rating: 4.0, downloads: 344, pages: 26, fileSizeMB: 2.2, uploader: "Ebimotimi Shadrack", description: "Step-by-step SQL lab exercises with sample databases, from basic queries to joins and subqueries." },
-    { id: 5, title: "CSC 201 Assignment 3 - Sorting Algorithms", courseCode: "CSC 201", courseName: "Data Structures", department: "Computer Science", semester: "First", type: "Assignment", fileType: "DOCX", uploadedDaysAgo: 2, rating: 3.9, downloads: 201, pages: 4, fileSizeMB: 0.3, uploader: "Preye Amachree", description: "Assignment brief and starter code for implementing and comparing five sorting algorithms." },
-    { id: 6, title: "MTH 202 Differential Equations Notes", courseCode: "MTH 202", courseName: "Differential Equations", department: "Mathematics", semester: "Second", type: "Lecture Notes", fileType: "PDF", uploadedDaysAgo: 4, rating: 4.7, downloads: 890, pages: 55, fileSizeMB: 4.6, uploader: "Zainab Bello", description: "Full-semester notes on first and second order ODEs, with solved examples and practice sets." },
-    { id: 7, title: "MTH 202 Past Questions", courseCode: "MTH 202", courseName: "Differential Equations", department: "Mathematics", semester: "Second", type: "Past Questions", fileType: "PDF", uploadedDaysAgo: 15, rating: 4.3, downloads: 730, pages: 12, fileSizeMB: 1.1, uploader: "Zainab Bello", description: "Past exam papers from the last three sessions, useful for exam-pattern recognition." },
-    { id: 8, title: "MTH 301 Real Analysis Summary", courseCode: "MTH 301", courseName: "Real Analysis", department: "Mathematics", semester: "First", type: "Summary", fileType: "PDF", uploadedDaysAgo: 8, rating: 4.1, downloads: 265, pages: 14, fileSizeMB: 1.0, uploader: "Preye Amachree", description: "Key definitions, theorems, and proof sketches condensed for quick pre-exam review." },
-    { id: 9, title: "PHY 201 Mechanics Lecture Notes", courseCode: "PHY 201", courseName: "Classical Mechanics", department: "Physics", semester: "First", type: "Lecture Notes", fileType: "PPTX", uploadedDaysAgo: 5, rating: 4.4, downloads: 512, pages: 60, fileSizeMB: 6.2, uploader: "Tamuno Wilcox", description: "Slide deck covering kinematics, Newton's laws, and rotational motion with diagrams." },
-    { id: 10, title: "PHY 201 Lab Manual - Pendulum Experiment", courseCode: "PHY 201", courseName: "Classical Mechanics", department: "Physics", semester: "First", type: "Lab Manual", fileType: "PDF", uploadedDaysAgo: 20, rating: 3.8, downloads: 178, pages: 8, fileSizeMB: 0.9, uploader: "Chidera Okafor", description: "Procedure, data tables, and sample calculations for the simple pendulum experiment." },
-    { id: 11, title: "CSC 202 Assignment - Logic Gates", courseCode: "CSC 202", courseName: "Computer Architecture", department: "Computer Science", semester: "Second", type: "Assignment", fileType: "DOCX", uploadedDaysAgo: 12, rating: 3.6, downloads: 143, pages: 3, fileSizeMB: 0.2, uploader: "Zainab Bello", description: "Circuit design exercises covering AND, OR, NOT, NAND, and NOR gate combinations." },
-    { id: 12, title: "GST Past Questions Compilation", courseCode: "GST 101", courseName: "Use of English", department: "Computer Science", semester: "First", type: "Past Questions", fileType: "PDF", uploadedDaysAgo: 30, rating: 4.5, downloads: 1560, pages: 22, fileSizeMB: 1.8, uploader: "Ebimotimi Shadrack", description: "General studies past questions spanning multiple sessions, grouped by recurring topics." },
-    { id: 13, title: "MTH 301 Assignment - Sequences & Series", courseCode: "MTH 301", courseName: "Real Analysis", department: "Mathematics", semester: "First", type: "Assignment", fileType: "PDF", uploadedDaysAgo: 18, rating: 3.7, downloads: 96, pages: 5, fileSizeMB: 0.4, uploader: "Tamuno Wilcox", description: "Problem set on convergence tests for sequences and series, with hints for the harder questions." },
-    { id: 14, title: "PHY 201 Past Questions", courseCode: "PHY 201", courseName: "Classical Mechanics", department: "Physics", semester: "First", type: "Past Questions", fileType: "PDF", uploadedDaysAgo: 25, rating: 4.0, downloads: 302, pages: 16, fileSizeMB: 1.3, uploader: "Preye Amachree", description: "Compiled past questions with a focus on numerical mechanics problems." },
-    { id: 15, title: "CSC 301 Summary - Concurrency & Deadlocks", courseCode: "CSC 301", courseName: "Operating Systems", department: "Computer Science", semester: "First", type: "Summary", fileType: "DOCX", uploadedDaysAgo: 7, rating: 4.3, downloads: 421, pages: 7, fileSizeMB: 0.6, uploader: "Chidera Okafor", description: "Quick-reference notes on race conditions, mutexes, semaphores, and deadlock prevention." },
-    { id: 16, title: "MTH 202 Lab Manual - Numerical Methods", courseCode: "MTH 202", courseName: "Differential Equations", department: "Mathematics", semester: "Second", type: "Lab Manual", fileType: "PDF", uploadedDaysAgo: 14, rating: 3.9, downloads: 187, pages: 20, fileSizeMB: 1.7, uploader: "Zainab Bello", description: "Worked examples of Euler's method and Runge-Kutta approximations for solving ODEs numerically." },
-  ];
+  var RESOURCES = [];
+
+  function daysAgoFromDate(iso) {
+    var diffMs = Date.now() - new Date(iso).getTime();
+    return Math.max(0, Math.floor(diffMs / 86400000));
+  }
+
+  // Backend only stores a single `course` field (e.g. "CSC 201"), not a
+  // separate code/name pair, so both map to the same value here.
+  function transformResource(r) {
+    return {
+      id: r.id,
+      title: r.title,
+      courseCode: r.course,
+      courseName: r.course,
+      department: r.department,
+      semester: r.semester,
+      type: r.type,
+      fileType: (r.fileExtension || "").toUpperCase(),
+      uploadedDaysAgo: daysAgoFromDate(r.createdAt),
+      downloads: r.downloads,
+      pages: r.pages,
+      size: r.size,
+      uploader: r.uploader || "Unknown",
+      description: r.description || "",
+    };
+  }
+
+  // GET /api/resources is paginated (max 50/page) — page through it so the
+  // client-side filter/sort/paginate pipeline below still has the full set
+  // to work with, same as it did with the in-memory mock array.
+  async function fetchAllResources() {
+    var all = [];
+    var page = 1;
+    var totalPages = 1;
+    do {
+      var res = await authFetch(API_BASE + "/resources?page=" + page + "&limit=50");
+      var data = await res.json();
+      if (!data.success) break;
+      all = all.concat(data.resources.map(transformResource));
+      totalPages = data.totalPages || 1;
+      page += 1;
+    } while (page <= totalPages && page <= 10); // sane cap to avoid runaway pagination
+    return all;
+  }
 
   // Pricing follows the ₦10/page model used across the app — cost is
-  // derived from `pages` rather than hardcoded, so it stays in sync if the
-  // mock data changes and swaps in cleanly for a real per-resource price
-  // field later.
+  // derived from `pages` rather than hardcoded.
   var PRICE_PER_PAGE = 10;
   function getResourceCost(r) {
     return r.pages * PRICE_PER_PAGE;
@@ -98,10 +124,13 @@ document.addEventListener("DOMContentLoaded", function () {
   // 2. DEPARTMENT -> COURSE MAP (keeps the Course filter relevant)
   // ==========================================================================
   var coursesByDepartment = {};
-  RESOURCES.forEach(function (r) {
-    if (!coursesByDepartment[r.department]) coursesByDepartment[r.department] = new Set();
-    coursesByDepartment[r.department].add(r.courseCode);
-  });
+  function buildCourseMap() {
+    coursesByDepartment = {};
+    RESOURCES.forEach(function (r) {
+      if (!coursesByDepartment[r.department]) coursesByDepartment[r.department] = new Set();
+      coursesByDepartment[r.department].add(r.courseCode);
+    });
+  }
 
   function populateCourseOptions(department) {
     var courses;
@@ -122,16 +151,9 @@ document.addEventListener("DOMContentLoaded", function () {
     courseSelect.value = "all";
   }
 
-  populateCourseOptions("all");
-
   // ==========================================================================
   // 3. FILTER + SORT + RENDER PIPELINE
   // ==========================================================================
-  function starString(rating) {
-    var full = Math.round(rating);
-    return "\u2605".repeat(full) + "\u2606".repeat(5 - full);
-  }
-
   function daysAgoLabel(days) {
     if (days === 0) return "today";
     if (days === 1) return "yesterday";
@@ -159,9 +181,8 @@ document.addEventListener("DOMContentLoaded", function () {
     list.sort(function (a, b) {
       switch (sortBy) {
         case "downloads":
+        case "rating": // no backend rating field — falls back to most-downloaded
           return b.downloads - a.downloads;
-        case "rating":
-          return b.rating - a.rating;
         case "az":
           return a.title.localeCompare(b.title);
         case "newest":
@@ -192,7 +213,6 @@ document.addEventListener("DOMContentLoaded", function () {
       '<p class="browse-card-sub">' + r.courseCode + " \u2022 " + r.semester + " Semester</p>" +
       '<p class="browse-card-uploaded">Uploaded ' + daysAgoLabel(r.uploadedDaysAgo) + "</p>" +
       '<div class="browse-card-stats">' +
-        '<span class="stars" aria-label="Rating ' + r.rating + ' out of 5">' + starString(r.rating) + "</span>" +
         '<span class="download-count">' + r.downloads.toLocaleString() + " Downloads</span>" +
       "</div>" +
       '<div class="browse-card-actions">' +
@@ -410,7 +430,7 @@ document.addEventListener("DOMContentLoaded", function () {
     previewCourse.textContent = resource.courseCode + " - " + resource.courseName;
     previewDepartment.textContent = resource.department;
     previewPages.textContent = resource.pages + " pages";
-    previewFileSize.textContent = resource.fileSizeMB + " MB";
+    previewFileSize.textContent = resource.size;
     previewUploadDate.textContent = daysAgoLabel(resource.uploadedDaysAgo);
     if (previewPrice) previewPrice.textContent = window.SharefWallet.formatNaira(cost);
     previewDownloadBtn.textContent = "Download \u00b7 " + window.SharefWallet.formatNaira(cost);
@@ -440,7 +460,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   function findResourceById(id) {
-    return RESOURCES.filter(function (r) { return r.id === id; })[0];
+    return RESOURCES.filter(function (r) { return String(r.id) === String(id); })[0];
   }
 
   previewDownloadBtn.addEventListener("click", function () {
@@ -448,9 +468,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var resource = findResourceById(currentPreviewId);
     if (!resource) return;
     var cost = getResourceCost(resource);
-    // NOTE: charge() is now async and expects a real backend resource id —
-    // this page still uses mock numeric ids, so charges here will fail
-    // against the real API until this page gets its own real-data wiring.
     window.SharefWallet.charge(resource.id, resource.courseCode + " \u2014 " + resource.title).then(function (data) {
       if (!data.success) return;
       if (data.fileUrl) window.open(data.fileUrl, "_blank");
@@ -467,20 +484,17 @@ document.addEventListener("DOMContentLoaded", function () {
     var bookmarkBtn = e.target.closest(".bookmark-btn");
 
     if (previewBtn) {
-      var id = Number(previewBtn.getAttribute("data-id"));
+      var id = previewBtn.getAttribute("data-id");
       var resource = findResourceById(id);
       if (resource) openPreview(resource);
       return;
     }
 
     if (downloadBtn) {
-      var did = Number(downloadBtn.getAttribute("data-id"));
+      var did = downloadBtn.getAttribute("data-id");
       var dResource = findResourceById(did);
       if (dResource) {
         var dCost = getResourceCost(dResource);
-        // NOTE: charge() is now async and expects a real backend resource
-        // id — this page still uses mock numeric ids, so charges here will
-        // fail against the real API until this page gets real-data wiring.
         window.SharefWallet.charge(dResource.id, dResource.courseCode + " \u2014 " + dResource.title).then(function (data) {
           if (!data.success) return;
           if (data.fileUrl) window.open(data.fileUrl, "_blank");
@@ -493,7 +507,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (bookmarkBtn) {
-      var bid = Number(bookmarkBtn.getAttribute("data-id"));
+      var bid = bookmarkBtn.getAttribute("data-id");
       var idx = bookmarkedIds.indexOf(bid);
       if (idx === -1) {
         bookmarkedIds.push(bid);
@@ -506,7 +520,21 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ==========================================================================
-  // 6. INITIAL RENDER
+  // 6. INITIAL LOAD
   // ==========================================================================
-  render();
+  resourceGrid.innerHTML = '<p class="browse-loading-text">Loading resources\u2026</p>';
+  fetchAllResources()
+    .then(function (data) {
+      RESOURCES = data;
+      buildCourseMap();
+      populateCourseOptions("all");
+      render();
+    })
+    .catch(function (err) {
+      console.error(err);
+      resourceGrid.innerHTML = "";
+      resultsCountText.textContent = "Could not load resources";
+      emptyState.classList.remove("hidden");
+      resourceGrid.classList.add("hidden");
+    });
 });

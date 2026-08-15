@@ -21,6 +21,7 @@ function formatResource(resource) {
     level: resource.level,
     semester: resource.semester,
     session: resource.session,
+    description: resource.description,
     fileName: resource.fileName,
     fileExtension: resource.fileExtension,
     pages: resource.pages,

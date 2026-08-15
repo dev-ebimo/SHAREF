@@ -1,13 +1,55 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // Realistic data reflecting a Computer Science curriculum
-    const mockNotes = [
-        { id: 1, title: "Introduction to Java Programming", course: "CSC 201", dept: "Computer Science", level: "200", semester: "First", pages: 42, size: "3.1 MB", downloads: 1246, date: "2 weeks ago", type: "PDF", popular: true },
-        { id: 2, title: "Object-Oriented Concepts in Java", course: "CSC 201", dept: "Computer Science", level: "200", semester: "First", pages: 28, size: "1.8 MB", downloads: 850, date: "1 month ago", type: "PDF", popular: false },
-        { id: 3, title: "Data Structures - Linked Lists & Trees", course: "CSC 202", dept: "Computer Science", level: "200", semester: "Second", pages: 55, size: "4.2 MB", downloads: 1050, date: "3 weeks ago", type: "PDF", popular: true },
-        { id: 4, title: "Calculus Fundamentals", course: "MTH 101", dept: "Mathematics", level: "100", semester: "First", pages: 12, size: "1.1 MB", downloads: 430, date: "2 months ago", type: "DOCX", popular: false },
-        { id: 5, title: "Software Engineering Principles", course: "CSC 301", dept: "Computer Science", level: "300", semester: "First", pages: 34, size: "2.5 MB", downloads: 620, date: "1 week ago", type: "PDF", popular: false }
-    ];
+    // Real data — fetched from GET /api/resources?type=Lecture Note
+    let mockNotes = [];
+
+    function timeAgoLabel(isoDate) {
+        const diffMs = Date.now() - new Date(isoDate).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (mins < 60) return mins <= 1 ? "Just now" : `${mins} minutes ago`;
+        if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+        if (days === 1) return "Yesterday";
+        if (days < 30) return `${days} days ago`;
+        const months = Math.floor(days / 30);
+        return months === 1 ? "1 month ago" : `${months} months ago`;
+    }
+
+    // Backend has no per-resource "popular" flag — the course highlight
+    // banner instead picks whichever note in that course has the most
+    // downloads (see updateHeaders below).
+    function transformResource(r) {
+        return {
+            id: r.id,
+            title: r.title,
+            course: r.course,
+            dept: r.department,
+            level: r.level,
+            semester: r.semester,
+            pages: r.pages,
+            size: r.size,
+            downloads: r.downloads,
+            date: timeAgoLabel(r.createdAt),
+            createdAt: r.createdAt,
+            type: (r.fileExtension || "").toUpperCase(),
+        };
+    }
+
+    async function fetchAllLectureNotes() {
+        let all = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+            const res = await authFetch(`${API_BASE}/resources?type=${encodeURIComponent("Lecture Note")}&page=${page}&limit=50`);
+            const data = await res.json();
+            if (!data.success) break;
+            all = all.concat(data.resources.map(transformResource));
+            totalPages = data.totalPages || 1;
+            page += 1;
+        } while (page <= totalPages && page <= 10);
+        return all;
+    }
 
     // Inline SVG markup used in place of emoji icons, matching the app-wide stroke-icon set
     const DOC_ICON_SVG = `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
@@ -60,9 +102,21 @@ document.addEventListener('DOMContentLoaded', () => {
     mobileFilterToggle.addEventListener('click', () => filterPanel.classList.add('open'));
     closeFilters.addEventListener('click', () => filterPanel.classList.remove('open'));
 
-    // Initial Load
+    // Initial Load — fetch real Lecture Note resources once, then filter/
+    // sort/render entirely client-side (same pipeline as before, just fed
+    // with real data instead of a fixed mock array).
     renderSkeletons();
-    setTimeout(applyFiltersAndRender, 800);
+    fetchAllLectureNotes()
+        .then(notes => {
+            mockNotes = notes;
+            applyFiltersAndRender();
+        })
+        .catch(err => {
+            console.error(err);
+            skeletonContainer.classList.add('hidden');
+            resultsHeader.textContent = 'Could not load lecture notes.';
+            emptyState.classList.remove('hidden');
+        });
 
     function triggerSimulatedLoad() {
         container.classList.add('hidden');
@@ -70,7 +124,7 @@ document.addEventListener('DOMContentLoaded', () => {
         courseHighlightArea.classList.add('hidden');
         resultsHeader.innerHTML = '';
         renderSkeletons();
-        setTimeout(applyFiltersAndRender, 500);
+        setTimeout(applyFiltersAndRender, 300);
     }
 
     function renderSkeletons() {
@@ -114,7 +168,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Sorting Logic
         if(sort === 'downloads') filtered.sort((a,b) => b.downloads - a.downloads);
         if(sort === 'az') filtered.sort((a,b) => a.title.localeCompare(b.title));
-        if(sort === 'newest' || sort === 'updated') filtered.sort((a,b) => a.id - b.id); // Mock sorting
+        if(sort === 'newest' || sort === 'updated') filtered.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
 
         updateHeaders(filtered, selectedCourse, query, selectedDept);
         
@@ -135,7 +189,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Course specific highlight logic
         if (course !== 'all' || (query.length > 5 && query.startsWith('csc'))) {
             const targetCourse = course !== 'all' ? course : query.toUpperCase();
-            const popularNote = data.find(n => n.course === targetCourse && n.popular) || data[0];
+            const courseNotes = data.filter(n => n.course === targetCourse).sort((a, b) => b.downloads - a.downloads);
+            const popularNote = courseNotes[0] || data[0];
             
             if (popularNote && data.length > 0) {
                 courseHighlightArea.innerHTML = `
@@ -251,12 +306,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Runs the wallet charge, then a success callback if funds were enough.
-    // NOTE: charge() is now async and expects a real backend resource id —
-    // this page still uses mock note.id values, so charges here will fail
-    // against the real API (404, resource not found) until this page gets
-    // its own real-data wiring pass. That's expected for now; the goal here
-    // is just matching the new signature so this doesn't crash or falsely
-    // report success while the promise is still pending.
     function attemptDownload(note, onSuccess) {
         const cost = getResourceCost(note);
         window.SharefWallet.charge(note.id, `${note.course} — ${note.title}`).then((data) => {
@@ -273,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const previewBtn = e.target.closest('.btn-preview');
         if (previewBtn) {
             const card = previewBtn.closest('.note-card');
-            const noteId = card ? Number(card.dataset.noteId) : null;
+            const noteId = card ? card.dataset.noteId : null;
             const note = mockNotes.find(n => n.id === noteId);
             if (note) openPreviewModal(note, previewBtn);
             return;
@@ -285,7 +334,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const downloadBtn = e.target.closest('.btn-download');
         if (downloadBtn) {
             const card = downloadBtn.closest('.note-card');
-            const noteId = card ? Number(card.dataset.noteId) : null;
+            const noteId = card ? card.dataset.noteId : null;
             const note = mockNotes.find(n => n.id === noteId);
             if (note) attemptDownload(note);
         }

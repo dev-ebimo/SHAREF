@@ -1,51 +1,75 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    let notificationsData = [
-        { 
-            id: "n_001", 
-            type: "resource_approved", 
-            title: "Resource Approved", 
-            message: "Your \"CSC 201 Lecture Notes\" has been approved.", 
-            isRead: false, 
-            createdAt: "2 minutes ago", 
-            dateGroup: "Today",
-            actionText: "View Resource →",
-            actionUrl: "#" 
-        },
-        { 
-            id: "n_002", 
-            type: "new_resource", 
-            title: "New Lecture Notes", 
-            message: "New CSC 202 lecture notes have been added to your department.", 
-            isRead: false, 
-            createdAt: "3 hours ago", 
-            dateGroup: "Today",
-            actionText: "Browse →",
-            actionUrl: "#" 
-        },
-        { 
-            id: "n_003", 
-            type: "resource_rejected", 
-            title: "Resource Rejected", 
-            message: "Your upload \"MTH 101 Past Questions\" couldn't be approved. Reason: Duplicate Resource.", 
-            isRead: true, 
-            createdAt: "Yesterday", 
-            dateGroup: "Yesterday",
-            actionText: "View Details →",
-            actionUrl: "#" 
-        },
-        { 
-            id: "n_004", 
-            type: "account", 
-            title: "Password Updated", 
-            message: "Your password was changed successfully.", 
-            isRead: true, 
-            createdAt: "2 days ago", 
-            dateGroup: "Earlier",
-            actionText: "Account Settings →",
-            actionUrl: "#" 
+    // Real data — fetched from GET /api/notifications/mine. The backend
+    // only ever produces three notification types for a student:
+    // "resource_approved", "resource_rejected", and "announcement" — the
+    // old mock "new_resource" / "account" types don't exist server-side.
+    let notificationsData = [];
+
+    function timeAgoLabel(isoDate) {
+        const diffMs = Date.now() - new Date(isoDate).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        const hours = Math.floor(diffMs / 3600000);
+        const days = Math.floor(diffMs / 86400000);
+        if (mins < 60) return mins <= 1 ? "Just now" : `${mins} minutes ago`;
+        if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
+        if (days === 1) return "Yesterday";
+        return `${days} days ago`;
+    }
+
+    function dateGroupFor(isoDate) {
+        const now = new Date();
+        const d = new Date(isoDate);
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const startOfYesterday = new Date(startOfToday);
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+        if (d >= startOfToday) return "Today";
+        if (d >= startOfYesterday) return "Yesterday";
+        return "Earlier";
+    }
+
+    function transformNotification(n) {
+        const base = {
+            id: n.id,
+            type: n.type,
+            isRead: !n.unread,
+            createdAt: timeAgoLabel(n.createdAt),
+            dateGroup: dateGroupFor(n.createdAt),
+        };
+
+        if (n.type === 'announcement') {
+            return { ...base, title: n.title, message: n.message, actionText: null, actionUrl: null };
         }
-    ];
+        if (n.type === 'resource_approved') {
+            return {
+                ...base,
+                title: "Resource Approved",
+                message: `Your "${n.title}" has been approved.`,
+                actionText: "View My Uploads →",
+                actionUrl: "my-uploads.html",
+            };
+        }
+        if (n.type === 'resource_rejected') {
+            return {
+                ...base,
+                title: "Resource Rejected",
+                message: n.rejectionReason
+                    ? `Your upload "${n.title}" couldn't be approved. Reason: ${n.rejectionReason}.`
+                    : `Your upload "${n.title}" couldn't be approved.`,
+                actionText: "View Details →",
+                actionUrl: "my-uploads.html",
+            };
+        }
+        // Fallback for any future notification type this page doesn't know about yet
+        return { ...base, title: n.title || "Notification", message: n.course ? `Related to ${n.course}.` : "", actionText: null, actionUrl: null };
+    }
+
+    async function fetchNotifications() {
+        const res = await authFetch(`${API_BASE}/notifications/mine`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || "Could not load notifications");
+        notificationsData = data.notifications.map(transformNotification);
+    }
 
     const container = document.getElementById('notificationsContainer');
     const emptyState = document.getElementById('emptyState');
@@ -69,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderNotifications(filterType = 'all') {
         container.innerHTML = '';
-        
+
         let filteredData = notificationsData;
         if (filterType === 'unread') {
             filteredData = notificationsData.filter(n => !n.isRead);
@@ -95,16 +119,16 @@ document.addEventListener('DOMContentLoaded', () => {
         for (const [dateString, notifs] of Object.entries(grouped)) {
             const groupWrapper = document.createElement('div');
             groupWrapper.className = 'date-group';
-            
+
             groupWrapper.innerHTML = `<h3 class="date-group-title">${dateString}</h3>`;
-            
+
             notifs.forEach(notif => {
                 const iconSvg = iconDictionary[notif.type] || iconDictionary['announcement'];
                 const iconColorClass = getIconClass(notif.type);
-                
+
                 const card = document.createElement('div');
                 card.className = `notification-card ${notif.isRead ? '' : 'unread'}`;
-                
+
                 card.innerHTML = `
                     <div class="notif-icon-wrapper ${iconColorClass}">
                         ${iconSvg}
@@ -112,22 +136,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="notif-body">
                         <h4 class="notif-title">${notif.title}</h4>
                         <p class="notif-message">${notif.message}</p>
-                        <a href="${notif.actionUrl}" class="notif-action">${notif.actionText}</a>
+                        ${notif.actionText ? `<a href="${notif.actionUrl}" class="notif-action">${notif.actionText}</a>` : ''}
                     </div>
                     <div class="notif-time">${notif.createdAt}</div>
                 `;
 
                 // Mark as read on click
                 card.addEventListener('click', (e) => {
-                    if(!notif.isRead && !e.target.classList.contains('notif-action')) {
+                    if (!notif.isRead && !e.target.classList.contains('notif-action')) {
                         notif.isRead = true;
+                        authFetch(`${API_BASE}/notifications/mine/${notif.id}/toggle-read`, { method: 'PATCH' }).catch(err => console.error(err));
                         renderNotifications(document.querySelector('.qf-btn.active').dataset.filter);
                     }
                 });
 
                 groupWrapper.appendChild(card);
             });
-            
+
             container.appendChild(groupWrapper);
         }
     }
@@ -144,8 +169,15 @@ document.addEventListener('DOMContentLoaded', () => {
     markAllBtn.addEventListener('click', () => {
         notificationsData = notificationsData.map(n => ({ ...n, isRead: true }));
         renderNotifications(document.querySelector('.qf-btn.active').dataset.filter);
+        authFetch(`${API_BASE}/notifications/mine/mark-all-read`, { method: 'PATCH' }).catch(err => console.error(err));
     });
 
     // Initial Load
-    renderNotifications();
+    fetchNotifications()
+        .then(() => renderNotifications())
+        .catch(err => {
+            console.error(err);
+            container.classList.add('hidden');
+            emptyState.classList.remove('hidden');
+        });
 });

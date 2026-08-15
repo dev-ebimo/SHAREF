@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const { uploadResource, getMyUploads } = require("../controllers/resourceController");
+const { uploadResource, getMyUploads, getResources, getResourceById } = require("../controllers/resourceController");
 const {
   getRecentFeed, getTrending, getContinueLearning, searchPastQuestions, getResourcePreview,
 } = require("../controllers/browseController");
@@ -25,5 +25,7 @@ router.get("/continue-learning", protect, getContinueLearning);
 router.get("/past-questions", protect, searchPastQuestions);
 router.get("/my-uploads", protect, getMyUploads);
 router.get("/:id/preview", protect, getResourcePreview);
+router.get("/", protect, getResources);
+router.get("/:id", protect, getResourceById);
 
 module.exports = router;

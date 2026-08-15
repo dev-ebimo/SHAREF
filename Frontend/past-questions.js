@@ -1,11 +1,45 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const mockResources = [
-    { id: 401, title: "Intro to Computer Structures Exam", course: "CSC 201", type: "Past Questions", session: "2024/2025", semester: "First", level: "200", size: "2.4 MB", pages: 8, downloads: 142, date: "March 12" },
-    { id: 402, title: "Data Architecture Final Evaluation Paper", course: "CSC 201", type: "Past Questions", session: "2023/2024", semester: "First", level: "200", size: "1.9 MB", pages: 6, downloads: 98, date: "Feb 04" },
-    { id: 403, title: "Discrete Structures Logic Evaluation Matrix", course: "CSC 205", type: "Past Questions", session: "2024/2025", semester: "First", level: "200", size: "3.1 MB", pages: 14, downloads: 210, date: "May 19" },
-    { id: 404, title: "Linear Algebra Exam Matrix Paper", course: "MTH 102", type: "Past Questions", session: "2024/2025", semester: "Second", level: "100", size: "1.7 MB", pages: 4, downloads: 320, date: "June 02" },
-    { id: 405, title: "Calculus Fundamentals Assessment Tracker", course: "MTH 102", type: "Past Questions", session: "2023/2024", semester: "Second", level: "100", size: "2.2 MB", pages: 5, downloads: 185, date: "Jan 15" },
-  ];
+  // Real data — fetched from GET /api/resources/past-questions, which
+  // already supports server-side search/session/semester/level/sort
+  // filtering matching this page's controls exactly.
+  let mockResources = [];
+
+  function transformResource(r) {
+    return {
+      id: r.id,
+      title: r.title,
+      course: r.course,
+      type: r.type,
+      session: r.session,
+      semester: r.semester,
+      level: r.level,
+      size: r.size,
+      pages: r.pages,
+      downloads: r.downloads,
+      date: r.date,
+    };
+  }
+
+  let fetchToken = 0;
+  async function fetchPastQuestions() {
+    const params = new URLSearchParams({
+      search: searchInput.value.trim(),
+      session: sessionFilter.value,
+      semester: semesterFilter.value,
+      level: levelFilter.value,
+      sort: sortOrder.value,
+    });
+    const currentToken = ++fetchToken;
+    const res = await authFetch(`${API_BASE}/resources/past-questions?${params.toString()}`);
+    const data = await res.json();
+    if (currentToken !== fetchToken) return; // a newer request has since started — ignore this stale response
+    if (!data.success) {
+      showToast(data.message || "Could not load past questions.");
+      return;
+    }
+    mockResources = data.resources.map(transformResource);
+    renderTimeline();
+  }
 
   const timelineContainer = document.getElementById("timelineContainer");
   const emptyState = document.getElementById("emptyState");
@@ -56,8 +90,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentPreviewItem = null;
 
-  [searchInput, sessionFilter, semesterFilter, levelFilter, sortOrder].forEach((el) => {
-    el.addEventListener("input", queryAndRenderTimeline);
+  let searchDebounceTimer = null;
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(fetchPastQuestions, 350);
+  });
+  [sessionFilter, semesterFilter, levelFilter, sortOrder].forEach((el) => {
+    el.addEventListener("input", fetchPastQuestions);
   });
 
   // The static info-strip only ships with Size / Pages / Downloads — this
@@ -111,9 +150,6 @@ document.addEventListener("DOMContentLoaded", () => {
   modalDownloadBtn.addEventListener("click", () => {
     if (!currentPreviewItem) return;
     const cost = getResourceCost(currentPreviewItem);
-    // NOTE: charge() is now async and expects a real backend resource id —
-    // this page still uses mock item.id values, so charges here will fail
-    // against the real API until this page gets its own real-data wiring.
     window.SharefWallet.charge(currentPreviewItem.id, `${currentPreviewItem.course} — ${currentPreviewItem.title}`).then((data) => {
       if (!data.success) return;
       if (data.fileUrl) window.open(data.fileUrl, "_blank");
@@ -127,32 +163,18 @@ document.addEventListener("DOMContentLoaded", () => {
     showToast(`"${currentPreviewItem.title}" saved to bookmarks.`);
   });
 
-  queryAndRenderTimeline();
+  fetchPastQuestions().catch((err) => {
+    console.error(err);
+    showToast("Could not load past questions.");
+  });
 
-  function queryAndRenderTimeline() {
+  // The backend already applied search/session/semester/level filtering
+  // and sorting server-side (see fetchPastQuestions) — this just groups
+  // and renders the result set it received.
+  function renderTimeline() {
     timelineContainer.innerHTML = "";
 
-    const query = searchInput.value.toLowerCase().trim();
-    const selectedSession = sessionFilter.value;
-    const selectedSemester = semesterFilter.value;
-    const selectedLevel = levelFilter.value;
-    const selectedSort = sortOrder.value;
-
-    let dataPool = mockResources.filter((item) => {
-      const matchesSearch = item.course.toLowerCase().includes(query) || item.title.toLowerCase().includes(query);
-      const matchesSession = selectedSession === "all" || item.session === selectedSession;
-      const matchesSemester = selectedSemester === "all" || item.semester === selectedSemester;
-      const matchesLevel = selectedLevel === "all" || item.level === selectedLevel;
-      return matchesSearch && matchesSession && matchesSemester && matchesLevel;
-    });
-
-    if (selectedSort === "downloads") {
-      dataPool.sort((a, b) => b.downloads - a.downloads);
-    } else if (selectedSort === "oldest") {
-      dataPool.sort((a, b) => a.id - b.id);
-    } else {
-      dataPool.sort((a, b) => b.id - a.id);
-    }
+    const dataPool = mockResources;
 
     resultsCounter.textContent = `Results (${dataPool.length})`;
 

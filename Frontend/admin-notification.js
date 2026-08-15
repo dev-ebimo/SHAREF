@@ -42,16 +42,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ---- Mock notification feed (resource-upload alerts) ---- */
-  let notifications = [
-    { id: 'ntf_1', resourceId: 'req_101', title: 'Introduction to Java Programming', type: 'Lecture Note', dept: 'Computer Science', course: 'CSC 201', level: '200 Level', semester: 'First', session: '2025/2026', uploader: 'Ebimotimi Shadrack', size: '2.4 MB', timeAgo: '4 days ago', unread: true },
-    { id: 'ntf_2', resourceId: 'req_102', title: 'Software Engineering Ethics', type: 'Assignment Material', dept: 'Computer Science', course: 'CSC 205', level: '200 Level', semester: 'First', session: '2025/2026', uploader: 'John Doe', size: '1.1 MB', timeAgo: '2 hours ago', unread: true },
-    { id: 'ntf_3', resourceId: 'req_103', title: 'MTH 102 Past Questions', type: 'Past Question', dept: 'Mathematics', course: 'MTH 102', level: '100 Level', semester: 'Second', session: '2024/2025', uploader: 'Jane Smith', size: '4.5 MB', timeAgo: '3 hours ago', unread: true },
-    { id: 'ntf_4', resourceId: 'req_104', title: 'Digital Logic Design Notes', type: 'Lecture Note', dept: 'Computer Science', course: 'CSC 220', level: '200 Level', semester: 'Second', session: '2025/2026', uploader: 'Aliyu Bello', size: '3.1 MB', timeAgo: 'Yesterday', unread: true },
-    { id: 'ntf_5', resourceId: 'req_105', title: 'PHY 101 Lab Manual', type: 'Lecture Note', dept: 'Physics', course: 'PHY 101', level: '100 Level', semester: 'First', session: '2025/2026', uploader: 'Grace Okon', size: '5.8 MB', timeAgo: 'Yesterday', unread: true },
-    { id: 'ntf_6', resourceId: 'req_106', title: 'Linear Algebra Assignment 3', type: 'Assignment Material', dept: 'Mathematics', course: 'MTH 204', level: '200 Level', semester: 'First', session: '2025/2026', uploader: 'Chidi Umeh', size: '0.8 MB', timeAgo: '3 days ago', unread: false },
-    { id: 'ntf_7', resourceId: 'req_107', title: 'Organic Chemistry Notes', type: 'Lecture Note', dept: 'Chemistry', course: 'CHM 201', level: '200 Level', semester: 'First', session: '2025/2026', uploader: 'Fatima Sani', size: '2.9 MB', timeAgo: '5 days ago', unread: false },
-  ];
+  /* ---- Real notification feed (resource-upload alerts), from GET /api/admin/notifications ---- */
+  let notifications = [];
+
+  async function fetchNotifications() {
+    const res = await authFetch(`${API_BASE}/admin/notifications`);
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || "Could not load notifications");
+    notifications = data.notifications;
+  }
 
   let currentFilter = 'all';
   let currentReviewId = null;
@@ -151,6 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
   markAllReadBtn.addEventListener('click', () => {
     notifications.forEach(n => (n.unread = false));
     renderFeed();
+    authFetch(`${API_BASE}/admin/notifications/mark-all-read`, { method: 'PATCH' }).catch(err => console.error(err));
   });
 
   /* ---- Read/unread toggle (exposed for inline onclick) ---- */
@@ -159,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!item) return;
     item.unread = !item.unread;
     renderFeed();
+    authFetch(`${API_BASE}/admin/notifications/${id}/toggle-read`, { method: 'PATCH' }).catch(err => console.error(err));
   };
 
   /* ---- Quick Review Modal ---- */
@@ -178,7 +179,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('qrSession').textContent = item.session;
 
     // Opening the review is treated as reading the alert
-    item.unread = false;
+    if (item.unread) {
+      item.unread = false;
+      authFetch(`${API_BASE}/admin/notifications/${id}/toggle-read`, { method: 'PATCH' }).catch(err => console.error(err));
+    }
     renderFeed();
 
     quickReviewModal.classList.remove('hidden');
@@ -193,22 +197,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('qrApprove').addEventListener('click', () => {
     if (!currentReviewId) return;
-    notifications = notifications.filter(n => n.id !== currentReviewId);
-    quickReviewModal.classList.add('hidden');
-    alert('Resource approved successfully.');
-    renderFeed();
+    const id = currentReviewId;
+    authFetch(`${API_BASE}/admin/notifications/${id}/approve`, { method: 'POST' })
+      .then(res => res.json().then(data => ({ status: res.status, data })))
+      .then(({ data }) => {
+        if (!data.success) {
+          alert(data.message || 'Could not approve resource.');
+          return;
+        }
+        notifications = notifications.filter(n => n.id !== id);
+        quickReviewModal.classList.add('hidden');
+        alert('Resource approved successfully.');
+        renderFeed();
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Network error — could not approve resource.');
+      });
     currentReviewId = null;
   });
 
   document.getElementById('qrReject').addEventListener('click', () => {
     if (!currentReviewId) return;
-    notifications = notifications.filter(n => n.id !== currentReviewId);
-    quickReviewModal.classList.add('hidden');
-    alert('Resource rejected. Head to Rejected Resources to log a reason.');
-    renderFeed();
+    const id = currentReviewId;
+    authFetch(`${API_BASE}/admin/notifications/${id}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}), // reason is optional from the quick-review flow — logged properly from Rejected Resources
+    })
+      .then(res => res.json().then(data => ({ status: res.status, data })))
+      .then(({ data }) => {
+        if (!data.success) {
+          alert(data.message || 'Could not reject resource.');
+          return;
+        }
+        notifications = notifications.filter(n => n.id !== id);
+        quickReviewModal.classList.add('hidden');
+        alert('Resource rejected. Head to Rejected Resources to log a reason.');
+        renderFeed();
+      })
+      .catch(err => {
+        console.error(err);
+        alert('Network error — could not reject resource.');
+      });
     currentReviewId = null;
   });
 
   // Init
-  renderFeed();
+  fetchNotifications()
+    .then(() => renderFeed())
+    .catch(err => {
+      console.error(err);
+      notifFeed.classList.add('hidden');
+      notifEmptyState.classList.remove('hidden');
+    });
 });
