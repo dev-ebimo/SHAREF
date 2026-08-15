@@ -1,4 +1,6 @@
 document.addEventListener("DOMContentLoaded", function () {
+  if (!currentUser) return; // dashboard.js already ran requireAuth() at the top of the file
+
   // ==========================================================================
   // 0. TOAST HELPER
   // ==========================================================================
@@ -16,6 +18,58 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ==========================================================================
+  // 0b. LOAD REAL SETTINGS DATA
+  // ==========================================================================
+  var fullNameInput = document.getElementById("settingsFullName");
+  var emailInput0 = document.getElementById("settingsEmail");
+  var departmentInput = document.getElementById("settingsDepartment");
+  var levelSelect = document.getElementById("settingsLevel");
+  var landingPageSelect = document.getElementById("settingsLandingPage");
+  var privacyPublicToggle = document.getElementById("privacyPublicProfileToggle");
+  var privacyStatsToggle = document.getElementById("privacyStatsToggle");
+
+  function setSwitchState(el, isOn) {
+    if (!el) return;
+    el.classList.toggle("is-on", !!isOn);
+    el.setAttribute("aria-checked", isOn ? "true" : "false");
+  }
+
+  function loadSettings() {
+    authFetch(API_BASE + "/users/me")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) return;
+        var user = data.user;
+
+        if (fullNameInput) fullNameInput.value = user.fullName;
+        if (emailInput0) emailInput0.value = user.email;
+        window.__settingsOriginalEmail = user.email;
+        if (departmentInput) departmentInput.value = user.department;
+        if (levelSelect) levelSelect.value = user.level;
+
+        var prefs = user.preferences || {};
+        if (landingPageSelect && prefs.landingPage) landingPageSelect.value = prefs.landingPage;
+
+        document.querySelectorAll(".switch[data-pref-category]").forEach(function (btn) {
+          var category = btn.getAttribute("data-pref-category");
+          var channel = btn.getAttribute("data-pref-channel");
+          var section = prefs.notifications && prefs.notifications[category];
+          if (section && typeof section[channel] === "boolean") {
+            setSwitchState(btn, section[channel]);
+          }
+        });
+
+        if (prefs.privacy) {
+          if (typeof prefs.privacy.publicProfile === "boolean") setSwitchState(privacyPublicToggle, prefs.privacy.publicProfile);
+          if (typeof prefs.privacy.showStats === "boolean") setSwitchState(privacyStatsToggle, prefs.privacy.showStats);
+        }
+      })
+      .catch(function (err) { console.error("Could not load settings:", err); });
+  }
+
+  loadSettings();
+
+  // ==========================================================================
   // 1. GENERIC SWITCH TOGGLES (notifications + privacy)
   // ==========================================================================
   document.querySelectorAll(".switch").forEach(function (btn) {
@@ -26,25 +80,117 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ==========================================================================
-  // 2. SAVE CHANGES CONFIRMATIONS (Account + Preferences)
+  // 2. SAVE CHANGES (Account + Preferences) — real backend calls
   // ==========================================================================
-  function wireSaveButton(buttonId, confirmId) {
+  function wireSaveButton(buttonId, confirmId, onSave) {
     var btn = document.getElementById(buttonId);
     var confirmEl = document.getElementById(confirmId);
-    if (!btn || !confirmEl) return;
+    if (!btn) return;
 
     var hideTimer = null;
     btn.addEventListener("click", function () {
-      confirmEl.classList.remove("hidden");
-      clearTimeout(hideTimer);
-      hideTimer = setTimeout(function () {
-        confirmEl.classList.add("hidden");
-      }, 2500);
+      var originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+
+      onSave()
+        .then(function (ok) {
+          btn.disabled = false;
+          btn.textContent = originalText;
+          if (!ok) return;
+
+          if (confirmEl) {
+            confirmEl.classList.remove("hidden");
+            clearTimeout(hideTimer);
+            hideTimer = setTimeout(function () {
+              confirmEl.classList.add("hidden");
+            }, 2500);
+          }
+        })
+        .catch(function () {
+          btn.disabled = false;
+          btn.textContent = originalText;
+        });
     });
   }
 
-  wireSaveButton("saveAccountBtn", "accountSaveConfirm");
-  wireSaveButton("savePreferencesBtn", "preferencesSaveConfirm");
+  wireSaveButton("saveAccountBtn", "accountSaveConfirm", function () {
+    var payload = {
+      fullName: fullNameInput ? fullNameInput.value.trim() : undefined,
+      email: emailInput0 ? emailInput0.value.trim() : undefined,
+      department: departmentInput ? departmentInput.value.trim() : undefined,
+      level: levelSelect ? levelSelect.value : undefined,
+    };
+
+    return authFetch(API_BASE + "/users/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          showToast(data.message || "Could not save account changes.");
+          return false;
+        }
+        showToast(data.message || "Account updated successfully.");
+
+        // Reflect the server's verdict on whether the email actually
+        // changed (and therefore needs re-verification), not just our own
+        // client-side guess.
+        window.__settingsOriginalEmail = payload.email;
+        if (emailStatus && emailStatusText) {
+          emailStatus.classList.toggle("is-unverified", !!data.emailChanged);
+          emailStatusText.textContent = data.emailChanged ? "Unverified — check your inbox" : "Verified";
+        }
+
+        return true;
+      })
+      .catch(function (err) {
+        console.error(err);
+        showToast("Network error — could not save changes.");
+        return false;
+      });
+  });
+
+  wireSaveButton("savePreferencesBtn", "preferencesSaveConfirm", function () {
+    var notifications = {};
+    document.querySelectorAll(".switch[data-pref-category]").forEach(function (btn) {
+      var category = btn.getAttribute("data-pref-category");
+      var channel = btn.getAttribute("data-pref-channel");
+      notifications[category] = notifications[category] || {};
+      notifications[category][channel] = btn.classList.contains("is-on");
+    });
+
+    var preferences = {
+      landingPage: landingPageSelect ? landingPageSelect.value : undefined,
+      notifications: notifications,
+      privacy: {
+        publicProfile: privacyPublicToggle ? privacyPublicToggle.classList.contains("is-on") : undefined,
+        showStats: privacyStatsToggle ? privacyStatsToggle.classList.contains("is-on") : undefined,
+      },
+    };
+
+    return authFetch(API_BASE + "/users/me/preferences", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preferences: preferences }),
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          showToast(data.message || "Could not save preferences.");
+          return false;
+        }
+        showToast(data.message || "Preferences saved.");
+        return true;
+      })
+      .catch(function (err) {
+        console.error(err);
+        showToast("Network error — could not save preferences.");
+        return false;
+      });
+  });
 
   // ==========================================================================
   // 3. EMAIL VERIFIED/UNVERIFIED STATUS
@@ -54,10 +200,13 @@ document.addEventListener("DOMContentLoaded", function () {
   var emailStatusText = document.getElementById("emailStatusText");
 
   if (emailInput && emailStatus && emailStatusText) {
-    var originalEmail = emailInput.value.trim();
+    // Updated by loadSettings() once the real email comes back from the
+    // server — starts from the placeholder value so this still works even
+    // if that fetch is slow/fails.
+    window.__settingsOriginalEmail = emailInput.value.trim();
 
     emailInput.addEventListener("input", function () {
-      var changed = emailInput.value.trim() !== originalEmail;
+      var changed = emailInput.value.trim() !== window.__settingsOriginalEmail;
       emailStatus.classList.toggle("is-unverified", changed);
       emailStatusText.textContent = changed
         ? "Unverified — check your inbox after saving"
@@ -148,6 +297,7 @@ document.addEventListener("DOMContentLoaded", function () {
     passwordForm.addEventListener("submit", function (e) {
       e.preventDefault();
 
+      var currentVal = currentPasswordInput.value;
       var newVal = newPasswordInput.value;
       var confirmVal = confirmPasswordInput.value;
 
@@ -163,8 +313,33 @@ document.addEventListener("DOMContentLoaded", function () {
       }
 
       passwordError.classList.add("hidden");
-      closePasswordModal();
-      showToast("Password updated successfully.");
+      var submitBtn = passwordForm.querySelector("button[type='submit']");
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "Updating..."; }
+
+      authFetch(API_BASE + "/users/me/password", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: currentVal, newPassword: newVal }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Update Password"; }
+
+          if (!data.success) {
+            passwordError.textContent = data.message || "Could not update password.";
+            passwordError.classList.remove("hidden");
+            return;
+          }
+
+          closePasswordModal();
+          showToast(data.message || "Password updated successfully.");
+        })
+        .catch(function (err) {
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = "Update Password"; }
+          passwordError.textContent = "Network error — could not reach the server. Please try again.";
+          passwordError.classList.remove("hidden");
+          console.error(err);
+        });
     });
 
     document.addEventListener("keydown", function (e) {
@@ -206,8 +381,35 @@ document.addEventListener("DOMContentLoaded", function () {
 
     deleteConfirmBtn.addEventListener("click", function () {
       if (deleteConfirmInput.value.trim() !== "DELETE") return;
-      closeDeleteModal();
-      showToast("Account deletion requested — this is a prototype, so nothing was actually deleted.");
+
+      deleteConfirmBtn.disabled = true;
+      var originalText = deleteConfirmBtn.textContent;
+      deleteConfirmBtn.textContent = "Deleting...";
+
+      authFetch(API_BASE + "/users/me", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmation: "DELETE" }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.success) {
+            deleteConfirmBtn.disabled = false;
+            deleteConfirmBtn.textContent = originalText;
+            showToast(data.message || "Could not delete account.");
+            return;
+          }
+
+          // Account and all uploads are gone server-side — clear the local
+          // session and send them off, same as a normal logout.
+          logout();
+        })
+        .catch(function (err) {
+          deleteConfirmBtn.disabled = false;
+          deleteConfirmBtn.textContent = originalText;
+          showToast("Network error — could not delete account.");
+          console.error(err);
+        });
     });
 
     document.addEventListener("keydown", function (e) {

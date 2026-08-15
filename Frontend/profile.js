@@ -1,4 +1,51 @@
 document.addEventListener("DOMContentLoaded", function () {
+  if (!currentUser) return; // dashboard.js already ran requireAuth() at the top of the file
+
+  // ==========================================================================
+  // 0. LOAD REAL PROFILE DATA
+  // ==========================================================================
+  var nameHeadingEl = document.getElementById("profileNameHeading");
+  var deptLevelTextEl = document.getElementById("profileDeptLevel");
+  var universityTextEl = document.getElementById("profileUniversityText");
+
+  var editNameInput = document.getElementById("editName");
+  var editDeptInput = document.getElementById("editDept");
+  var editLevelInput = document.getElementById("editLevel");
+  var editUniversityInput = document.getElementById("editUniversity");
+
+  var publicToggleEl = document.getElementById("publicProfileToggle");
+  var publicToggleDescEl = document.getElementById("publicToggleDesc");
+
+  var myProfile = null; // cached, so the edit form has something to fall back on
+
+  authFetch(API_BASE + "/users/me")
+    .then(function (res) { return res.json(); })
+    .then(function (data) {
+      if (!data.success) return;
+      myProfile = data.user;
+
+      if (nameHeadingEl) nameHeadingEl.textContent = myProfile.fullName;
+      if (deptLevelTextEl) deptLevelTextEl.textContent = myProfile.department + " • " + myProfile.level + " Level";
+      if (universityTextEl) universityTextEl.textContent = myProfile.university;
+
+      if (editNameInput) editNameInput.value = myProfile.fullName;
+      if (editDeptInput) editDeptInput.value = myProfile.department;
+      if (editLevelInput) editLevelInput.value = myProfile.level + " Level";
+      if (editUniversityInput) editUniversityInput.value = myProfile.university;
+
+      var isPublic = !!(myProfile.preferences && myProfile.preferences.privacy && myProfile.preferences.privacy.publicProfile);
+      if (publicToggleEl) {
+        publicToggleEl.classList.toggle("is-on", isPublic);
+        publicToggleEl.setAttribute("aria-checked", isPublic ? "true" : "false");
+      }
+      if (publicToggleDescEl) {
+        publicToggleDescEl.textContent = isPublic
+          ? "Students can view your uploaded resources."
+          : "Your profile is currently private.";
+      }
+    })
+    .catch(function (err) { console.error("Could not load profile:", err); });
+
   // ==========================================================================
   // 1. EDIT PROFILE MODAL
   // ==========================================================================
@@ -8,6 +55,8 @@ document.addEventListener("DOMContentLoaded", function () {
   var editCloseBtn = document.getElementById("editProfileCloseBtn");
   var editCancelBtn = document.getElementById("editProfileCancelBtn");
   var editForm = document.getElementById("editProfileForm");
+  var editSubmitBtn = editForm ? editForm.querySelector("button[type='submit']") : null;
+  var editErrorEl = document.getElementById("editProfileError");
 
   var nameInput = document.getElementById("editName");
   var deptInput = document.getElementById("editDept");
@@ -53,18 +102,53 @@ document.addEventListener("DOMContentLoaded", function () {
 
       var name = nameInput.value.trim();
       var dept = deptInput.value.trim();
-      var level = levelInput.value.trim();
+      // The backend stores level as a bare number ("200"), the field here
+      // shows "200 Level" for readability — strip everything but the digits.
+      var levelDigits = (levelInput.value.match(/\d+/) || [""])[0];
       var university = universityInput.value.trim();
       var bio = bioInput.value.trim();
 
-      if (nameHeading && name) nameHeading.textContent = name;
-      if (deptLevelText) {
-        deptLevelText.textContent = [dept, level].filter(Boolean).join(" • ");
-      }
-      if (universityText && university) universityText.textContent = university;
-      if (bioText) bioText.textContent = bio;
+      if (editErrorEl) editErrorEl.style.display = "none";
+      if (editSubmitBtn) { editSubmitBtn.disabled = true; editSubmitBtn.textContent = "Saving..."; }
 
-      closeEditModal();
+      authFetch(API_BASE + "/users/me", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // Only fullName/department/level are recognised by the backend —
+        // university and bio aren't part of the User schema yet, so they
+        // update the display locally only, same as before.
+        body: JSON.stringify({ fullName: name, department: dept, level: levelDigits }),
+      })
+        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+        .then(function (result) {
+          var data = result.data;
+          if (editSubmitBtn) { editSubmitBtn.disabled = false; editSubmitBtn.textContent = "Save Changes"; }
+
+          if (!data.success) {
+            if (editErrorEl) {
+              editErrorEl.textContent = data.message || "Could not save changes. Please try again.";
+              editErrorEl.style.display = "block";
+            }
+            return;
+          }
+
+          if (nameHeading && name) nameHeading.textContent = name;
+          if (deptLevelText) {
+            deptLevelText.textContent = [dept, levelDigits ? levelDigits + " Level" : ""].filter(Boolean).join(" • ");
+          }
+          if (universityText && university) universityText.textContent = university;
+          if (bioText) bioText.textContent = bio;
+
+          closeEditModal();
+        })
+        .catch(function (err) {
+          if (editSubmitBtn) { editSubmitBtn.disabled = false; editSubmitBtn.textContent = "Save Changes"; }
+          if (editErrorEl) {
+            editErrorEl.textContent = "Network error — could not reach the server. Please try again.";
+            editErrorEl.style.display = "block";
+          }
+          console.error(err);
+        });
     });
   }
 
@@ -81,6 +165,24 @@ document.addEventListener("DOMContentLoaded", function () {
       publicToggleDesc.textContent = isOn
         ? "Students can view your uploaded resources."
         : "Your profile is currently private.";
+
+      authFetch(API_BASE + "/users/me/preferences", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: { privacy: { publicProfile: isOn } } }),
+      })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.success) {
+            // Revert the visual state if the save actually failed
+            publicToggle.classList.toggle("is-on", !isOn);
+            publicToggle.setAttribute("aria-checked", !isOn ? "true" : "false");
+            publicToggleDesc.textContent = !isOn
+              ? "Students can view your uploaded resources."
+              : "Your profile is currently private.";
+          }
+        })
+        .catch(function (err) { console.error("Could not save privacy preference:", err); });
     });
   }
 
