@@ -15,9 +15,10 @@ function formatFileSize(bytes) {
 // @route GET /api/admin/moderation/queue
 async function getModerationQueue(req, res) {
   try {
+    const sortOrder = req.query.sort === "newest" ? -1 : 1;
     const pendingResources = await Resource.find({ status: "pending" })
       .populate("uploader", "fullName")
-      .sort({ createdAt: 1 }); // oldest first, so aged items surface naturally
+      .sort({ createdAt: sortOrder });
 
     const now = new Date();
     const queue = pendingResources.map((r) => {

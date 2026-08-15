@@ -52,7 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Real data loading
     // ------------------------------------------------------------------
     function loadQueue() {
-        authFetch(API_BASE + '/admin/moderation/queue')
+        const sortSelect = document.getElementById('sortQueue');
+        const sortValue = sortSelect ? sortSelect.value : 'oldest';
+
+        authFetch(API_BASE + '/admin/moderation/queue?sort=' + sortValue)
             .then(res => res.json())
             .then(data => {
                 if (!data.success) return;
@@ -227,6 +230,11 @@ document.addEventListener('DOMContentLoaded', () => {
         statRejected.textContent = stats.rejected;
         if (sidebarQueueCount) sidebarQueueCount.textContent = stats.pending;
 
+        const statTotalResources = document.getElementById('statTotalResources');
+        if (statTotalResources) {
+            statTotalResources.textContent = (stats.pending + stats.approved + stats.rejected).toLocaleString();
+        }
+
         const total = stats.pending + stats.approved + stats.rejected;
         const pct = total > 0 ? Math.round((stats.pending / total) * 100) : 0;
         if (queueHealthRing) queueHealthRing.style.setProperty('--pct', pct);
@@ -272,6 +280,9 @@ document.addEventListener('DOMContentLoaded', () => {
             accountPanel?.setAttribute('aria-hidden', 'true');
         }
     });
+
+    const sortQueueSelect = document.getElementById('sortQueue');
+    if (sortQueueSelect) sortQueueSelect.addEventListener('change', loadQueue);
 
     // Init
     loadQueue();
