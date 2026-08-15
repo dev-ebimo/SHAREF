@@ -36,6 +36,9 @@ async function getModerationQueue(req, res) {
         size: formatFileSize(r.fileSizeBytes),
         uploadDate: timeAgo(r.createdAt),
         isAged: ageDays >= AGED_THRESHOLD_DAYS,
+        previewAvailable: r.previewAvailable,
+        previewSnippet: r.previewSnippet,
+        previewMessage: r.previewMessage,
       };
     });
 
