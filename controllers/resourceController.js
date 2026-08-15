@@ -45,7 +45,7 @@ async function uploadResource(req, res) {
       return res.status(400).json({ success: false, message: "A file is required" });
     }
 
-    const { title, type, department, course, level, semester, session } = req.body;
+    const { title, type, department, course, level, semester, session, description } = req.body;
 
     const fileBuffer = fs.readFileSync(req.file.path);
     const pages = await countPages(fileBuffer, req.file.originalname);
@@ -59,7 +59,7 @@ async function uploadResource(req, res) {
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
 
     const resource = await Resource.create({
-      title, type, department, course, level, semester, session,
+      title, type, department, course, level, semester, session, description,
       uploader: req.user.id,
       fileName: req.file.originalname,
       fileUrl: cloudinaryResult.secure_url,
@@ -79,7 +79,7 @@ async function uploadResource(req, res) {
       message: "Resource submitted for review. You'll be notified once it's approved.",
       resource: {
         id: resource._id, title: resource.title, type: resource.type,
-        course: resource.course, pages: resource.pages,
+        course: resource.course, pages: resource.pages, description: resource.description,
         size: formatFileSize(resource.fileSizeBytes), status: resource.status,
       },
     });
