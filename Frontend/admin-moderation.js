@@ -134,6 +134,19 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('previewSession').textContent = item.session;
 
         previewModal.classList.remove('hidden');
+
+        const previewTextEl = document.getElementById('docPreviewText');
+        if (previewTextEl) {
+            previewTextEl.textContent = 'Loading preview…';
+            authFetch(API_BASE + '/resources/' + id + '/preview')
+                .then(res => res.json())
+                .then(data => {
+                    previewTextEl.textContent = data.available
+                        ? '"' + data.snippet + '"'
+                        : (data.message || 'Preview not available for this file type.');
+                })
+                .catch(() => { previewTextEl.textContent = 'Preview not available right now.'; });
+        }
     };
 
     window.quickApprove = (id) => {
