@@ -60,8 +60,10 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   var PAGE_SIZE = 6;
+  var urlParams = new URLSearchParams(window.location.search);
+  var initialSearch = urlParams.get("search") || "";
   var state = {
-    search: "",
+    search: initialSearch,
     department: "all",
     course: "all",
     semester: "all",
@@ -72,26 +74,20 @@ document.addEventListener("DOMContentLoaded", function () {
   };
   var lastManualSort = "newest";
 
-  var BOOKMARK_KEY = "sharef.bookmarks";
   var bookmarkedIds = [];
-  try {
-    bookmarkedIds = JSON.parse(window.localStorage.getItem(BOOKMARK_KEY) || "[]");
-  } catch (err) {
-    bookmarkedIds = [];
-  }
 
-  function saveBookmarks() {
-    try {
-      window.localStorage.setItem(BOOKMARK_KEY, JSON.stringify(bookmarkedIds));
-    } catch (err) {
-      /* storage unavailable - bookmark still works for this session */
-    }
+  async function fetchBookmarkedIds() {
+    var res = await authFetch(API_BASE + "/bookmarks");
+    var data = await res.json();
+    if (!data.success) return [];
+    return data.resources.map(function (r) { return r.id; });
   }
 
   // ==========================================================================
   // 1. DOM REFERENCES
   // ==========================================================================
   var searchInput = document.getElementById("resourceSearchInput");
+  if (initialSearch) searchInput.value = initialSearch;
   var departmentSelect = document.getElementById("filterDepartment");
   var courseSelect = document.getElementById("filterCourse");
   var semesterSelect = document.getElementById("filterSemester");
@@ -508,14 +504,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (bookmarkBtn) {
       var bid = bookmarkBtn.getAttribute("data-id");
-      var idx = bookmarkedIds.indexOf(bid);
-      if (idx === -1) {
-        bookmarkedIds.push(bid);
-      } else {
-        bookmarkedIds.splice(idx, 1);
-      }
-      saveBookmarks();
-      render();
+      bookmarkBtn.disabled = true;
+      authFetch(API_BASE + "/bookmarks/" + bid, { method: "POST" })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          bookmarkBtn.disabled = false;
+          if (!data.success) return;
+          var idx = bookmarkedIds.indexOf(bid);
+          if (data.bookmarked && idx === -1) {
+            bookmarkedIds.push(bid);
+          } else if (!data.bookmarked && idx !== -1) {
+            bookmarkedIds.splice(idx, 1);
+          }
+          render();
+        })
+        .catch(function (err) {
+          bookmarkBtn.disabled = false;
+          console.error(err);
+        });
     }
   });
 
@@ -523,9 +529,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // 6. INITIAL LOAD
   // ==========================================================================
   resourceGrid.innerHTML = '<p class="browse-loading-text">Loading resources\u2026</p>';
-  fetchAllResources()
-    .then(function (data) {
-      RESOURCES = data;
+  Promise.all([fetchAllResources(), fetchBookmarkedIds()])
+    .then(function (results) {
+      RESOURCES = results[0];
+      bookmarkedIds = results[1];
       buildCourseMap();
       populateCourseOptions("all");
       render();

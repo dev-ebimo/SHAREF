@@ -244,14 +244,12 @@
                 aria-label="Account menu for Ebimotimi Shadrack"
               >
                 <span class="avatar-initials">EB</span>
-                <img class="avatar-image-el" alt="" />
               </button>
 
               <div class="account-dropdown" id="accountMenuPanel" role="menu" aria-hidden="true" aria-labelledby="accountMenuTrigger">
                 <div class="account-dropdown-header">
                   <div class="account-dropdown-avatar avatar-visual" aria-hidden="true">
                     <span class="avatar-initials">EB</span>
-                    <img class="avatar-image-el" alt="" />
                   </div>
                   <div class="account-dropdown-identity">
                     <h4>Ebimotimi Shadrack</h4>
@@ -453,37 +451,17 @@
               </div>
             </section>
 
-            <!-- Contact & Bug Report Form -->
+            <!-- Contact & Bug Report -->
             <section class="dashboard-section" id="contact-support">
               <h2 class="section-title">Contact Support &amp; Report Bugs</h2>
-              <p class="contextual-insight" style="margin-bottom: 1.5rem">Support Email: support@sharef.com</p>
-
-              <form class="support-form" action="/api/support" method="POST">
-                <div class="form-group">
-                  <label for="requestType">Request Type</label>
-                  <select id="requestType" name="type">
-                    <option value="general">General Support</option>
-                    <option value="bug">Report a Bug</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label for="supportName">Name</label>
-                  <input type="text" id="supportName" name="name" placeholder="Your Name" required />
-                </div>
-                <div class="form-group">
-                  <label for="supportEmail">Email</label>
-                  <input type="email" id="supportEmail" name="email" placeholder="Your Email" required />
-                </div>
-                <div class="form-group">
-                  <label for="supportSubject">Subject</label>
-                  <input type="text" id="supportSubject" name="subject" placeholder="Subject / Bug Title" required />
-                </div>
-                <div class="form-group">
-                  <label for="supportMessage">Message</label>
-                  <textarea id="supportMessage" name="message" rows="5" placeholder="Describe your issue or the bug you encountered..." required></textarea>
-                </div>
-                <button type="submit" class="btn-primary w-100">Submit Request</button>
-              </form>
+              <p class="contextual-insight" style="margin-bottom: 1.5rem">
+                Still stuck, or found a bug? Email us at
+                <a href="mailto:support@sharef.com">support@sharef.com</a>
+                — include your account email and, for bugs, the steps to reproduce it.
+              </p>
+              <a href="mailto:support@sharef.com" class="btn-primary w-100" style="display:block;text-align:center;text-decoration:none;">
+                Email Support
+              </a>
             </section>
           </div>
 

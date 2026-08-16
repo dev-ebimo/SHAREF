@@ -47,6 +47,90 @@ document.addEventListener("DOMContentLoaded", function () {
     .catch(function (err) { console.error("Could not load profile:", err); });
 
   // ==========================================================================
+  // 0b. MY UPLOADS PREVIEW (same endpoint as my-uploads.html, first 3 shown)
+  // ==========================================================================
+  var myUploadsListEl = document.getElementById("myUploadsPreviewList");
+  var myUploadsCountEl = document.getElementById("myUploadsTotalCount");
+  var myUploadsDownloadsEl = document.getElementById("myUploadsTotalDownloads");
+
+  if (myUploadsListEl) {
+    authFetch(API_BASE + "/resources/my-uploads")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          myUploadsListEl.innerHTML = "";
+          return;
+        }
+        var uploads = data.resources;
+        if (myUploadsCountEl) myUploadsCountEl.textContent = uploads.length;
+        if (myUploadsDownloadsEl) {
+          var totalDownloads = uploads.reduce(function (sum, r) { return sum + (r.downloads || 0); }, 0);
+          myUploadsDownloadsEl.textContent = totalDownloads.toLocaleString();
+        }
+        if (uploads.length === 0) {
+          myUploadsListEl.innerHTML = '<p class="uploads-empty">You haven\u2019t uploaded anything yet.</p>';
+          return;
+        }
+        myUploadsListEl.innerHTML = uploads.slice(0, 3).map(function (item) {
+          return (
+            '<article class="upload-card">' +
+              '<div class="upload-card-main">' +
+                '<span class="type-tag pdf-type">' + item.type + "</span>" +
+                "<h3>" + item.title + "</h3>" +
+                '<div class="upload-card-metrics">' +
+                  "<span>" + (item.downloads || 0) + " Downloads</span>" +
+                  '<span class="status-badge status-' + item.status + '">' + item.status + "</span>" +
+                "</div>" +
+              "</div>" +
+            "</article>"
+          );
+        }).join("");
+      })
+      .catch(function (err) {
+        console.error("Could not load uploads preview:", err);
+        myUploadsListEl.innerHTML = '<p class="uploads-error">Could not load your uploads.</p>';
+      });
+  }
+
+  // ==========================================================================
+  // 0c. SAVED RESOURCES PREVIEW (same endpoint as bookmarks.html, first 3 shown)
+  // ==========================================================================
+  var savedResourcesListEl = document.getElementById("savedResourcesPreviewList");
+
+  if (savedResourcesListEl) {
+    authFetch(API_BASE + "/bookmarks")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) {
+          savedResourcesListEl.innerHTML = "";
+          return;
+        }
+        var resources = data.resources;
+        if (resources.length === 0) {
+          savedResourcesListEl.innerHTML = '<p class="uploads-empty">No bookmarks yet.</p>';
+          return;
+        }
+        savedResourcesListEl.innerHTML = resources.slice(0, 3).map(function (item) {
+          return (
+            '<div class="feed-item">' +
+              '<div class="item-info">' +
+                "<h3>" + item.title + "</h3>" +
+                "<p>" + item.type + "</p>" +
+              "</div>" +
+              '<div class="item-control-links">' +
+                '<a href="resources.html" class="feed-inline-link">Open</a>' +
+              "</div>" +
+            "</div>"
+          );
+        }).join("");
+      })
+      .catch(function (err) {
+        console.error("Could not load saved resources preview:", err);
+        savedResourcesListEl.innerHTML = '<p class="uploads-error">Could not load bookmarks.</p>';
+      });
+  }
+
+  // ==========================================================================
   // 1. EDIT PROFILE MODAL
   // ==========================================================================
   var editBtn = document.getElementById("editProfileBtn");
@@ -62,12 +146,10 @@ document.addEventListener("DOMContentLoaded", function () {
   var deptInput = document.getElementById("editDept");
   var levelInput = document.getElementById("editLevel");
   var universityInput = document.getElementById("editUniversity");
-  var bioInput = document.getElementById("editBio");
 
   var nameHeading = document.getElementById("profileNameHeading");
   var deptLevelText = document.getElementById("profileDeptLevel");
   var universityText = document.getElementById("profileUniversityText");
-  var bioText = document.getElementById("profileBio");
 
   if (editBtn && editModal && editScrim && editForm) {
     function openEditModal() {
@@ -106,7 +188,6 @@ document.addEventListener("DOMContentLoaded", function () {
       // shows "200 Level" for readability — strip everything but the digits.
       var levelDigits = (levelInput.value.match(/\d+/) || [""])[0];
       var university = universityInput.value.trim();
-      var bio = bioInput.value.trim();
 
       if (editErrorEl) editErrorEl.style.display = "none";
       if (editSubmitBtn) { editSubmitBtn.disabled = true; editSubmitBtn.textContent = "Saving..."; }
@@ -114,10 +195,7 @@ document.addEventListener("DOMContentLoaded", function () {
       authFetch(API_BASE + "/users/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        // Only fullName/department/level are recognised by the backend —
-        // university and bio aren't part of the User schema yet, so they
-        // update the display locally only, same as before.
-        body: JSON.stringify({ fullName: name, department: dept, level: levelDigits }),
+        body: JSON.stringify({ fullName: name, department: dept, level: levelDigits, university: university }),
       })
         .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
         .then(function (result) {
@@ -137,7 +215,6 @@ document.addEventListener("DOMContentLoaded", function () {
             deptLevelText.textContent = [dept, levelDigits ? levelDigits + " Level" : ""].filter(Boolean).join(" • ");
           }
           if (universityText && university) universityText.textContent = university;
-          if (bioText) bioText.textContent = bio;
 
           closeEditModal();
         })
@@ -240,88 +317,4 @@ document.addEventListener("DOMContentLoaded", function () {
       });
     }
   });
-
-  // ==========================================================================
-  // 4. PROFILE AVATAR UPLOAD
-  //    Lets the user replace the "EB" initials with an uploaded photo.
-  //    The same image is mirrored onto the top-nav avatar and the account
-  //    dropdown avatar, since they all share the ".avatar-visual" pattern.
-  //    Saved to localStorage so it survives a page refresh; if storage isn't
-  //    available (private browsing, etc.) it still works for the session.
-  // ==========================================================================
-  var avatarUploadBtn = document.getElementById("avatarUploadBtn");
-  var avatarFileInput = document.getElementById("avatarFileInput");
-  var avatarRemoveBtn = document.getElementById("avatarRemoveBtn");
-  var avatarVisuals = document.querySelectorAll(".avatar-visual");
-  var AVATAR_STORAGE_KEY = "sharef.profileAvatar";
-
-  function applyAvatarImage(dataUrl) {
-    avatarVisuals.forEach(function (el) {
-      var img = el.querySelector(".avatar-image-el");
-      if (img) img.src = dataUrl;
-      el.classList.add("has-avatar-image");
-    });
-    if (avatarRemoveBtn) avatarRemoveBtn.classList.remove("hidden");
-  }
-
-  function clearAvatarImage() {
-    avatarVisuals.forEach(function (el) {
-      var img = el.querySelector(".avatar-image-el");
-      if (img) img.removeAttribute("src");
-      el.classList.remove("has-avatar-image");
-    });
-    if (avatarRemoveBtn) avatarRemoveBtn.classList.add("hidden");
-  }
-
-  if (avatarUploadBtn && avatarFileInput && avatarVisuals.length) {
-    // Restore a previously saved photo, if storage is available
-    try {
-      var savedAvatar = window.localStorage.getItem(AVATAR_STORAGE_KEY);
-      if (savedAvatar) applyAvatarImage(savedAvatar);
-    } catch (err) {
-      // Private browsing / storage disabled — falls back to initials, no harm done
-    }
-
-    avatarUploadBtn.addEventListener("click", function () {
-      avatarFileInput.click();
-    });
-
-    avatarFileInput.addEventListener("change", function () {
-      var file = avatarFileInput.files && avatarFileInput.files[0];
-      if (!file) return;
-
-      if (!file.type.startsWith("image/")) {
-        alert("Please choose an image file.");
-        return;
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Please choose an image smaller than 5MB.");
-        return;
-      }
-
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        var dataUrl = e.target.result;
-        applyAvatarImage(dataUrl);
-        try {
-          window.localStorage.setItem(AVATAR_STORAGE_KEY, dataUrl);
-        } catch (err) {
-          // Storage full/unavailable — photo still shows for this session
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-
-    if (avatarRemoveBtn) {
-      avatarRemoveBtn.addEventListener("click", function () {
-        clearAvatarImage();
-        avatarFileInput.value = "";
-        try {
-          window.localStorage.removeItem(AVATAR_STORAGE_KEY);
-        } catch (err) {
-          /* no-op */
-        }
-      });
-    }
-  }
 });

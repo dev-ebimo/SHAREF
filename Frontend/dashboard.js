@@ -8,6 +8,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
   wireLogoutButton();
 
+  // Every page ships the same static "EB" placeholder in its avatar markup —
+  // replace it with real initials derived from the logged-in user's name.
+  (function updateAvatarInitials() {
+    if (!currentUser || !currentUser.fullName) return;
+    var parts = currentUser.fullName.trim().split(/\s+/);
+    var initials = parts.length > 1
+      ? (parts[0][0] + parts[parts.length - 1][0])
+      : parts[0].slice(0, 2);
+    document.querySelectorAll(".avatar-initials").forEach(function (el) {
+      el.textContent = initials.toUpperCase();
+    });
+  })();
+
   var sidebar = document.getElementById("sidebar");
   var scrim = document.getElementById("scrim");
   var openBtn = document.getElementById("hamburgerBtn");
@@ -108,12 +121,14 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  function renderTrending(resources) {
+  function renderTrending(resources, bookmarkedIds) {
     if (!trendingGrid) return;
     trendingGrid.innerHTML = "";
+    bookmarkedIds = bookmarkedIds || [];
 
     resources.forEach(function (resource) {
       window.__dashboardResourceCache[resource.id] = resource;
+      var isBookmarked = bookmarkedIds.indexOf(resource.id) !== -1;
 
       var card = document.createElement("article");
       card.className = "resource-card";
@@ -121,8 +136,8 @@ document.addEventListener("DOMContentLoaded", function () {
       card.innerHTML =
         '<div class="card-top-meta">' +
         '<span class="type-tag pdf-type">' + resource.type + "</span>" +
-        '<button class="icon-btn-badge" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
-        '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
+        '<button class="icon-btn-badge' + (isBookmarked ? " is-bookmarked" : "") + '" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
+        '<svg fill="' + (isBookmarked ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
         "</button>" +
         "</div>" +
         '<div class="card-body-zone">' +
@@ -149,12 +164,15 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   if (trendingGrid) {
-    authFetch(API_BASE + "/resources/trending?limit=6")
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (data.success) renderTrending(data.resources);
-      })
-      .catch(function (err) { console.error("Could not load trending resources:", err); });
+    Promise.all([
+      authFetch(API_BASE + "/resources/trending?limit=6").then(function (res) { return res.json(); }),
+      authFetch(API_BASE + "/bookmarks").then(function (res) { return res.json(); }).catch(function () { return { success: false }; }),
+    ]).then(function (results) {
+      var trendingData = results[0];
+      var bookmarksData = results[1];
+      var bookmarkedIds = bookmarksData.success ? bookmarksData.resources.map(function (r) { return r.id; }) : [];
+      if (trendingData.success) renderTrending(trendingData.resources, bookmarkedIds);
+    }).catch(function (err) { console.error("Could not load trending resources:", err); });
   }
 
   // ------------------------------------------------------------------
@@ -234,11 +252,118 @@ var stateDefault = document.getElementById("searchStateDefault");
 var stateResults = document.getElementById("searchStateResults");
 
 if (omnibarInput && searchWrapper) {
+  var RECENT_SEARCHES_KEY = "sharef.recentSearches";
+
+  function getRecentSearches() {
+    try {
+      return JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_KEY) || "[]");
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function addRecentSearch(term) {
+    term = term.trim();
+    if (!term) return;
+    try {
+      var list = getRecentSearches().filter(function (t) { return t.toLowerCase() !== term.toLowerCase(); });
+      list.unshift(term);
+      window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(list.slice(0, 5)));
+    } catch (err) {
+      /* storage unavailable — recent searches just won't persist */
+    }
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement("div");
+    div.textContent = str == null ? "" : String(str);
+    return div.innerHTML;
+  }
+
+  function goToSearch(term) {
+    addRecentSearch(term);
+    window.location.href = "resources.html?search=" + encodeURIComponent(term);
+  }
+
+  // Populate the "before typing" dropdown state: real recent searches
+  // (client-side only — there's no backend endpoint for search history,
+  // nor does one need to exist for this) + real trending courses.
+  function renderDefaultState() {
+    var recent = getRecentSearches();
+    var recentHtml = recent.length
+      ? recent.map(function (term) {
+          return (
+            '<button class="dropdown-item recent-item" data-term="' + escapeHtml(term) + '">' +
+              '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>' +
+              "<span>" + escapeHtml(term) + "</span>" +
+            "</button>"
+          );
+        }).join("")
+      : '<p class="search-dropdown-empty">No recent searches yet.</p>';
+
+    stateDefault.innerHTML =
+      '<div class="dropdown-group"><div class="group-label">Recent Searches</div>' + recentHtml + "</div>" +
+      '<div class="dropdown-group"><div class="group-label">Trending Courses</div><div class="trending-chips" id="omnibarTrendingChips"><p class="search-dropdown-empty">Loading\u2026</p></div></div>';
+
+    authFetch(API_BASE + "/resources/trending?limit=5")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        var chipsEl = document.getElementById("omnibarTrendingChips");
+        if (!chipsEl) return; // dropdown may have been re-rendered/closed already
+        if (!data.success || !data.resources.length) {
+          chipsEl.innerHTML = '<p class="search-dropdown-empty">Nothing trending yet.</p>';
+          return;
+        }
+        var seenCourses = [];
+        data.resources.forEach(function (r) {
+          if (seenCourses.indexOf(r.course) === -1) seenCourses.push(r.course);
+        });
+        chipsEl.innerHTML = seenCourses.slice(0, 5).map(function (course) {
+          return '<button type="button" class="trend-chip" data-term="' + escapeHtml(course) + '">' + escapeHtml(course) + "</button>";
+        }).join("");
+      })
+      .catch(function (err) { console.error(err); });
+  }
+
+  // Populate the "typing" dropdown state with live search results.
+  var searchDebounceTimer = null;
+  function renderResultsState(query) {
+    stateResults.innerHTML = '<div class="dropdown-group"><p class="search-dropdown-empty">Searching\u2026</p></div>';
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(function () {
+      authFetch(API_BASE + "/resources?search=" + encodeURIComponent(query) + "&limit=5")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (omnibarInput.value.trim() !== query) return; // stale response — a newer search has since started
+          if (!data.success || !data.resources.length) {
+            stateResults.innerHTML = '<div class="dropdown-group"><p class="search-dropdown-empty">No resources found for \u201c' + escapeHtml(query) + '\u201d.</p></div>';
+            return;
+          }
+          var itemsHtml = data.resources.map(function (r) {
+            var badgeClass = (r.fileExtension || "").toLowerCase() === "pdf" ? "pdf" : "doc";
+            return (
+              '<a href="resources.html?search=' + encodeURIComponent(query) + '" class="dropdown-item">' +
+                '<span class="badge-mini ' + badgeClass + '">' + escapeHtml((r.fileExtension || "").toUpperCase()) + "</span>" +
+                '<span class="item-text">' + escapeHtml(r.title) + "</span>" +
+              "</a>"
+            );
+          }).join("");
+          stateResults.innerHTML = '<div class="dropdown-group"><div class="group-label">Resources</div>' + itemsHtml + "</div>";
+        })
+        .catch(function (err) {
+          console.error(err);
+          stateResults.innerHTML = '<div class="dropdown-group"><p class="search-dropdown-empty">Could not search right now.</p></div>';
+        });
+    }, 300);
+  }
+
   // Expand dropdown interface on focus
   omnibarInput.addEventListener("focus", function () {
     searchWrapper.classList.add("is-focused");
     searchDropdown.setAttribute("aria-hidden", "false");
+    if (omnibarInput.value.trim().length === 0) renderDefaultState();
   });
+  renderDefaultState();
 
   // Track key up sequences inside the input bar
   omnibarInput.addEventListener("input", function (e) {
@@ -248,11 +373,31 @@ if (omnibarInput && searchWrapper) {
       // If user typed context, change view state to Filtered Suggestions
       stateDefault.classList.add("hidden");
       stateResults.classList.remove("hidden");
+      renderResultsState(value);
     } else {
       // Retract view to standard Discovery metrics
       stateDefault.classList.remove("hidden");
       stateResults.classList.add("hidden");
     }
+  });
+
+  omnibarInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && omnibarInput.value.trim()) {
+      e.preventDefault();
+      goToSearch(omnibarInput.value.trim());
+    }
+  });
+
+  // Clicking a recent-search pill, trending chip, or result re-runs/opens that search
+  searchDropdown.addEventListener("click", function (e) {
+    var termEl = e.target.closest("[data-term]");
+    if (termEl) {
+      e.preventDefault();
+      goToSearch(termEl.getAttribute("data-term"));
+      return;
+    }
+    var resultLink = e.target.closest(".dropdown-item[href]");
+    if (resultLink) addRecentSearch(omnibarInput.value.trim());
   });
 
   // Close dropdown safely when clicking completely outside the element tree
@@ -852,6 +997,30 @@ document.addEventListener("DOMContentLoaded", function () {
   // the shared cache populated in section 2.
   // ------------------------------------------------------------------
   document.addEventListener("click", function (e) {
+    var bookmarkBtn = e.target.closest('.icon-btn-badge[data-action="bookmark"]');
+    if (bookmarkBtn) {
+      e.preventDefault();
+      var bmCard = bookmarkBtn.closest(".resource-card");
+      var bmId = bmCard && bmCard.dataset.resourceId;
+      if (!bmId) return;
+      bookmarkBtn.disabled = true;
+      authFetch(API_BASE + "/bookmarks/" + bmId, { method: "POST" })
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          bookmarkBtn.disabled = false;
+          if (!data.success) return;
+          bookmarkBtn.classList.toggle("is-bookmarked", data.bookmarked);
+          var svg = bookmarkBtn.querySelector("svg");
+          if (svg) svg.setAttribute("fill", data.bookmarked ? "currentColor" : "none");
+          window.SharefWallet.showToast(data.bookmarked ? "Saved to bookmarks." : "Removed from bookmarks.");
+        })
+        .catch(function (err) {
+          bookmarkBtn.disabled = false;
+          console.error(err);
+        });
+      return;
+    }
+
     var feedLink = e.target.closest(".feed-inline-link");
     if (feedLink) {
       e.preventDefault();

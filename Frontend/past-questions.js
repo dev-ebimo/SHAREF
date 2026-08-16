@@ -129,6 +129,16 @@ document.addEventListener("DOMContentLoaded", () => {
     previewModal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     closeModalBtn.focus();
+
+    modalBookmarkBtn.textContent = "Bookmark";
+    authFetch(`${API_BASE}/bookmarks/check/${item.id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && currentPreviewItem === item) {
+          modalBookmarkBtn.textContent = data.bookmarked ? "Remove Bookmark" : "Bookmark";
+        }
+      })
+      .catch((err) => console.error(err));
   }
 
   function closePreviewModal() {
@@ -160,7 +170,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   modalBookmarkBtn.addEventListener("click", () => {
     if (!currentPreviewItem) return;
-    showToast(`"${currentPreviewItem.title}" saved to bookmarks.`);
+    const item = currentPreviewItem;
+    modalBookmarkBtn.disabled = true;
+    authFetch(`${API_BASE}/bookmarks/${item.id}`, { method: "POST" })
+      .then((res) => res.json())
+      .then((data) => {
+        modalBookmarkBtn.disabled = false;
+        if (!data.success) {
+          showToast(data.message || "Could not update bookmark.");
+          return;
+        }
+        if (currentPreviewItem === item) {
+          modalBookmarkBtn.textContent = data.bookmarked ? "Remove Bookmark" : "Bookmark";
+        }
+        showToast(data.bookmarked ? `"${item.title}" saved to bookmarks.` : `"${item.title}" removed from bookmarks.`);
+      })
+      .catch((err) => {
+        modalBookmarkBtn.disabled = false;
+        console.error(err);
+        showToast("Network error — could not update bookmark.");
+      });
   });
 
   fetchPastQuestions().catch((err) => {

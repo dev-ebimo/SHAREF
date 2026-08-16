@@ -219,7 +219,6 @@
                     aria-hidden="true"
                   >
                     <span class="avatar-initials">EB</span>
-                    <img class="avatar-image-el" alt="" />
                   </div>
                   <div class="account-dropdown-identity">
                     <h4>Ebimotimi Shadrack</h4>
@@ -538,6 +537,7 @@
                 role="switch"
                 aria-checked="true"
                 aria-label="Auto-open next resource"
+                id="settingsAutoOpenNext"
               >
                 <span class="switch-knob"></span>
               </button>
@@ -553,6 +553,7 @@
                 role="switch"
                 aria-checked="false"
                 aria-label="Confirm before approval"
+                id="settingsConfirmApproval"
               >
                 <span class="switch-knob"></span>
               </button>
@@ -568,6 +569,7 @@
                 role="switch"
                 aria-checked="true"
                 aria-label="Confirm before rejection"
+                id="settingsConfirmRejection"
               >
                 <span class="switch-knob"></span>
               </button>
@@ -626,6 +628,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="Email notifications for new resources"
+                    data-pref-category="newResources"
+                    data-pref-channel="email"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -637,6 +641,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="In-app notifications for new resources"
+                    data-pref-category="newResources"
+                    data-pref-channel="inApp"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -657,6 +663,8 @@
                     role="switch"
                     aria-checked="false"
                     aria-label="Email notifications for discussion replies"
+                    data-pref-category="discussionReplies"
+                    data-pref-channel="email"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -668,6 +676,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="In-app notifications for discussion replies"
+                    data-pref-category="discussionReplies"
+                    data-pref-channel="inApp"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -692,6 +702,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="Email notifications for pending uploads"
+                    data-pref-category="pendingUploads"
+                    data-pref-channel="email"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -703,6 +715,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="In-app notifications for pending uploads"
+                    data-pref-category="pendingUploads"
+                    data-pref-channel="inApp"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -729,6 +743,8 @@
                     role="switch"
                     aria-checked="false"
                     aria-label="Email notifications for rejected resources"
+                    data-pref-category="rejectedResources"
+                    data-pref-channel="email"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -740,6 +756,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="In-app notifications for rejected resources"
+                    data-pref-category="rejectedResources"
+                    data-pref-channel="inApp"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -760,6 +778,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="Email announcements"
+                    data-pref-category="announcements"
+                    data-pref-channel="email"
                   >
                     <span class="switch-knob"></span>
                   </button>
@@ -771,6 +791,8 @@
                     role="switch"
                     aria-checked="true"
                     aria-label="In-app announcements"
+                    data-pref-category="announcements"
+                    data-pref-channel="inApp"
                   >
                     <span class="switch-knob"></span>
                   </button>

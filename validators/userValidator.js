@@ -5,6 +5,7 @@ const updateProfileValidator = [
   body("email").optional().trim().isEmail().withMessage("Please enter a valid email address").normalizeEmail(),
   body("department").optional().trim().notEmpty().withMessage("Department cannot be empty"),
   body("level").optional().isIn(["100", "200", "300", "400", "500", "600"]).withMessage("Please select a valid level"),
+  body("university").optional().trim().notEmpty().withMessage("University cannot be empty"),
 ];
 
 const changePasswordValidator = [

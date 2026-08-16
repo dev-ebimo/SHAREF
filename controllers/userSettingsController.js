@@ -48,7 +48,7 @@ async function getMyProfile(req, res) {
 // @route PATCH /api/users/me
 async function updateMyProfile(req, res) {
   try {
-    const { fullName, email, department, level } = req.body;
+    const { fullName, email, department, level, university } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
@@ -57,6 +57,7 @@ async function updateMyProfile(req, res) {
     if (fullName) user.fullName = fullName;
     if (department) user.department = department;
     if (level) user.level = level;
+    if (university) user.university = university;
 
     if (email && email !== user.email) {
       const existing = await User.findOne({ email, _id: { $ne: user._id } });
