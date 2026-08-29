@@ -6,6 +6,9 @@ const updateProfileValidator = [
   body("department").optional().trim().notEmpty().withMessage("Department cannot be empty"),
   body("level").optional().isIn(["100", "200", "300", "400", "500", "600"]).withMessage("Please select a valid level"),
   body("university").optional().trim().notEmpty().withMessage("University cannot be empty"),
+  body("faculty").optional().trim().notEmpty().withMessage("Faculty cannot be empty"),
+  body("matricNumber").optional().trim().notEmpty().withMessage("Matric number cannot be empty"),
+  body("gender").optional().isIn(["Male", "Female", "Other"]).withMessage("Please select a valid gender"),
 ];
 
 const changePasswordValidator = [

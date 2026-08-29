@@ -192,7 +192,23 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   });
 
-  fetchPastQuestions().catch((err) => {
+  // Pre-fills the level filter from the user's completed profile — the
+  // payoff for completing the "Add your department" banner. Level is a
+  // controlled enum here (100/200/.../500), so unlike department elsewhere,
+  // no fallback "add a missing option" logic is needed.
+  async function applyProfileLevelPrefill() {
+    try {
+      const res = await authFetch(`${API_BASE}/users/me`);
+      const data = await res.json();
+      if (data.success && data.user.level) {
+        levelFilter.value = data.user.level;
+      }
+    } catch (err) {
+      console.error("Could not load profile for filter prefill:", err);
+    }
+  }
+
+  applyProfileLevelPrefill().then(fetchPastQuestions).catch((err) => {
     console.error(err);
     showToast("Could not load past questions.");
   });

@@ -16,20 +16,12 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     hideError();
 
-    const genderSelect = document.getElementById("gender");
-    const levelSelect = document.getElementById("level");
     const discoverySelect = document.getElementById("discovery");
 
     const payload = {
       fullName: document.getElementById("fullname").value.trim(),
       email: document.getElementById("email").value.trim(),
       password: document.getElementById("password").value,
-      gender: genderSelect.value,
-      university: document.getElementById("university").value.trim(),
-      matricNumber: document.getElementById("mat_no").value.trim(),
-      faculty: document.getElementById("faculty").value.trim(),
-      department: document.getElementById("department").value.trim(),
-      level: levelSelect.value,
       // Store the readable label ("Word of Mouth / Friend"), not the raw slug —
       // this field is just free-text context for admins, not filtered on.
       communitySurvey: discoverySelect.options[discoverySelect.selectedIndex]?.text || "",

@@ -12,6 +12,9 @@ document.addEventListener("DOMContentLoaded", function () {
   var editDeptInput = document.getElementById("editDept");
   var editLevelInput = document.getElementById("editLevel");
   var editUniversityInput = document.getElementById("editUniversity");
+  var editFacultyInput = document.getElementById("editFaculty");
+  var editMatricInput = document.getElementById("editMatricNumber");
+  var editGenderInput = document.getElementById("editGender");
 
   var publicToggleEl = document.getElementById("publicProfileToggle");
   var publicToggleDescEl = document.getElementById("publicToggleDesc");
@@ -25,13 +28,26 @@ document.addEventListener("DOMContentLoaded", function () {
       myProfile = data.user;
 
       if (nameHeadingEl) nameHeadingEl.textContent = myProfile.fullName;
-      if (deptLevelTextEl) deptLevelTextEl.textContent = myProfile.department + " • " + myProfile.level + " Level";
-      if (universityTextEl) universityTextEl.textContent = myProfile.university;
+      if (deptLevelTextEl) {
+        deptLevelTextEl.textContent = (myProfile.department && myProfile.level)
+          ? myProfile.department + " • " + myProfile.level + " Level"
+          : "Add your department & level to see resources filtered for you";
+      }
+      if (universityTextEl) universityTextEl.textContent = myProfile.university || "";
 
-      if (editNameInput) editNameInput.value = myProfile.fullName;
-      if (editDeptInput) editDeptInput.value = myProfile.department;
-      if (editLevelInput) editLevelInput.value = myProfile.level + " Level";
-      if (editUniversityInput) editUniversityInput.value = myProfile.university;
+      if (editNameInput) editNameInput.value = myProfile.fullName || "";
+      if (editDeptInput) editDeptInput.value = myProfile.department || "";
+      if (editLevelInput) editLevelInput.value = myProfile.level ? myProfile.level + " Level" : "";
+      if (editUniversityInput) editUniversityInput.value = myProfile.university || "";
+      if (editFacultyInput) editFacultyInput.value = myProfile.faculty || "";
+      if (editMatricInput) editMatricInput.value = myProfile.matricNumber || "";
+      if (editGenderInput) editGenderInput.value = myProfile.gender || "";
+
+      // Arrived via the "Complete profile" banner — jump straight into the form
+      var params = new URLSearchParams(window.location.search);
+      if (params.get("complete") === "1" && typeof window.__openEditProfileModal === "function") {
+        window.__openEditProfileModal();
+      }
 
       var isPublic = !!(myProfile.preferences && myProfile.preferences.privacy && myProfile.preferences.privacy.publicProfile);
       if (publicToggleEl) {
@@ -146,6 +162,9 @@ document.addEventListener("DOMContentLoaded", function () {
   var deptInput = document.getElementById("editDept");
   var levelInput = document.getElementById("editLevel");
   var universityInput = document.getElementById("editUniversity");
+  var facultyInput = document.getElementById("editFaculty");
+  var matricInput = document.getElementById("editMatricNumber");
+  var genderInput = document.getElementById("editGender");
 
   var nameHeading = document.getElementById("profileNameHeading");
   var deptLevelText = document.getElementById("profileDeptLevel");
@@ -159,6 +178,7 @@ document.addEventListener("DOMContentLoaded", function () {
       document.body.style.overflow = "hidden";
       nameInput.focus();
     }
+    window.__openEditProfileModal = openEditModal; // used by the ?complete=1 auto-open below
 
     function closeEditModal() {
       editModal.classList.remove("is-visible");
@@ -188,6 +208,9 @@ document.addEventListener("DOMContentLoaded", function () {
       // shows "200 Level" for readability — strip everything but the digits.
       var levelDigits = (levelInput.value.match(/\d+/) || [""])[0];
       var university = universityInput.value.trim();
+      var faculty = facultyInput ? facultyInput.value.trim() : "";
+      var matricNumber = matricInput ? matricInput.value.trim() : "";
+      var gender = genderInput ? genderInput.value : "";
 
       if (editErrorEl) editErrorEl.style.display = "none";
       if (editSubmitBtn) { editSubmitBtn.disabled = true; editSubmitBtn.textContent = "Saving..."; }
@@ -195,7 +218,10 @@ document.addEventListener("DOMContentLoaded", function () {
       authFetch(API_BASE + "/users/me", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName: name, department: dept, level: levelDigits, university: university }),
+        body: JSON.stringify({
+          fullName: name, department: dept, level: levelDigits, university: university,
+          faculty: faculty, matricNumber: matricNumber, gender: gender,
+        }),
       })
         .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
         .then(function (result) {
@@ -212,9 +238,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
           if (nameHeading && name) nameHeading.textContent = name;
           if (deptLevelText) {
-            deptLevelText.textContent = [dept, levelDigits ? levelDigits + " Level" : ""].filter(Boolean).join(" • ");
+            deptLevelText.textContent = (dept && levelDigits)
+              ? dept + " • " + levelDigits + " Level"
+              : "Add your department & level to see resources filtered for you";
           }
           if (universityText && university) universityText.textContent = university;
+
+          // Profile may now be complete — clear the "finish your profile" banner if present
+          try { window.sessionStorage.removeItem("sharef.profileBannerDismissed"); } catch (err) { /* no-op */ }
+          if (window.SharefProfileBanner && typeof window.SharefProfileBanner.recheck === "function") {
+            window.SharefProfileBanner.recheck();
+          }
 
           closeEditModal();
         })

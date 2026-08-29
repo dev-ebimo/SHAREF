@@ -21,6 +21,76 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   })();
 
+  // ==========================================================================
+  // "COMPLETE YOUR PROFILE" BANNER
+  //    Signup now only collects fullName/email/password — department, level,
+  //    university, faculty, matricNumber, and gender are filled in later, via
+  //    this prompt. Self-contained (inline styles) so it works consistently
+  //    across every page's own CSS. Dismissible for the current session only
+  //    — it reappears next session until the profile is actually complete.
+  // ==========================================================================
+  (function setupProfileCompletionBanner() {
+    var BANNER_ID = "sharefProfileBanner";
+    var DISMISS_KEY = "sharef.profileBannerDismissed";
+
+    function isDismissedThisSession() {
+      try { return window.sessionStorage.getItem(DISMISS_KEY) === "1"; } catch (err) { return false; }
+    }
+    function markDismissed() {
+      try { window.sessionStorage.setItem(DISMISS_KEY, "1"); } catch (err) { /* no-op */ }
+    }
+
+    function removeBanner() {
+      var existing = document.getElementById(BANNER_ID);
+      if (existing) existing.remove();
+    }
+
+    function showBanner() {
+      if (document.getElementById(BANNER_ID)) return; // already showing
+      var banner = document.createElement("div");
+      banner.id = BANNER_ID;
+      banner.setAttribute("role", "status");
+      banner.style.cssText =
+        "position:sticky;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;" +
+        "justify-content:center;gap:1rem;flex-wrap:wrap;padding:0.65rem 1.25rem;" +
+        "background:#4f46e5;color:#fff;font-family:inherit;font-size:0.85rem;text-align:center;";
+      banner.innerHTML =
+        '<span>Add your department &amp; level to see resources filtered for you.</span>' +
+        '<a href="profile.html?complete=1" style="color:#fff;font-weight:600;text-decoration:underline;white-space:nowrap;">Complete profile</a>' +
+        '<button type="button" aria-label="Dismiss" style="background:none;border:none;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;padding:0 0.25rem;">&times;</button>';
+
+      banner.querySelector("button").addEventListener("click", function () {
+        markDismissed();
+        removeBanner();
+      });
+
+      document.body.prepend(banner);
+    }
+
+    function checkAndRender() {
+      if (isDismissedThisSession()) return;
+      authFetch(API_BASE + "/users/me")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (!data.success) return;
+          var u = data.user;
+          var isComplete = !!(u.department && u.level && u.university && u.faculty && u.matricNumber && u.gender);
+          if (!isComplete) {
+            showBanner();
+          } else {
+            removeBanner();
+          }
+        })
+        .catch(function (err) { console.error("Could not check profile completeness:", err); });
+    }
+
+    // Exposed so profile.js can force an immediate recheck right after a save,
+    // instead of waiting for the next page load.
+    window.SharefProfileBanner = { recheck: checkAndRender };
+
+    checkAndRender();
+  })();
+
   var sidebar = document.getElementById("sidebar");
   var scrim = document.getElementById("scrim");
   var openBtn = document.getElementById("hamburgerBtn");

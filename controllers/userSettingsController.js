@@ -33,9 +33,12 @@ async function getMyProfile(req, res) {
         fullName: user.fullName,
         email: user.email,
         isVerified: user.isVerified,
+        matricNumber: user.matricNumber,
+        university: user.university,
+        faculty: user.faculty,
         department: user.department,
         level: user.level,
-        university: user.university,
+        gender: user.gender,
         role: user.role,
         preferences,
       },
@@ -48,7 +51,9 @@ async function getMyProfile(req, res) {
 // @route PATCH /api/users/me
 async function updateMyProfile(req, res) {
   try {
-    const { fullName, email, department, level, university } = req.body;
+    const {
+      fullName, email, department, level, university, faculty, matricNumber, gender,
+    } = req.body;
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
@@ -58,6 +63,16 @@ async function updateMyProfile(req, res) {
     if (department) user.department = department;
     if (level) user.level = level;
     if (university) user.university = university;
+    if (faculty) user.faculty = faculty;
+    if (gender) user.gender = gender;
+
+    if (matricNumber && matricNumber !== user.matricNumber) {
+      const existingMatric = await User.findOne({ matricNumber, _id: { $ne: user._id } });
+      if (existingMatric) {
+        return res.status(409).json({ success: false, message: "That matric number is already registered to another account" });
+      }
+      user.matricNumber = matricNumber;
+    }
 
     if (email && email !== user.email) {
       const existing = await User.findOne({ email, _id: { $ne: user._id } });

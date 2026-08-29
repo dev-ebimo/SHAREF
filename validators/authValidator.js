@@ -13,21 +13,21 @@ const registerValidator = [
     .notEmpty().withMessage("Password is required")
     .isLength({ min: 8 }).withMessage("Password must be at least 8 characters"),
 
-  body("matricNumber").trim().notEmpty().withMessage("Matric number is required"),
+  body("matricNumber").optional({ checkFalsy: true }).trim(),
 
-  body("university").trim().notEmpty().withMessage("University is required"),
+  body("university").optional({ checkFalsy: true }).trim(),
 
-  body("faculty").trim().notEmpty().withMessage("Faculty is required"),
+  body("faculty").optional({ checkFalsy: true }).trim(),
 
-  body("department").trim().notEmpty().withMessage("Department is required"),
+  body("department").optional({ checkFalsy: true }).trim(),
 
   body("level")
-    .notEmpty().withMessage("Level is required")
+    .optional({ checkFalsy: true })
     .isIn(["100", "200", "300", "400", "500", "600"])
     .withMessage("Please select a valid level"),
 
   body("gender")
-    .notEmpty().withMessage("Gender is required")
+    .optional({ checkFalsy: true })
     .isIn(["Male", "Female", "Other"])
     .withMessage("Please select a valid gender"),
 

@@ -102,12 +102,41 @@ document.addEventListener('DOMContentLoaded', () => {
     mobileFilterToggle.addEventListener('click', () => filterPanel.classList.add('open'));
     closeFilters.addEventListener('click', () => filterPanel.classList.remove('open'));
 
+    // Pre-fills department/level from the user's completed profile — the
+    // payoff for completing the "Add your department" banner. Department is
+    // free-text at profile-edit time, so a matching <option> is added on the
+    // fly if it isn't one of this page's fixed presets.
+    async function fetchAndApplyProfilePrefill() {
+        try {
+            const res = await authFetch(`${API_BASE}/users/me`);
+            const data = await res.json();
+            if (!data.success) return;
+            const profile = data.user;
+
+            if (profile.department) {
+                const hasOption = Array.from(deptFilter.options).some(opt => opt.value === profile.department);
+                if (!hasOption) {
+                    const opt = document.createElement('option');
+                    opt.value = profile.department;
+                    opt.textContent = profile.department;
+                    deptFilter.appendChild(opt);
+                }
+                deptFilter.value = profile.department;
+            }
+            if (profile.level) {
+                levelFilter.value = profile.level;
+            }
+        } catch (err) {
+            console.error('Could not load profile for filter prefill:', err);
+        }
+    }
+
     // Initial Load — fetch real Lecture Note resources once, then filter/
     // sort/render entirely client-side (same pipeline as before, just fed
     // with real data instead of a fixed mock array).
     renderSkeletons();
-    fetchAllLectureNotes()
-        .then(notes => {
+    Promise.all([fetchAllLectureNotes(), fetchAndApplyProfilePrefill()])
+        .then(([notes]) => {
             mockNotes = notes;
             applyFiltersAndRender();
         })

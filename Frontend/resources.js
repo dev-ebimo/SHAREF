@@ -525,16 +525,49 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   });
 
+  // Pre-fills the department filter from the user's completed profile (if
+  // they have one) — the payoff for completing the "Add your department"
+  // banner. Adds a matching <option> on the fly if the department isn't one
+  // of the page's fixed preset options, since department is free-text at
+  // signup/profile-edit time, not a controlled enum.
+  async function fetchProfileDepartment() {
+    try {
+      var res = await authFetch(API_BASE + "/users/me");
+      var data = await res.json();
+      return (data.success && data.user.department) ? data.user.department : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function applyDepartmentPrefill(department) {
+    if (!department) return;
+    var hasOption = Array.prototype.some.call(departmentSelect.options, function (opt) {
+      return opt.value === department;
+    });
+    if (!hasOption) {
+      var newOption = document.createElement("option");
+      newOption.value = department;
+      newOption.textContent = department;
+      departmentSelect.appendChild(newOption);
+    }
+    departmentSelect.value = department;
+    state.department = department;
+    populateCourseOptions(department);
+  }
+
   // ==========================================================================
   // 6. INITIAL LOAD
   // ==========================================================================
   resourceGrid.innerHTML = '<p class="browse-loading-text">Loading resources\u2026</p>';
-  Promise.all([fetchAllResources(), fetchBookmarkedIds()])
+  Promise.all([fetchAllResources(), fetchBookmarkedIds(), fetchProfileDepartment()])
     .then(function (results) {
       RESOURCES = results[0];
       bookmarkedIds = results[1];
+      var profileDepartment = results[2];
       buildCourseMap();
       populateCourseOptions("all");
+      applyDepartmentPrefill(profileDepartment);
       render();
     })
     .catch(function (err) {

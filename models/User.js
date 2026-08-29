@@ -24,33 +24,29 @@ const userSchema = new mongoose.Schema(
     },
     matricNumber: {
       type: String,
-      required: [true, "Matric number is required"],
       unique: true,
+      sparse: true, // required=false now (deferred signup) — sparse prevents a
+                     // duplicate-key error when multiple users haven't set one yet
       trim: true,
     },
     university: {
       type: String,
-      required: [true, "University is required"],
       trim: true,
     },
     faculty: {
       type: String,
-      required: [true, "Faculty is required"],
       trim: true,
     },
     department: {
       type: String,
-      required: [true, "Department is required"],
       trim: true,
     },
     level: {
       type: String,
-      required: [true, "Level is required"],
       enum: ["100", "200", "300", "400", "500", "600"],
     },
     gender: {
       type: String,
-      required: [true, "Gender is required"],
       enum: ["Male", "Female", "Other"],
     },
     communitySurvey: {

@@ -408,6 +408,23 @@
           <span>University</span>
           <input type="text" id="editUniversity" value="Federal University Otuoke" required />
         </label>
+        <label class="modal-field">
+          <span>Faculty</span>
+          <input type="text" id="editFaculty" placeholder="e.g. Science" required />
+        </label>
+        <label class="modal-field">
+          <span>Matriculation Number</span>
+          <input type="text" id="editMatricNumber" placeholder="e.g. FUO/26/CSI/12345" style="text-transform: uppercase;" required />
+        </label>
+        <label class="modal-field">
+          <span>Gender</span>
+          <select id="editGender" required>
+            <option value="" disabled selected>Select your gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Prefer not to say</option>
+          </select>
+        </label>
         <p id="editProfileError" class="form-error-text" style="display:none;"></p>
         <div class="modal-actions">
           <button type="button" class="modal-cancel-btn" id="editProfileCancelBtn">Cancel</button>

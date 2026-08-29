@@ -14,7 +14,10 @@ async function register(req, res) {
       university, faculty, department, level, gender, communitySurvey,
     } = req.body;
 
-    const existingUser = await User.findOne({ $or: [{ email }, { matricNumber }] });
+    const duplicateQuery = [{ email }];
+    if (matricNumber) duplicateQuery.push({ matricNumber });
+
+    const existingUser = await User.findOne({ $or: duplicateQuery });
     if (existingUser) {
       return res.status(409).json({
         success: false,
