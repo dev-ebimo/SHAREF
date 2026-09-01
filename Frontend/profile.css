@@ -734,7 +734,8 @@
   color: var(--text-lead);
 }
 .modal-field input,
-.modal-field textarea {
+.modal-field textarea,
+.modal-field select {
   font-family: inherit;
   font-size: 0.87rem;
   font-weight: 400;
@@ -745,8 +746,19 @@
   padding: 0.65rem 0.85rem;
   resize: vertical;
 }
+.modal-field select {
+  /* Without this, most browsers render the native option list on a plain
+     white background — since the option text inherits our light theme
+     color, it's invisible until hover applies a highlight behind it. */
+  color-scheme: dark;
+}
+.modal-field select option {
+  background: #0f0e17;
+  color: var(--text-pure);
+}
 .modal-field input:focus,
-.modal-field textarea:focus {
+.modal-field textarea:focus,
+.modal-field select:focus {
   outline: none;
   border-color: rgba(168, 85, 247, 0.55);
   background: var(--surface-02);
