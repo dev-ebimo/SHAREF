@@ -22,70 +22,101 @@ document.addEventListener("DOMContentLoaded", function () {
   })();
 
   // ==========================================================================
-  // "COMPLETE YOUR PROFILE" BANNER
+  // "COMPLETE YOUR PROFILE" PROMPT
   //    Signup now only collects fullName/email/password — department, level,
   //    university, faculty, matricNumber, and gender are filled in later, via
-  //    this prompt. Self-contained (inline styles) so it works consistently
-  //    across every page's own CSS. Dismissible for the current session only
-  //    — it reappears next session until the profile is actually complete.
+  //    this prompt. Shown as a blocking dialog (same visual shell as the
+  //    Study Wallet modals) rather than a dismissible banner, throttled to
+  //    once every 24 hours via localStorage so it doesn't nag on every page
+  //    load. Never shown on profile.html itself, since that's exactly where
+  //    "Complete Profile" sends the user.
   // ==========================================================================
-  (function setupProfileCompletionBanner() {
-    var BANNER_ID = "sharefProfileBanner";
-    var DISMISS_KEY = "sharef.profileBannerDismissed";
+  (function setupProfileCompletionPrompt() {
+    var LAST_SHOWN_KEY = "sharef.profileCompletionPromptLastShown";
+    var THROTTLE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-    function isDismissedThisSession() {
-      try { return window.sessionStorage.getItem(DISMISS_KEY) === "1"; } catch (err) { return false; }
+    function wasShownRecently() {
+      try {
+        var last = window.localStorage.getItem(LAST_SHOWN_KEY);
+        if (!last) return false;
+        return Date.now() - parseInt(last, 10) < THROTTLE_MS;
+      } catch (err) {
+        return false;
+      }
     }
-    function markDismissed() {
-      try { window.sessionStorage.setItem(DISMISS_KEY, "1"); } catch (err) { /* no-op */ }
+    function markShownNow() {
+      try { window.localStorage.setItem(LAST_SHOWN_KEY, String(Date.now())); } catch (err) { /* no-op */ }
     }
 
-    function removeBanner() {
-      var existing = document.getElementById(BANNER_ID);
-      if (existing) existing.remove();
+    function isProfilePage() {
+      return /(^|\/)profile\.html$/.test(window.location.pathname);
     }
 
-    function showBanner() {
-      if (document.getElementById(BANNER_ID)) return; // already showing
-      var banner = document.createElement("div");
-      banner.id = BANNER_ID;
-      banner.setAttribute("role", "status");
-      banner.style.cssText =
-        "position:sticky;top:0;left:0;right:0;z-index:9999;display:flex;align-items:center;" +
-        "justify-content:center;gap:1rem;flex-wrap:wrap;padding:0.65rem 1.25rem;" +
-        "background:#4f46e5;color:#fff;font-family:inherit;font-size:0.85rem;text-align:center;";
-      banner.innerHTML =
-        '<span>Add your department &amp; level to see resources filtered for you.</span>' +
-        '<a href="profile.html?complete=1" style="color:#fff;font-weight:600;text-decoration:underline;white-space:nowrap;">Complete profile</a>' +
-        '<button type="button" aria-label="Dismiss" style="background:none;border:none;color:#fff;font-size:1.1rem;line-height:1;cursor:pointer;padding:0 0.25rem;">&times;</button>';
+    var overlay = document.createElement("div");
+    overlay.className = "profile-prompt-overlay";
+    overlay.innerHTML =
+      '<div class="profile-prompt-modal" role="dialog" aria-modal="true" aria-labelledby="profilePromptTitle" aria-describedby="profilePromptSubtitle">' +
+      '<div class="profile-prompt-icon" aria-hidden="true">' +
+      '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>' +
+      "</div>" +
+      '<h2 class="profile-prompt-title" id="profilePromptTitle">Complete your profile</h2>' +
+      '<p class="profile-prompt-subtitle" id="profilePromptSubtitle">A couple more details unlock a better Sharef experience:</p>' +
+      '<ul class="profile-prompt-benefits">' +
+      '<li><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>Resources auto-filtered to your department &amp; level</span></li>' +
+      '<li><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>Your public profile shows properly to classmates</span></li>' +
+      '<li><svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg><span>Takes less than a minute — you won\'t be asked again today</span></li>' +
+      "</ul>" +
+      '<div class="profile-prompt-actions">' +
+      '<button type="button" class="btn-wallet-secondary" id="profilePromptSkipBtn">Maybe later</button>' +
+      '<button type="button" class="btn-wallet-primary" id="profilePromptProceedBtn">Complete profile</button>' +
+      "</div>" +
+      "</div>";
+    document.body.appendChild(overlay);
 
-      banner.querySelector("button").addEventListener("click", function () {
-        markDismissed();
-        removeBanner();
-      });
+    var skipBtn = overlay.querySelector("#profilePromptSkipBtn");
+    var proceedBtn = overlay.querySelector("#profilePromptProceedBtn");
 
-      document.body.prepend(banner);
+    function openPrompt() {
+      if (overlay.classList.contains("is-open")) return; // already showing
+      overlay.classList.add("is-open");
+      document.body.style.overflow = "hidden";
+      markShownNow();
+      proceedBtn.focus();
     }
+
+    function closePrompt() {
+      overlay.classList.remove("is-open");
+      document.body.style.overflow = "";
+    }
+
+    skipBtn.addEventListener("click", closePrompt);
+    proceedBtn.addEventListener("click", function () {
+      closePrompt();
+      window.location.href = "profile.html?complete=1";
+    });
+    overlay.addEventListener("click", function (e) {
+      if (e.target === overlay) closePrompt();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && overlay.classList.contains("is-open")) closePrompt();
+    });
 
     function checkAndRender() {
-      if (isDismissedThisSession()) return;
+      if (isProfilePage() || wasShownRecently()) return;
       authFetch(API_BASE + "/users/me")
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (!data.success) return;
           var u = data.user;
           var isComplete = !!(u.department && u.level && u.university && u.faculty && u.matricNumber && u.gender);
-          if (!isComplete) {
-            showBanner();
-          } else {
-            removeBanner();
-          }
+          if (!isComplete) openPrompt();
         })
         .catch(function (err) { console.error("Could not check profile completeness:", err); });
     }
 
-    // Exposed so profile.js can force an immediate recheck right after a save,
-    // instead of waiting for the next page load.
+    // Exposed so profile.js can force an immediate recheck right after a save
+    // (name kept as SharefProfileBanner for backward compatibility with the
+    // existing call site in profile.js).
     window.SharefProfileBanner = { recheck: checkAndRender };
 
     checkAndRender();

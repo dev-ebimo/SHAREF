@@ -1570,3 +1570,129 @@ button {
     padding: 1.5rem;
   }
 }
+
+/* ==========================================================================
+   COMPLETE YOUR PROFILE — prompt dialog
+   Injected by dashboard.js on every page (same pattern as the Study Wallet
+   modals above). Class names prefixed "profile-prompt-" so they never
+   collide with a page's own modal styles. Shell/overlay/actions reuse the
+   wallet modal's visual language for consistency.
+   ========================================================================== */
+.profile-prompt-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 3, 8, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.25s ease,
+    visibility 0.25s ease;
+}
+.profile-prompt-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+.profile-prompt-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  background: #0f0e17;
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(168, 85, 247, 0.1);
+  transform: scale(0.95) translateY(8px);
+  transition: transform 0.25s var(--ease-snap);
+}
+.profile-prompt-overlay.is-open .profile-prompt-modal {
+  transform: scale(1) translateY(0);
+}
+
+.profile-prompt-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(168, 85, 247, 0.12);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  color: var(--purple-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.1rem;
+}
+.profile-prompt-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.profile-prompt-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text-pure);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.profile-prompt-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 1.25rem;
+}
+
+.profile-prompt-benefits {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1.5rem;
+}
+.profile-prompt-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-lead);
+  line-height: 1.4;
+}
+.profile-prompt-benefits svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: var(--purple-soft);
+}
+
+.profile-prompt-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+.profile-prompt-actions .btn-wallet-primary,
+.profile-prompt-actions .btn-wallet-secondary {
+  flex: 1;
+  height: 46px;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+@media (max-width: 480px) {
+  .profile-prompt-modal {
+    padding: 1.5rem;
+  }
+}
