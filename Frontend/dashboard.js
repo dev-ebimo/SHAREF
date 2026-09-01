@@ -101,15 +101,20 @@ document.addEventListener("DOMContentLoaded", function () {
       if (e.key === "Escape" && overlay.classList.contains("is-open")) closePrompt();
     });
 
-    function checkAndRender() {
-      if (isProfilePage() || wasShownRecently()) return;
+    // "force" (true only for the recheck() call below) bypasses the 24h
+    // throttle so a just-completed profile is confirmed right away instead
+    // of waiting on the next natural page load. The profile.html guard stays
+    // on openPrompt() itself either way — the dialog never pops up over the
+    // very page a person is completing their profile on.
+    function checkAndRender(force) {
+      if (!force && wasShownRecently()) return;
       authFetch(API_BASE + "/users/me")
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (!data.success) return;
           var u = data.user;
           var isComplete = !!(u.department && u.level && u.university && u.faculty && u.matricNumber && u.gender);
-          if (!isComplete) openPrompt();
+          if (!isComplete && !isProfilePage()) openPrompt();
         })
         .catch(function (err) { console.error("Could not check profile completeness:", err); });
     }
@@ -117,9 +122,9 @@ document.addEventListener("DOMContentLoaded", function () {
     // Exposed so profile.js can force an immediate recheck right after a save
     // (name kept as SharefProfileBanner for backward compatibility with the
     // existing call site in profile.js).
-    window.SharefProfileBanner = { recheck: checkAndRender };
+    window.SharefProfileBanner = { recheck: function () { checkAndRender(true); } };
 
-    checkAndRender();
+    checkAndRender(false);
   })();
 
   var sidebar = document.getElementById("sidebar");
