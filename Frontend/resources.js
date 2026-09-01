@@ -52,11 +52,13 @@ document.addEventListener("DOMContentLoaded", function () {
     return all;
   }
 
-  // Pricing follows the ₦10/page model used across the app — cost is
-  // derived from `pages` rather than hardcoded.
-  var PRICE_PER_PAGE = 10;
+  // Pricing mirrors the backend's tiered formula (utils/pricing.js) via the
+  // shared window.SharefWallet.calculateCost helper in dashboard.js, so the
+  // price shown on cards matches what the download modal will actually
+  // charge — a flat ₦10/page estimate used to live here and under-priced
+  // anything under 25 pages.
   function getResourceCost(r) {
-    return r.pages * PRICE_PER_PAGE;
+    return window.SharefWallet.calculateCost(r.pages);
   }
 
   var PAGE_SIZE = 6;

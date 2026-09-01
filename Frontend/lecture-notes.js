@@ -54,13 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inline SVG markup used in place of emoji icons, matching the app-wide stroke-icon set
     const DOC_ICON_SVG = `<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
 
-    // Pricing follows the ₦10/page model — cost travels with the resource
-    // itself rather than being recomputed ad hoc, so it's easy to swap in
-    // a per-resource "downloadPrice" field from the backend later without
-    // touching this math everywhere it's used.
-    const PRICE_PER_PAGE = 10;
+    // Pricing mirrors the backend's tiered formula (utils/pricing.js) via
+    // the shared window.SharefWallet.calculateCost helper in dashboard.js,
+    // so the price shown here matches what the download modal will
+    // actually charge — a flat ₦10/page estimate used to live here and
+    // under-priced anything under 25 pages.
     function getResourceCost(note) {
-        return note.pages * PRICE_PER_PAGE;
+        return window.SharefWallet.calculateCost(note.pages);
     }
 
     // DOM Elements

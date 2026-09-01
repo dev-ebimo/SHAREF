@@ -73,13 +73,13 @@ document.addEventListener("DOMContentLoaded", () => {
     toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2600);
   }
 
-  // Pricing follows the ₦10/page model used across the app — cost is
-  // derived from `pages` rather than hardcoded, so it stays in sync if the
-  // mock data changes and swaps in cleanly for a real per-resource price
-  // field later.
-  const PRICE_PER_PAGE = 10;
+  // Pricing mirrors the backend's tiered formula (utils/pricing.js) via the
+  // shared window.SharefWallet.calculateCost helper in dashboard.js, so the
+  // price shown here matches what the download modal will actually charge
+  // — a flat ₦10/page estimate used to live here and under-priced anything
+  // under 25 pages.
   function getResourceCost(item) {
-    return item.pages * PRICE_PER_PAGE;
+    return window.SharefWallet.calculateCost(item.pages);
   }
 
   // The reusable document-icon SVG markup (replaces the old 📄 emoji)

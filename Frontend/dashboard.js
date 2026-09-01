@@ -3,6 +3,19 @@
 // is null, since requireAuth() has already redirected away in that case.
 var currentUser = requireAuth();
 
+// The real per-bracket pricing formula (must match utils/pricing.js on the
+// backend exactly). Hoisted to module scope, above every DOMContentLoaded
+// block below, since both the Study Wallet section and the download modal
+// section need it and each runs in its own separate closure. This is
+// purely for display before the user confirms — the backend recomputes
+// cost independently from the resource's actual page count and is the
+// only source that matters for what actually gets charged.
+function calculateResourceCost(pages) {
+  if (pages <= 5) return 200;
+  if (pages <= 24) return 200 + (pages - 5) * 20;
+  return 580 + (pages - 24) * 10;
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   if (!currentUser) return;
 
@@ -915,6 +928,14 @@ document.addEventListener("DOMContentLoaded", function () {
     openFundModal: openFundModal,
     refreshBalance: fetchBalance,
 
+    // Shared tiered pricing formula, exposed so resource-listing pages can
+    // show an accurate price badge on cards without maintaining their own
+    // copy of this math (previously several pages had a stale flat
+    // ₦10/page version that under-priced anything under 25 pages). The
+    // backend independently recomputes this from the resource's real page
+    // count at charge time — this is display-only.
+    calculateCost: calculateResourceCost,
+
     // Charges for a resource by id — the backend computes the real cost
     // from the resource's page count, never trusts a client-supplied
     // amount. Returns a Promise resolving to the server's response object
@@ -1008,16 +1029,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var DOWNLOAD_BTN_DEFAULT_TEXT = "Download File";
 
   var currentResource = null;
-
-  // The real per-bracket formula, mirrored here purely for display before
-  // the user confirms — the backend recomputes this independently from
-  // the resource's actual page count and is the only source that matters
-  // for what actually gets charged.
-  function calculateResourceCost(pages) {
-    if (pages <= 5) return 200;
-    if (pages <= 24) return 200 + (pages - 5) * 20;
-    return 580 + (pages - 24) * 10;
-  }
 
   function openDownloadModal(resource) {
     currentResource = resource;
