@@ -1,9 +1,11 @@
+const axios = require("axios");
 const Resource = require("../models/Resource");
 const Notification = require("../models/Notification");
 const User = require("../models/User");
 const { sendResourceStatusEmail } = require("../services/emailService");
 
 const timeAgo = require("../utils/timeAgo");
+const { getFullText } = require("../utils/previewSnippet");
 
 const AGED_THRESHOLD_DAYS = 4;
 
@@ -36,9 +38,10 @@ async function getModerationQueue(req, res) {
         size: formatFileSize(r.fileSizeBytes),
         uploadDate: timeAgo(r.createdAt),
         isAged: ageDays >= AGED_THRESHOLD_DAYS,
-        previewAvailable: r.previewAvailable,
-        previewSnippet: r.previewSnippet,
-        previewMessage: r.previewMessage,
+        // Just enough to pick the right UI when Preview is clicked — the
+        // actual content (full image or full text) is fetched lazily via
+        // getResourcePreviewForAdmin, not preloaded for every queue item.
+        previewType: r.previewType,
       };
     });
 
@@ -125,4 +128,49 @@ async function rejectResource(req, res) {
   }
 }
 
-module.exports = { getModerationQueue, approveResource, rejectResource, formatFileSize };
+// @route GET /api/admin/moderation/:id/preview
+// Admin preview shows the ENTIRE document, unlike the student preview
+// (which only ever shows a fraction of page 1). For a PDF that's just the
+// full fileUrl — the frontend embeds it in an <iframe> and the browser's
+// native PDF viewer handles every page. For DOCX/PPTX there's no inline
+// renderer available, so the complete text is extracted fresh, on demand:
+// nothing is kept locally after upload, so the original file is re-fetched
+// from Cloudinary's public raw URL first. This only runs when an admin
+// actually opens a preview, not for every item in the queue.
+async function getResourcePreviewForAdmin(req, res) {
+  try {
+    const resource = await Resource.findById(req.params.id);
+    if (!resource) return res.status(404).json({ success: false, message: "Resource not found" });
+
+    if (resource.previewType === "image") {
+      return res.status(200).json({ success: true, previewType: "image", fileUrl: resource.fileUrl });
+    }
+
+    if (resource.previewType === "text") {
+      const fileResponse = await axios.get(resource.fileUrl, { responseType: "arraybuffer" });
+      const fileBuffer = Buffer.from(fileResponse.data);
+      const result = await getFullText(fileBuffer, resource.fileName);
+
+      if (!result.available) {
+        return res.status(200).json({
+          success: true,
+          previewType: "none",
+          message: result.message || "Preview could not be generated for this document.",
+        });
+      }
+      return res.status(200).json({ success: true, previewType: "text", fullText: result.fullText });
+    }
+
+    return res.status(200).json({
+      success: true,
+      previewType: "none",
+      message: resource.previewMessage || "Preview not available for this file type.",
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not load preview", error: err.message });
+  }
+}
+
+module.exports = {
+  getModerationQueue, approveResource, rejectResource, formatFileSize, getResourcePreviewForAdmin,
+};

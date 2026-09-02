@@ -48,16 +48,38 @@ async function uploadResource(req, res) {
 
     const { title, type, department, course, level, semester, session, description } = req.body;
 
+    const fileExtension = req.file.originalname.split(".").pop().toLowerCase();
+    const isPdf = fileExtension === "pdf";
+
     const fileBuffer = fs.readFileSync(req.file.path);
     const pages = await countPages(fileBuffer, req.file.originalname);
-    const previewResult = await getPreviewSnippet(fileBuffer, req.file.originalname);
+
+    // PDFs get a real image preview (top half of page 1) generated on-demand
+    // by Cloudinary — see buildPdfHalfPagePreviewUrl — so there's no text to
+    // extract here. DOCX/PPTX still get a text snippet (half of page 1).
+    const previewResult = isPdf
+      ? { available: true }
+      : await getPreviewSnippet(fileBuffer, req.file.originalname);
+
+    // PDFs must upload as Cloudinary's "image" resource type — that's what
+    // unlocks the pg_1 page-to-image transformation used for the preview.
+    // Everything else stays "raw" (Cloudinary can't rasterize DOCX/PPTX
+    // without a paid add-on, and raw is the right type for a plain
+    // downloadable file either way). The base secure_url still serves the
+    // untouched original file for both types, so the download flow is
+    // unaffected by this choice.
+    const cloudinaryResourceType = isPdf ? "image" : "raw";
 
     const cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: "raw",
+      resource_type: cloudinaryResourceType,
       folder: "sharef_resources",
     });
 
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
+
+    let previewType = "none";
+    if (isPdf) previewType = "image";
+    else if (previewResult.available) previewType = "text";
 
     const resource = await Resource.create({
       title, type, department, course, level, semester, session, description,
@@ -65,12 +87,14 @@ async function uploadResource(req, res) {
       fileName: req.file.originalname,
       fileUrl: cloudinaryResult.secure_url,
       cloudinaryPublicId: cloudinaryResult.public_id,
+      cloudinaryResourceType,
       fileSizeBytes: req.file.size,
-      fileExtension: req.file.originalname.split(".").pop().toLowerCase(),
+      fileExtension,
       pages,
-      previewAvailable: previewResult.available,
-      previewSnippet: previewResult.available ? previewResult.snippet : "",
-      previewMessage: !previewResult.available ? previewResult.message : "",
+      previewType,
+      previewAvailable: previewType !== "none",
+      previewSnippet: previewType === "text" ? previewResult.snippet : "",
+      previewMessage: previewType === "none" ? previewResult.message : "",
     });
 
     await Notification.create({ resource: resource._id, recipient: null, type: "new_upload" });

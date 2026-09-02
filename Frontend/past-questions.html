@@ -371,10 +371,11 @@
         <div class="info-item"><span class="label">Downloads</span><span id="modalDownloads" class="val">145</span></div>
       </div>
 
-      <div class="doc-preview-placeholder">
+      <div class="doc-preview-placeholder" id="docPreviewPlaceholder">
         <svg fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h4m3 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        <span>Document preview</span>
+        <span id="docPreviewText">Loading preview…</span>
       </div>
+      <img class="doc-preview-image hidden" id="docPreviewImage" alt="First half of page 1" />
 
       <div class="modal-actions">
         <button class="modal-cancel-btn" id="modalBookmarkBtn">Bookmark</button>

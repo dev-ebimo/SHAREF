@@ -20,6 +20,16 @@ const resourceSchema = new mongoose.Schema(
     
     fileUrl: { type: String, required: true },
     cloudinaryPublicId: { type: String, required: true },
+    // "raw" for everything except PDFs. PDFs are uploaded as "image" so
+    // Cloudinary's page-to-image transformation (pg_1 + crop) is available
+    // for the student half-page preview. Destroy calls MUST branch on this
+    // — deleting with the wrong resource_type silently no-ops on Cloudinary
+    // and leaves the file orphaned.
+    cloudinaryResourceType: { type: String, enum: ["raw", "image"], default: "raw" },
+    // "image"  -> PDF; student preview is a cropped top-half-of-page-1 image
+    // "text"   -> DOCX/PPTX; student preview is half of page 1's extracted text
+    // "none"   -> extraction failed or unsupported type; previewMessage explains why
+    previewType: { type: String, enum: ["image", "text", "none"], default: "none" },
     previewAvailable: { type: Boolean, default: false },
     previewSnippet: { type: String, default: "" },
     previewMessage: { type: String, default: "" },

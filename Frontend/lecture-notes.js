@@ -305,9 +305,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewModalSemester = document.getElementById('previewModalSemester');
     const previewModalPages = document.getElementById('previewModalPages');
     const previewModalDownloads = document.getElementById('previewModalDownloads');
+    const previewModalVisual = document.getElementById('previewModalVisual');
+    const previewModalImage = document.getElementById('previewModalImage');
+    const previewModalNote = document.getElementById('previewModalNote');
 
     let lastFocusedTrigger = null;
     let currentPreviewNote = null; // tracked so the modal's Download button knows what to charge for
+
+    function resetPreviewDocPanel() {
+        previewModalImage.classList.add('hidden', 'is-loading');
+        previewModalImage.removeAttribute('src');
+        previewModalVisual.classList.remove('hidden');
+        previewModalNote.textContent = 'Loading preview…';
+    }
+
+    function showPreviewImage(imageUrl) {
+        previewModalVisual.classList.add('hidden');
+        previewModalNote.textContent = '';
+        previewModalImage.classList.remove('hidden');
+        previewModalImage.classList.add('is-loading'); // spinner-style fade until it loads
+        previewModalImage.onload = () => previewModalImage.classList.remove('is-loading');
+        previewModalImage.onerror = () => {
+            previewModalImage.classList.add('hidden');
+            previewModalVisual.classList.remove('hidden');
+            previewModalNote.textContent = 'Preview not available right now.';
+        };
+        previewModalImage.src = imageUrl; // fetched from Cloudinary only when the modal opens
+    }
+
+    function showPreviewText(text) {
+        previewModalNote.textContent = `"${text}"`;
+    }
 
     function openPreviewModal(note, triggerEl) {
         previewModalTitle.textContent = note.title;
@@ -318,6 +346,7 @@ document.addEventListener('DOMContentLoaded', () => {
         previewModalPages.textContent = `${note.pages} Pages`;
         previewModalDownloads.textContent = note.downloads;
         previewModalDownload.textContent = `Download · ${window.SharefWallet.formatNaira(getResourceCost(note))}`;
+        resetPreviewDocPanel();
 
         currentPreviewNote = note;
         lastFocusedTrigger = triggerEl || null;
@@ -325,6 +354,23 @@ document.addEventListener('DOMContentLoaded', () => {
         previewModalOverlay.setAttribute('aria-hidden', 'false');
         document.body.style.overflow = 'hidden';
         previewModalClose.focus();
+
+        authFetch(`${API_BASE}/resources/${note.id}/preview`)
+            .then((res) => res.json())
+            .then((data) => {
+                if (currentPreviewNote !== note) return; // modal moved on to something else
+                if (data.previewType === 'image') {
+                    showPreviewImage(data.imageUrl);
+                } else if (data.previewType === 'text') {
+                    showPreviewText(data.snippet);
+                } else {
+                    previewModalNote.textContent = data.message || 'Preview not available for this file type.';
+                }
+            })
+            .catch(() => {
+                if (currentPreviewNote !== note) return;
+                previewModalNote.textContent = 'Preview not available right now.';
+            });
     }
 
     function closePreviewModal() {

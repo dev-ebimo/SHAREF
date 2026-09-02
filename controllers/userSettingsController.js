@@ -175,7 +175,12 @@ async function deleteMyAccount(req, res) {
     const userResources = await Resource.find({ uploader: req.user.id });
 
     for (const r of userResources) {
-      await cloudinary.uploader.destroy(r.cloudinaryPublicId, { resource_type: "raw" });
+      // Must match the resource_type the file was actually uploaded with
+      // (PDFs are "image", everything else is "raw") — destroying with the
+      // wrong type silently no-ops on Cloudinary and leaves the file orphaned.
+      await cloudinary.uploader.destroy(r.cloudinaryPublicId, {
+        resource_type: r.cloudinaryResourceType || "raw",
+      });
     }
     await Resource.deleteMany({ uploader: req.user.id });
 
