@@ -61,25 +61,41 @@ async function uploadResource(req, res) {
       ? { available: true }
       : await getPreviewSnippet(fileBuffer, req.file.originalname);
 
-    // PDFs must upload as Cloudinary's "image" resource type — that's what
-    // unlocks the pg_1 page-to-image transformation used for the preview.
-    // Everything else stays "raw" (Cloudinary can't rasterize DOCX/PPTX
-    // without a paid add-on, and raw is the right type for a plain
-    // downloadable file either way). The base secure_url still serves the
-    // untouched original file for both types, so the download flow is
-    // unaffected by this choice.
-    const cloudinaryResourceType = isPdf ? "image" : "raw";
-
+    // The actual stored file always uploads as "raw", regardless of type.
+    // PDFs briefly used "image" here to unlock the pg_1 transformation, but
+    // Cloudinary blocks serving the UNTRANSFORMED original through the
+    // "image" resource type by default — that broke both downloads and the
+    // admin full-document preview, which both need the real, unmodified
+    // file. "raw" has no such restriction.
     const cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: cloudinaryResourceType,
+      resource_type: "raw",
       folder: "sharef_resources",
     });
+
+    // PDFs additionally get a second, purpose-only Cloudinary asset
+    // (resource_type: "image") whose sole job is to make the pg_1 crop
+    // transformation available. Its untransformed URL is never linked or
+    // exposed anywhere — only ever requested with a transformation attached
+    // (see buildPdfHalfPagePreviewUrl), which Cloudinary always permits
+    // since that produces a genuine converted image, not a raw PDF.
+    let previewImagePublicId = null;
+    if (isPdf) {
+      try {
+        const previewImageResult = await cloudinary.uploader.upload(req.file.path, {
+          resource_type: "image",
+          folder: "sharef_resources_preview",
+        });
+        previewImagePublicId = previewImageResult.public_id;
+      } catch (err) {
+        console.error("PDF preview-image upload failed (main file upload still succeeded):", err.message);
+      }
+    }
 
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
 
     let previewType = "none";
-    if (isPdf) previewType = "image";
-    else if (previewResult.available) previewType = "text";
+    if (isPdf && previewImagePublicId) previewType = "image";
+    else if (!isPdf && previewResult.available) previewType = "text";
 
     const resource = await Resource.create({
       title, type, department, course, level, semester, session, description,
@@ -87,14 +103,15 @@ async function uploadResource(req, res) {
       fileName: req.file.originalname,
       fileUrl: cloudinaryResult.secure_url,
       cloudinaryPublicId: cloudinaryResult.public_id,
-      cloudinaryResourceType,
+      cloudinaryResourceType: "raw",
+      previewImagePublicId,
       fileSizeBytes: req.file.size,
       fileExtension,
       pages,
       previewType,
       previewAvailable: previewType !== "none",
       previewSnippet: previewType === "text" ? previewResult.snippet : "",
-      previewMessage: previewType === "none" ? previewResult.message : "",
+      previewMessage: previewType === "none" ? (previewResult.message || "Preview not available for this file type.") : "",
     });
 
     await Notification.create({ resource: resource._id, recipient: null, type: "new_upload" });

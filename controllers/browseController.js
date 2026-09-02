@@ -150,7 +150,7 @@ async function getResourcePreview(req, res) {
       return res.status(200).json({
         success: true,
         previewType: "image",
-        imageUrl: buildPdfHalfPagePreviewUrl(resource.cloudinaryPublicId),
+        imageUrl: buildPdfHalfPagePreviewUrl(resource.previewImagePublicId),
       });
     }
 
