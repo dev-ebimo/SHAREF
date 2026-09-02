@@ -1411,48 +1411,6 @@ button {
   color: var(--text-faint);
   margin-bottom: 0.75rem;
 }
-
-/* Document preview box: shows either a cropped top-half-of-page-1 image
-   (PDFs) or a text snippet (DOCX/PPTX) while the modal is open. */
-.download-preview-box {
-  position: relative;
-  margin-bottom: 0.75rem;
-  border-radius: 10px;
-  overflow: hidden;
-}
-.download-preview-box.is-loading .download-preview-image {
-  opacity: 0;
-}
-.download-preview-box.is-loading::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 20px;
-  height: 20px;
-  margin: -10px 0 0 -10px;
-  border-radius: 50%;
-  border: 2px solid var(--border-hair);
-  border-top-color: var(--purple-accent, #a855f7);
-  animation: sharef-preview-spin 0.7s linear infinite;
-}
-@keyframes sharef-preview-spin {
-  to { transform: rotate(360deg); }
-}
-.download-preview-image {
-  display: block;
-  width: 100%;
-  max-height: 220px;
-  object-fit: cover;
-  object-position: top;
-  border-radius: 10px;
-  border: 1px solid var(--border-hair);
-  background: var(--surface-02);
-  transition: opacity 0.2s ease;
-}
-.download-preview-image.hidden {
-  display: none;
-}
 .wallet-field-error {
   font-size: 0.78rem;
   color: var(--red);

@@ -1,6 +1,5 @@
 const Resource = require("../models/Resource");
 const DownloadLog = require("../models/DownloadLog");
-const { buildPdfHalfPagePreviewUrl } = require("../utils/cloudinaryPreview");
 
 function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -135,10 +134,6 @@ async function searchPastQuestions(req, res) {
   }
 }
 // @route GET /api/resources/:id/preview
-// Student-facing preview — only ever shows a fraction of page 1, never the
-// full document. PDFs get an image URL (top half of page 1, cropped by
-// Cloudinary on request — nothing is generated or fetched here, this just
-// returns the URL). DOCX/PPTX get the pre-extracted half-page text snippet.
 async function getResourcePreview(req, res) {
   try {
     const resource = await Resource.findById(req.params.id);
@@ -146,26 +141,11 @@ async function getResourcePreview(req, res) {
       return res.status(404).json({ success: false, message: "Resource not available" });
     }
 
-    if (resource.previewType === "image") {
-      return res.status(200).json({
-        success: true,
-        previewType: "image",
-        imageUrl: buildPdfHalfPagePreviewUrl(resource.previewImagePublicId),
-      });
-    }
-
-    if (resource.previewType === "text") {
-      return res.status(200).json({
-        success: true,
-        previewType: "text",
-        snippet: resource.previewSnippet,
-      });
-    }
-
     return res.status(200).json({
       success: true,
-      previewType: "none",
-      message: resource.previewMessage || "Preview not available for this file type.",
+      available: resource.previewAvailable,
+      snippet: resource.previewSnippet,
+      message: resource.previewMessage,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch preview", error: err.message });

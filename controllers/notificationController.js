@@ -1,6 +1,6 @@
 const Notification = require("../models/Notification");
 const timeAgo = require("../utils/timeAgo");
-const { approveResource, rejectResource, formatFileSize, getResourcePreviewForAdmin } = require("./moderationController");
+const { approveResource, rejectResource, formatFileSize } = require("./moderationController");
 
 // @route GET /api/admin/notifications
 async function getNotifications(req, res) {
@@ -61,16 +61,6 @@ async function markAllRead(req, res) {
   }
 }
 
-// @route GET /api/admin/notifications/:id/preview
-// Quick-review preview — same full-document logic as the full moderation queue.
-async function quickPreview(req, res) {
-  const notification = await Notification.findById(req.params.id);
-  if (!notification) return res.status(404).json({ success: false, message: "Notification not found" });
-
-  req.params.id = notification.resource; // reuse getResourcePreviewForAdmin by resource id
-  return getResourcePreviewForAdmin(req, res);
-}
-
 // @route POST /api/admin/notifications/:id/approve
 // Quick-review approve — same underlying logic as the full moderation queue.
 async function quickApprove(req, res) {
@@ -90,4 +80,4 @@ async function quickReject(req, res) {
   return rejectResource(req, res);
 }
 
-module.exports = { getNotifications, toggleRead, markAllRead, quickApprove, quickReject, quickPreview };
+module.exports = { getNotifications, toggleRead, markAllRead, quickApprove, quickReject };

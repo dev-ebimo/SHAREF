@@ -5,37 +5,13 @@ const path = require("path");
 
 const WORDS_PER_PAGE = 500;
 
-// pdf-parse (a thin, largely-unmaintained wrapper around an older pinned
-// pdfjs-dist) is known to under-report `numpages` for PDFs whose page tree
-// isn't laid out the way it expects — this shows up in practice with some
-// Word/Google Docs exports. As a cross-check, independently count `/Type
-// /Page` object dictionaries directly in the raw PDF bytes (a standard,
-// dependency-free fallback technique) and trust whichever signal is higher.
-// latin1 preserves a 1:1 byte mapping so the regex scan can't corrupt or
-// misread the binary stream data sitting between the actual page objects.
-function countPdfPageObjectsRaw(fileBuffer) {
-  const raw = fileBuffer.toString("latin1");
-  const matches = raw.match(/\/Type\s*\/Page(?!s)\b/g);
-  return matches ? matches.length : 0;
-}
-
 async function countPages(fileBuffer, originalName) {
   const ext = path.extname(originalName).toLowerCase();
 
   try {
     if (ext === ".pdf") {
       const data = await pdfParse(fileBuffer);
-      const parsedCount = data.numpages || 0;
-      const rawScanCount = countPdfPageObjectsRaw(fileBuffer);
-      const finalCount = Math.max(parsedCount, rawScanCount, 1);
-
-      if (parsedCount && rawScanCount && parsedCount !== rawScanCount) {
-        console.warn(
-          `Page count mismatch for "${originalName}": pdf-parse reported ${parsedCount}, ` +
-          `raw object scan found ${rawScanCount}. Using ${finalCount}.`
-        );
-      }
-      return finalCount;
+      return data.numpages || 1;
     }
 
     if (ext === ".pptx") {
@@ -54,7 +30,7 @@ async function countPages(fileBuffer, originalName) {
 
     return 1;
   } catch (err) {
-    console.error(`Page count detection failed for "${originalName}", defaulting to 1:`, err.stack || err.message);
+    console.error("Page count detection failed, defaulting to 1:", err.message);
     return 1;
   }
 }

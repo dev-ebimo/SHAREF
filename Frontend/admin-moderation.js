@@ -133,43 +133,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('previewSize').textContent = item.size;
         document.getElementById('previewSession').textContent = item.session;
 
-        const placeholderEl = document.getElementById('docPreviewPlaceholder');
-        const textEl = document.getElementById('docPreviewText');
-        const frameEl = document.getElementById('docPreviewFrame');
-        const fullTextEl = document.getElementById('docPreviewFullText');
-
-        // Reset to the loading state — the full document (every page / all
-        // text, not just a snippet) is fetched fresh each time, not cached
-        // on the queue item.
-        frameEl.classList.add('hidden');
-        frameEl.removeAttribute('src');
-        fullTextEl.classList.add('hidden');
-        fullTextEl.textContent = '';
-        placeholderEl.classList.remove('hidden');
-        textEl.textContent = 'Loading preview…';
+        const previewTextEl = document.getElementById('docPreviewText');
+        if (previewTextEl) {
+            previewTextEl.textContent = item.previewAvailable
+                ? '"' + item.previewSnippet + '"'
+                : (item.previewMessage || 'Preview not available for this file type.');
+        }
 
         previewModal.classList.remove('hidden');
-
-        authFetch(API_BASE + '/admin/moderation/' + id + '/preview')
-            .then(res => res.json())
-            .then(data => {
-                if (currentReviewId !== id) return; // modal moved on to something else
-                if (data.previewType === 'image') {
-                    placeholderEl.classList.add('hidden');
-                    frameEl.classList.remove('hidden');
-                    frameEl.src = data.fileUrl; // full multi-page PDF, browser's native viewer
-                } else if (data.previewType === 'text') {
-                    placeholderEl.classList.add('hidden');
-                    fullTextEl.classList.remove('hidden');
-                    fullTextEl.textContent = data.fullText;
-                } else {
-                    textEl.textContent = data.message || 'Preview not available for this file type.';
-                }
-            })
-            .catch(() => {
-                if (currentReviewId !== id) return;
-                textEl.textContent = 'Preview not available right now.';
-            });
     };
 
     window.quickApprove = (id) => {
