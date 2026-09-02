@@ -224,7 +224,16 @@ async function permanentlyDeleteResource(req, res) {
     if (!resource) return res.status(404).json({ success: false, message: "Resource not found" });
 
     const cloudinary = require("../config/cloudinary");
-    await cloudinary.uploader.destroy(resource.cloudinaryPublicId, { resource_type: "raw" });
+    // Must match the resource_type the file was actually uploaded with
+    // (always "raw" for the main file) — destroying with the wrong type
+    // silently no-ops on Cloudinary and leaves the file orphaned.
+    await cloudinary.uploader.destroy(resource.cloudinaryPublicId, {
+      resource_type: resource.cloudinaryResourceType || "raw",
+    });
+    // PDFs also have a second, preview-only "image" asset — clean that up too.
+    if (resource.previewImagePublicId) {
+      await cloudinary.uploader.destroy(resource.previewImagePublicId, { resource_type: "image" });
+    }
 
     await resource.deleteOne();
 

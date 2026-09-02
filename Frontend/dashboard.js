@@ -1007,7 +1007,10 @@ document.addEventListener("DOMContentLoaded", function () {
     '<div class="stat-item"><span class="label">Downloads</span><span class="val" id="downloadModalDownloads"></span></div>' +
     '<div class="stat-item price-stat"><span class="label">Price</span><span class="val" id="downloadModalPrice"></span></div>' +
     "</div>" +
+    '<div class="download-preview-box" id="downloadModalPreviewBox">' +
+    '<img class="download-preview-image hidden" id="downloadModalPreviewImage" alt="First half of page 1" />' +
     '<p class="wallet-hint" id="downloadModalPreview">Loading preview…</p>' +
+    "</div>" +
     '<div class="wallet-modal-actions">' +
     '<button type="button" class="btn-wallet-secondary" id="downloadModalCancelBtn">Cancel</button>' +
     '<button type="button" class="btn-wallet-primary" id="downloadModalConfirmBtn">Download File</button>' +
@@ -1026,9 +1029,32 @@ document.addEventListener("DOMContentLoaded", function () {
   var downloadDownloadsEl = downloadOverlay.querySelector("#downloadModalDownloads");
   var downloadPriceEl = downloadOverlay.querySelector("#downloadModalPrice");
   var downloadPreviewEl = downloadOverlay.querySelector("#downloadModalPreview");
+  var downloadPreviewBoxEl = downloadOverlay.querySelector("#downloadModalPreviewBox");
+  var downloadPreviewImageEl = downloadOverlay.querySelector("#downloadModalPreviewImage");
   var DOWNLOAD_BTN_DEFAULT_TEXT = "Download File";
 
   var currentResource = null;
+
+  function showDownloadPreviewText(message) {
+    downloadPreviewImageEl.classList.add("hidden");
+    downloadPreviewImageEl.removeAttribute("src");
+    downloadPreviewBoxEl.classList.remove("is-loading");
+    downloadPreviewEl.classList.remove("hidden");
+    downloadPreviewEl.textContent = message;
+  }
+
+  function showDownloadPreviewImage(imageUrl) {
+    downloadPreviewEl.classList.add("hidden");
+    downloadPreviewBoxEl.classList.add("is-loading"); // shows the spinner while it loads
+    downloadPreviewImageEl.classList.remove("hidden");
+    downloadPreviewImageEl.onload = function () {
+      downloadPreviewBoxEl.classList.remove("is-loading");
+    };
+    downloadPreviewImageEl.onerror = function () {
+      showDownloadPreviewText("Preview not available right now.");
+    };
+    downloadPreviewImageEl.src = imageUrl; // fetched from Cloudinary only now, not preloaded
+  }
 
   function openDownloadModal(resource) {
     currentResource = resource;
@@ -1043,7 +1069,7 @@ document.addEventListener("DOMContentLoaded", function () {
     downloadPriceEl.textContent = window.SharefWallet.formatNaira(cost);
     downloadConfirmBtn.textContent = "Download File · " + window.SharefWallet.formatNaira(cost);
     downloadConfirmBtn.disabled = false;
-    downloadPreviewEl.textContent = "Loading preview…";
+    showDownloadPreviewText("Loading preview…");
 
     downloadOverlay.classList.add("is-open");
     document.body.style.overflow = "hidden";
@@ -1053,12 +1079,17 @@ document.addEventListener("DOMContentLoaded", function () {
       .then(function (res) { return res.json(); })
       .then(function (data) {
         if (currentResource !== resource) return; // modal moved on to something else
-        downloadPreviewEl.textContent = data.available
-          ? '"' + data.snippet + '"'
-          : (data.message || "Preview not available for this file type.");
+        if (data.previewType === "image") {
+          showDownloadPreviewImage(data.imageUrl);
+        } else if (data.previewType === "text") {
+          showDownloadPreviewText('"' + data.snippet + '"');
+        } else {
+          showDownloadPreviewText(data.message || "Preview not available for this file type.");
+        }
       })
       .catch(function () {
-        downloadPreviewEl.textContent = "Preview not available right now.";
+        if (currentResource !== resource) return;
+        showDownloadPreviewText("Preview not available right now.");
       });
   }
 

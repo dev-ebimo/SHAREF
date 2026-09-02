@@ -406,6 +406,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var previewModalTitle = document.getElementById("previewModalTitle");
   var previewThumb = document.getElementById("previewThumb");
+  var previewThumbImage = document.getElementById("previewThumbImage");
+  var previewThumbLabel = document.getElementById("previewThumbLabel");
+  var previewDocSnippet = document.getElementById("previewDocSnippet");
   var previewDescription = document.getElementById("previewDescription");
   var previewUploader = document.getElementById("previewUploader");
   var previewCourse = document.getElementById("previewCourse");
@@ -417,12 +420,40 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var currentPreviewId = null;
 
+  function resetPreviewDocPanel(fileTypeLabel) {
+    previewThumb.classList.remove("is-loading");
+    previewThumbImage.classList.add("hidden");
+    previewThumbImage.removeAttribute("src");
+    previewThumbLabel.classList.remove("hidden");
+    previewThumbLabel.textContent = fileTypeLabel;
+    previewDocSnippet.classList.add("hidden");
+    previewDocSnippet.textContent = "";
+  }
+
+  function showPreviewDocImage(imageUrl) {
+    previewThumbLabel.classList.add("hidden");
+    previewThumb.classList.add("is-loading"); // spinner shows while Cloudinary serves the crop
+    previewThumbImage.classList.remove("hidden");
+    previewThumbImage.onload = function () { previewThumb.classList.remove("is-loading"); };
+    previewThumbImage.onerror = function () {
+      previewThumb.classList.remove("is-loading");
+      previewThumbImage.classList.add("hidden");
+      previewThumbLabel.classList.remove("hidden");
+    };
+    previewThumbImage.src = imageUrl; // only fetched now, not preloaded with the card list
+  }
+
+  function showPreviewDocSnippet(text) {
+    previewDocSnippet.classList.remove("hidden");
+    previewDocSnippet.textContent = '"' + text + '"';
+  }
+
   function openPreview(resource) {
     currentPreviewId = resource.id;
     var cost = getResourceCost(resource);
 
     previewModalTitle.textContent = resource.title;
-    previewThumb.textContent = resource.fileType;
+    resetPreviewDocPanel(resource.fileType);
     previewDescription.textContent = resource.description;
     previewUploader.textContent = resource.uploader;
     previewCourse.textContent = resource.courseCode + " - " + resource.courseName;
@@ -438,6 +469,21 @@ document.addEventListener("DOMContentLoaded", function () {
     previewModal.setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     previewCloseBtn.focus();
+
+    authFetch(API_BASE + "/resources/" + resource.id + "/preview")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (currentPreviewId !== resource.id) return; // modal moved on to something else
+        if (data.previewType === "image") {
+          showPreviewDocImage(data.imageUrl);
+        } else if (data.previewType === "text") {
+          showPreviewDocSnippet(data.snippet);
+        }
+        // previewType "none" just leaves the file-type badge showing.
+      })
+      .catch(function () {
+        // Leaves the file-type badge showing — no preview content to add.
+      });
   }
 
   function closePreview() {

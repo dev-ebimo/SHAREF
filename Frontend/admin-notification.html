@@ -218,12 +218,14 @@
                     <div class="meta-item"><span class="label">Session</span><span class="val" id="qrSession">Session</span></div>
                 </div>
 
-                <div class="doc-preview-placeholder">
+                <div class="doc-preview-placeholder" id="qrPreviewPlaceholder">
                     <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
                         <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    <p>Document interactive sandbox preview frame</p>
+                    <p id="qrPreviewText">Loading preview…</p>
                 </div>
+                <iframe class="doc-preview-frame hidden" id="qrPreviewFrame" title="Full document preview"></iframe>
+                <div class="doc-preview-fulltext hidden" id="qrPreviewFullText"></div>
             </div>
 
             <div class="sticky-action-bar">

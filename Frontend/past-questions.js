@@ -61,6 +61,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalDownloads = document.getElementById("modalDownloads");
   const modalBookmarkBtn = document.getElementById("modalBookmarkBtn");
   const modalDownloadBtn = document.getElementById("modalDownloadBtn");
+  const docPreviewPlaceholder = document.getElementById("docPreviewPlaceholder");
+  const docPreviewText = document.getElementById("docPreviewText");
+  const docPreviewImage = document.getElementById("docPreviewImage");
 
   // --- Toast (replaces the old alert() calls) ---
   const toast = document.getElementById("pqToast");
@@ -112,6 +115,26 @@ document.addEventListener("DOMContentLoaded", () => {
     modalPrice = priceItem.querySelector("#modalPrice");
   }
 
+  function resetDocPreview() {
+    docPreviewImage.classList.add("hidden", "is-loading");
+    docPreviewImage.removeAttribute("src");
+    docPreviewPlaceholder.classList.remove("hidden");
+    docPreviewText.textContent = "Loading preview…";
+  }
+
+  function showDocPreviewImage(imageUrl) {
+    docPreviewPlaceholder.classList.add("hidden");
+    docPreviewImage.classList.remove("hidden");
+    docPreviewImage.classList.add("is-loading"); // spinner-style fade until it loads
+    docPreviewImage.onload = () => docPreviewImage.classList.remove("is-loading");
+    docPreviewImage.onerror = () => {
+      docPreviewImage.classList.add("hidden");
+      docPreviewPlaceholder.classList.remove("hidden");
+      docPreviewText.textContent = "Preview not available right now.";
+    };
+    docPreviewImage.src = imageUrl; // fetched from Cloudinary only when the modal opens
+  }
+
   function openPreviewModal(item) {
     currentPreviewItem = item;
     const cost = getResourceCost(item);
@@ -123,6 +146,7 @@ document.addEventListener("DOMContentLoaded", () => {
     modalDownloads.textContent = item.downloads;
     if (modalPrice) modalPrice.textContent = window.SharefWallet.formatNaira(cost);
     modalDownloadBtn.textContent = `Download File · ${window.SharefWallet.formatNaira(cost)}`;
+    resetDocPreview();
 
     previewModal.classList.add("is-visible");
     previewScrim.classList.add("is-visible");
@@ -139,6 +163,23 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       })
       .catch((err) => console.error(err));
+
+    authFetch(`${API_BASE}/resources/${item.id}/preview`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (currentPreviewItem !== item) return; // modal moved on to something else
+        if (data.previewType === "image") {
+          showDocPreviewImage(data.imageUrl);
+        } else if (data.previewType === "text") {
+          docPreviewText.textContent = `"${data.snippet}"`;
+        } else {
+          docPreviewText.textContent = data.message || "Preview not available for this file type.";
+        }
+      })
+      .catch(() => {
+        if (currentPreviewItem !== item) return;
+        docPreviewText.textContent = "Preview not available right now.";
+      });
   }
 
   function closePreviewModal() {
