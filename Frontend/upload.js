@@ -162,18 +162,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function realUploadProcess() {
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
-
-        // authFetch (plain fetch under the hood) can't report real byte
-        // progress, so this animates a smooth crawl up to 90% while the
-        // request is in flight, then jumps to 100% once the server
-        // actually responds — same visual reassurance without extra
-        // XHR plumbing.
-        let progress = 0;
-        const crawl = setInterval(() => {
-            progress = Math.min(progress + Math.random() * 8 + 2, 90);
-            progressBar.style.width = `${Math.round(progress)}%`;
-            progressText.textContent = `${Math.round(progress)}%`;
-        }, 250);
+        const progressDetail = document.getElementById('progressDetail');
 
         const formData = new FormData();
         formData.append('file', currentFile);
@@ -186,40 +175,110 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('session', document.getElementById('academicSession').value);
         formData.append('description', description.value.trim());
 
-        authFetch(`${API_BASE}/resources/upload`, {
-            method: 'POST',
-            body: formData, // no Content-Type header — the browser sets the multipart boundary automatically
-        })
-            .then((res) => res.json().then((data) => ({ status: res.status, data })))
-            .then(({ data }) => {
-                clearInterval(crawl);
+        progressBar.style.width = '0%';
+        progressText.textContent = '0%';
+        progressDetail.textContent = `Preparing to upload ${formatBytes(currentFile.size)}…`;
 
-                if (!data.success) {
-                    progressBar.style.width = '0%';
-                    progressText.textContent = '0%';
-                    switchState(stateProgress, stateForm);
-                    uploadError.textContent = data.errors
-                        ? data.errors.map((e) => e.message).join(' ')
-                        : (data.message || 'Upload failed. Please try again.');
-                    uploadError.style.display = 'block';
-                    return;
-                }
+        // fetch() can't report upload byte progress, so real percentage +
+        // ETA needs XMLHttpRequest's upload.progress event instead.
+        const xhr = new XMLHttpRequest();
+        let lastLoaded = 0;
+        let lastTickAt = Date.now();
+        // Exponential moving average of bytes/sec — smooths out the jumpy,
+        // unreliable instantaneous reading you get between individual
+        // progress ticks (especially the first couple), so the ETA doesn't
+        // flicker between very different numbers every few hundred ms.
+        let smoothedBytesPerSecond = null;
 
-                progressBar.style.width = '100%';
-                progressText.textContent = '100%';
-                setTimeout(() => {
-                    switchState(stateProgress, stateSuccess);
-                }, 400);
-            })
-            .catch((err) => {
-                clearInterval(crawl);
+        xhr.upload.addEventListener('progress', (e) => {
+            if (!e.lengthComputable) return;
+
+            const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `${percent}%`;
+
+            const now = Date.now();
+            const intervalSeconds = (now - lastTickAt) / 1000;
+            const intervalBytes = e.loaded - lastLoaded;
+            if (intervalSeconds > 0 && intervalBytes > 0) {
+                const instantBytesPerSecond = intervalBytes / intervalSeconds;
+                smoothedBytesPerSecond = smoothedBytesPerSecond === null
+                    ? instantBytesPerSecond
+                    : smoothedBytesPerSecond * 0.7 + instantBytesPerSecond * 0.3;
+            }
+            lastLoaded = e.loaded;
+            lastTickAt = now;
+
+            if (e.loaded >= e.total) {
+                progressDetail.textContent = `${formatBytes(e.total)} uploaded · Finishing up…`;
+                return;
+            }
+
+            const remainingBytes = e.total - e.loaded;
+            const etaLabel = smoothedBytesPerSecond
+                ? formatEta(remainingBytes / smoothedBytesPerSecond)
+                : 'Calculating time remaining…';
+            progressDetail.textContent = `${formatBytes(e.loaded)} of ${formatBytes(e.total)} · ${etaLabel}`;
+        });
+
+        xhr.addEventListener('load', () => {
+            let data = null;
+            try {
+                data = JSON.parse(xhr.responseText);
+            } catch (err) {
+                data = null;
+            }
+
+            if (xhr.status === 401) {
+                logout();
+                return;
+            }
+
+            if (xhr.status < 200 || xhr.status >= 300 || !data || !data.success) {
                 progressBar.style.width = '0%';
                 progressText.textContent = '0%';
+                progressDetail.textContent = '';
                 switchState(stateProgress, stateForm);
-                uploadError.textContent = 'Network error — could not reach the server. Please try again.';
+                uploadError.textContent = (data && data.errors)
+                    ? data.errors.map((e) => e.message).join(' ')
+                    : (data && data.message) || 'Upload failed. Please try again.';
                 uploadError.style.display = 'block';
-                console.error(err);
-            });
+                return;
+            }
+
+            progressBar.style.width = '100%';
+            progressText.textContent = '100%';
+            progressDetail.textContent = 'Upload complete';
+            setTimeout(() => {
+                switchState(stateProgress, stateSuccess);
+            }, 400);
+        });
+
+        xhr.addEventListener('error', () => {
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            progressDetail.textContent = '';
+            switchState(stateProgress, stateForm);
+            uploadError.textContent = 'Network error — could not reach the server. Please try again.';
+            uploadError.style.display = 'block';
+        });
+
+        xhr.open('POST', `${API_BASE}/resources/upload`);
+        xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`); // no Content-Type — the browser sets the multipart boundary automatically
+        xhr.send(formData);
+    }
+
+    function formatEta(seconds) {
+        if (!isFinite(seconds) || seconds < 1) return 'Almost done…';
+        if (seconds < 60) return `About ${Math.ceil(seconds)}s remaining`;
+        const minutes = Math.floor(seconds / 60);
+        const remSeconds = Math.round(seconds % 60);
+        if (minutes < 60) {
+            return remSeconds > 0 ? `About ${minutes}m ${remSeconds}s remaining` : `About ${minutes}m remaining`;
+        }
+        const hours = Math.floor(minutes / 60);
+        const remMinutes = minutes % 60;
+        return `About ${hours}h ${remMinutes}m remaining`;
     }
 
     // --- 5. Reset Flow ---
@@ -232,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset Progress bar
         document.getElementById('progressBar').style.width = '0%';
         document.getElementById('progressText').textContent = '0%';
+        document.getElementById('progressDetail').textContent = '';
         
         switchState(stateSuccess, stateForm);
     });

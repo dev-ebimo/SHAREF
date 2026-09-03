@@ -387,6 +387,11 @@
   font-size: 1.2rem;
   color: var(--purple-soft);
 }
+.progress-detail {
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-faint);
+}
 .success-icon {
   width: 60px;
   height: 60px;
