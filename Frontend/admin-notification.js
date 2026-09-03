@@ -187,15 +187,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const placeholderEl = document.getElementById('qrPreviewPlaceholder');
     const textEl = document.getElementById('qrPreviewText');
-    const frameEl = document.getElementById('qrPreviewFrame');
     const fullTextEl = document.getElementById('qrPreviewFullText');
+    const downloadBtn = document.getElementById('qrPreviewDownloadBtn');
 
-    // Reset to the loading state — the full document (every page / all
-    // text, not just a snippet) is fetched fresh each time.
-    frameEl.classList.add('hidden');
-    frameEl.removeAttribute('src');
+    // Reset to the loading state — the full document (all text, or the
+    // download link) is fetched fresh each time.
     fullTextEl.classList.add('hidden');
     fullTextEl.textContent = '';
+    downloadBtn.classList.add('hidden');
+    downloadBtn.removeAttribute('href');
     placeholderEl.classList.remove('hidden');
     textEl.textContent = 'Loading preview…';
 
@@ -205,16 +205,20 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(res => res.json())
       .then(data => {
         if (currentReviewId !== id) return; // modal moved on to something else
-        if (data.previewType === 'image') {
-          placeholderEl.classList.add('hidden');
-          frameEl.classList.remove('hidden');
-          frameEl.src = data.fileUrl; // full multi-page PDF, browser's native viewer
-        } else if (data.previewType === 'text') {
+
+        if (data.previewType === 'text') {
           placeholderEl.classList.add('hidden');
           fullTextEl.classList.remove('hidden');
           fullTextEl.textContent = data.fullText;
         } else {
+          // "image" (PDF) and "none" both land here — no iframe, just the
+          // message plus a free download to review.
           textEl.textContent = data.message || 'Preview not available for this file type.';
+        }
+
+        if (data.fileUrl) {
+          downloadBtn.href = data.fileUrl;
+          downloadBtn.classList.remove('hidden');
         }
       })
       .catch(() => {

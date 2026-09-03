@@ -1041,16 +1041,6 @@ button {
 .doc-preview-placeholder.hidden {
   display: none;
 }
-.doc-preview-frame {
-  width: 100%;
-  height: 380px;
-  border: 1px solid var(--border-hair);
-  border-radius: var(--radius-md);
-  background: var(--surface-01);
-}
-.doc-preview-frame.hidden {
-  display: none;
-}
 .doc-preview-fulltext {
   height: 380px;
   overflow-y: auto;
@@ -1064,6 +1054,35 @@ button {
   white-space: pre-wrap;
 }
 .doc-preview-fulltext.hidden {
+  display: none;
+}
+.btn-download-review {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 44px;
+  margin-top: 0.9rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-hair);
+  background: var(--surface-01);
+  color: var(--text-pure);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.btn-download-review:hover {
+  background: var(--surface-02);
+  border-color: var(--purple-accent, #a855f7);
+}
+.btn-download-review svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.btn-download-review.hidden {
   display: none;
 }
 

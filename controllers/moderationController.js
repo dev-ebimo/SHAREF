@@ -129,42 +129,59 @@ async function rejectResource(req, res) {
 }
 
 // @route GET /api/admin/moderation/:id/preview
-// Admin preview shows the ENTIRE document, unlike the student preview
-// (which only ever shows a fraction of page 1). For a PDF that's just the
-// full fileUrl — the frontend embeds it in an <iframe> and the browser's
-// native PDF viewer handles every page. For DOCX/PPTX there's no inline
-// renderer available, so the complete text is extracted fresh, on demand:
-// nothing is kept locally after upload, so the original file is re-fetched
-// from Cloudinary's public raw URL first. This only runs when an admin
-// actually opens a preview, not for every item in the queue.
+// Admin review needs the ENTIRE document, unlike the student preview (which
+// only ever shows a fraction of page 1). Inline PDF rendering (an <iframe>
+// pointed at the raw file) turned out to be unreliable across hosting
+// setups, so PDFs are no longer embedded inline at all — instead every
+// response includes `fileUrl`, and the admin downloads the original file
+// for free to review offline. DOCX/PPTX still get a genuine inline
+// preview (the complete extracted text) alongside that same download
+// option, extracted fresh on demand: nothing is kept locally after upload,
+// so the original file is re-fetched from Cloudinary's public raw URL
+// first. This only runs when an admin actually opens a preview, not for
+// every item in the queue.
 async function getResourcePreviewForAdmin(req, res) {
   try {
     const resource = await Resource.findById(req.params.id);
     if (!resource) return res.status(404).json({ success: false, message: "Resource not found" });
 
-    if (resource.previewType === "image") {
-      return res.status(200).json({ success: true, previewType: "image", fileUrl: resource.fileUrl });
-    }
-
     if (resource.previewType === "text") {
-      const fileResponse = await axios.get(resource.fileUrl, { responseType: "arraybuffer" });
-      const fileBuffer = Buffer.from(fileResponse.data);
-      const result = await getFullText(fileBuffer, resource.fileName);
+      try {
+        const fileResponse = await axios.get(resource.fileUrl, { responseType: "arraybuffer" });
+        const fileBuffer = Buffer.from(fileResponse.data);
+        const result = await getFullText(fileBuffer, resource.fileName);
 
-      if (!result.available) {
+        if (result.available) {
+          return res.status(200).json({
+            success: true, previewType: "text", fullText: result.fullText, fileUrl: resource.fileUrl,
+          });
+        }
         return res.status(200).json({
           success: true,
           previewType: "none",
           message: result.message || "Preview could not be generated for this document.",
+          fileUrl: resource.fileUrl,
+        });
+      } catch (extractErr) {
+        console.error(`Admin full-text preview failed for resource ${resource._id}:`, extractErr.message);
+        return res.status(200).json({
+          success: true,
+          previewType: "none",
+          message: "Preview could not be generated for this document.",
+          fileUrl: resource.fileUrl,
         });
       }
-      return res.status(200).json({ success: true, previewType: "text", fullText: result.fullText });
     }
 
+    // "image" (PDF) and "none" both land here: no inline content, just the
+    // download link so the admin can review the original file directly.
     return res.status(200).json({
       success: true,
-      previewType: "none",
-      message: resource.previewMessage || "Preview not available for this file type.",
+      previewType: resource.previewType === "image" ? "image" : "none",
+      message: resource.previewType === "image"
+        ? "Download the file to review it in full."
+        : (resource.previewMessage || "Preview not available for this file type."),
+      fileUrl: resource.fileUrl,
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not load preview", error: err.message });

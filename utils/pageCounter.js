@@ -1,19 +1,26 @@
 const AdmZip = require("adm-zip");
 const mammoth = require("mammoth");
-const pdfParse = require("pdf-parse");
 const path = require("path");
 
 const WORDS_PER_PAGE = 500;
 
-// pdf-parse (a thin, largely-unmaintained wrapper around an older pinned
-// pdfjs-dist) is known to under-report `numpages` for PDFs whose page tree
-// isn't laid out the way it expects — this shows up in practice with some
-// Word/Google Docs exports. As a cross-check, independently count `/Type
-// /Page` object dictionaries directly in the raw PDF bytes (a standard,
-// dependency-free fallback technique) and trust whichever signal is higher.
-// latin1 preserves a 1:1 byte mapping so the regex scan can't corrupt or
-// misread the binary stream data sitting between the actual page objects.
-function countPdfPageObjectsRaw(fileBuffer) {
+// Counts PDF pages directly from the raw file bytes, with no external
+// library involved: every actual page in a PDF is represented by its own
+// `/Type /Page` dictionary object in the file (the parent `/Type /Pages`
+// node is excluded via the negative lookahead). latin1 preserves a 1:1
+// byte mapping so the regex can't corrupt or misread the binary stream
+// data sitting between page objects, and this holds up even when the
+// content streams themselves are compressed (verified against real
+// Word/Google-Docs-style exports) since producers virtually always leave
+// the page tree itself uncompressed.
+//
+// This used to be a cross-check against the `pdf-parse` package, which was
+// removed: it threw on every single call in this deployment (a known,
+// still-open issue where pdf-parse tries to read a bundled test fixture
+// file that gets pruned from node_modules on some hosts), making it dead
+// weight that only ever produced a hardcoded "1". This scan alone was
+// already producing every correct result.
+function countPdfPageObjects(fileBuffer) {
   const raw = fileBuffer.toString("latin1");
   const matches = raw.match(/\/Type\s*\/Page(?!s)\b/g);
   return matches ? matches.length : 0;
@@ -24,34 +31,7 @@ async function countPages(fileBuffer, originalName) {
 
   try {
     if (ext === ".pdf") {
-      // The raw-byte scan runs unconditionally, BEFORE we even attempt
-      // pdf-parse. If pdf-parse throws outright (as opposed to just
-      // under-counting), this is the only signal that still gets computed —
-      // it must not live inside the same try/catch as the pdf-parse call,
-      // or an exception there skips it entirely and we silently fall back
-      // to a flat "1", which is what was happening.
-      const rawScanCount = countPdfPageObjectsRaw(fileBuffer);
-
-      let parsedCount = 0;
-      try {
-        const data = await pdfParse(fileBuffer);
-        parsedCount = data.numpages || 0;
-      } catch (pdfParseErr) {
-        console.error(
-          `pdf-parse threw for "${originalName}", falling back to raw page-object scan (found ${rawScanCount}):`,
-          pdfParseErr.stack || pdfParseErr.message
-        );
-      }
-
-      const finalCount = Math.max(parsedCount, rawScanCount, 1);
-
-      if (parsedCount && rawScanCount && parsedCount !== rawScanCount) {
-        console.warn(
-          `Page count mismatch for "${originalName}": pdf-parse reported ${parsedCount}, ` +
-          `raw object scan found ${rawScanCount}. Using ${finalCount}.`
-        );
-      }
-      return finalCount;
+      return Math.max(countPdfPageObjects(fileBuffer), 1);
     }
 
     if (ext === ".pptx") {
