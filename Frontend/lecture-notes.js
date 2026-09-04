@@ -434,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Runs the wallet charge, then a success callback if funds were enough.
     function attemptDownload(note, onSuccess) {
         const cost = getResourceCost(note);
-        window.SharefWallet.charge(note.id, `${note.course} — ${note.title}`).then((data) => {
+        window.SharefWallet.charge(note.id, `${note.course} — ${note.title}`, cost).then((data) => {
             if (!data.success) return;
             if (data.fileUrl) window.open(data.fileUrl, "_blank");
             window.SharefWallet.showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${note.title}" download started.`);

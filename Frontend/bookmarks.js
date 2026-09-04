@@ -98,8 +98,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // pricing and ownership.
     function openBookmark(item) {
         if (!window.SharefWallet) return;
+        const cost = window.SharefWallet.calculateCost(item.pages);
 
-        window.SharefWallet.charge(item.id, item.course + ' — ' + item.title).then((data) => {
+        window.SharefWallet.charge(item.id, item.course + ' — ' + item.title, cost).then((data) => {
             if (!data.success) return; // charge() already surfaced the right modal/toast
 
             if (data.fileUrl) window.open(data.fileUrl, '_blank');

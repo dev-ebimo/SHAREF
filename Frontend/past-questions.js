@@ -206,7 +206,7 @@ document.addEventListener("DOMContentLoaded", () => {
   modalDownloadBtn.addEventListener("click", () => {
     if (!currentPreviewItem) return;
     const cost = getResourceCost(currentPreviewItem);
-    window.SharefWallet.charge(currentPreviewItem.id, `${currentPreviewItem.course} — ${currentPreviewItem.title}`).then((data) => {
+    window.SharefWallet.charge(currentPreviewItem.id, `${currentPreviewItem.course} — ${currentPreviewItem.title}`, cost).then((data) => {
       if (!data.success) return;
       if (data.fileUrl) window.open(data.fileUrl, "_blank");
       showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${currentPreviewItem.title}" download started.`);
@@ -369,7 +369,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         itemRowNode.querySelector(".download-trigger").addEventListener("click", () => {
           const cost = getResourceCost(item);
-          window.SharefWallet.charge(item.id, `${item.course} — ${item.title}`).then((data) => {
+          window.SharefWallet.charge(item.id, `${item.course} — ${item.title}`, cost).then((data) => {
             if (!data.success) return;
             if (data.fileUrl) window.open(data.fileUrl, "_blank");
             showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${item.title}" download started.`);

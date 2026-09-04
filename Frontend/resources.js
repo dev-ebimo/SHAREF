@@ -539,7 +539,7 @@ document.addEventListener("DOMContentLoaded", function () {
     var resource = findResourceById(currentPreviewId);
     if (!resource) return;
     var cost = getResourceCost(resource);
-    window.SharefWallet.charge(resource.id, resource.courseCode + " \u2014 " + resource.title).then(function (data) {
+    window.SharefWallet.charge(resource.id, resource.courseCode + " \u2014 " + resource.title, cost).then(function (data) {
       if (!data.success) return;
       if (data.fileUrl) window.open(data.fileUrl, "_blank");
       resource.downloads += 1;
@@ -566,7 +566,7 @@ document.addEventListener("DOMContentLoaded", function () {
       var dResource = findResourceById(did);
       if (dResource) {
         var dCost = getResourceCost(dResource);
-        window.SharefWallet.charge(dResource.id, dResource.courseCode + " \u2014 " + dResource.title).then(function (data) {
+        window.SharefWallet.charge(dResource.id, dResource.courseCode + " \u2014 " + dResource.title, dCost).then(function (data) {
           if (!data.success) return;
           if (data.fileUrl) window.open(data.fileUrl, "_blank");
           dResource.downloads += 1;

@@ -920,6 +920,74 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // ------------------------------------------------------------------
+  // Confirm Download modal — every download charges the wallet, so every
+  // download button (across every page, via SharefWallet.charge() below)
+  // routes through this single "are you sure?" gate before the actual
+  // charge request goes out, rather than firing immediately on click.
+  // ------------------------------------------------------------------
+  var confirmDownloadOverlay = document.createElement("div");
+  confirmDownloadOverlay.className = "wallet-modal-overlay";
+  confirmDownloadOverlay.innerHTML =
+    '<div class="wallet-modal" role="dialog" aria-modal="true" aria-labelledby="confirmDownloadTitle">' +
+    '<button type="button" class="wallet-modal-close-btn" id="confirmDownloadCloseBtn" aria-label="Close">' +
+    '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>' +
+    "</button>" +
+    '<h3 class="wallet-modal-title" id="confirmDownloadTitle">Confirm Download</h3>' +
+    '<p class="wallet-hint" id="confirmDownloadResourceName"></p>' +
+    '<div class="wallet-balance-row"><span>This will charge</span><strong id="confirmDownloadCost"></strong></div>' +
+    '<div class="wallet-modal-actions">' +
+    '<button type="button" class="btn-wallet-secondary" id="confirmDownloadCancelBtn">Cancel</button>' +
+    '<button type="button" class="btn-wallet-primary" id="confirmDownloadConfirmBtn">Confirm & Download</button>' +
+    "</div>" +
+    "</div>";
+  document.body.appendChild(confirmDownloadOverlay);
+
+  var confirmDownloadCloseBtn = confirmDownloadOverlay.querySelector("#confirmDownloadCloseBtn");
+  var confirmDownloadCancelBtn = confirmDownloadOverlay.querySelector("#confirmDownloadCancelBtn");
+  var confirmDownloadConfirmBtn = confirmDownloadOverlay.querySelector("#confirmDownloadConfirmBtn");
+  var confirmDownloadNameEl = confirmDownloadOverlay.querySelector("#confirmDownloadResourceName");
+  var confirmDownloadCostEl = confirmDownloadOverlay.querySelector("#confirmDownloadCost");
+  var confirmDownloadResolver = null; // the Promise executor's resolve fn for whichever confirm is currently open
+
+  function closeConfirmDownloadModal(confirmed) {
+    confirmDownloadOverlay.classList.remove("is-open");
+    document.body.style.overflow = "";
+    if (confirmDownloadResolver) {
+      confirmDownloadResolver(confirmed);
+      confirmDownloadResolver = null;
+    }
+  }
+
+  // Returns a Promise<boolean> — true if the person confirmed, false if
+  // they cancelled/closed/pressed Escape. cost is a client-side estimate
+  // (same tiered formula used for on-card price badges); the backend
+  // independently recomputes the real charge from the resource's actual
+  // page count, same as it always has — this modal is purely a confirm
+  // gate, not a new source of truth for pricing.
+  function openConfirmDownloadModal(description, cost) {
+    confirmDownloadNameEl.textContent = description || "";
+    confirmDownloadCostEl.textContent = formatNaira(cost);
+    confirmDownloadOverlay.classList.add("is-open");
+    document.body.style.overflow = "hidden";
+    confirmDownloadConfirmBtn.focus();
+    return new Promise(function (resolve) {
+      confirmDownloadResolver = resolve;
+    });
+  }
+
+  confirmDownloadCloseBtn.addEventListener("click", function () { closeConfirmDownloadModal(false); });
+  confirmDownloadCancelBtn.addEventListener("click", function () { closeConfirmDownloadModal(false); });
+  confirmDownloadConfirmBtn.addEventListener("click", function () { closeConfirmDownloadModal(true); });
+  confirmDownloadOverlay.addEventListener("click", function (e) {
+    if (e.target === confirmDownloadOverlay) closeConfirmDownloadModal(false);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && confirmDownloadOverlay.classList.contains("is-open")) {
+      closeConfirmDownloadModal(false);
+    }
+  });
+
+  // ------------------------------------------------------------------
   // Public API for resource pages
   // ------------------------------------------------------------------
   window.SharefWallet = {
@@ -936,39 +1004,57 @@ document.addEventListener("DOMContentLoaded", function () {
     // count at charge time — this is display-only.
     calculateCost: calculateResourceCost,
 
-    // Charges for a resource by id — the backend computes the real cost
-    // from the resource's page count, never trusts a client-supplied
-    // amount. Returns a Promise resolving to the server's response object
-    // ({ success, alreadyOwned, fileUrl, ... } or { success:false,
-    // insufficientBalance:true, ... }), so callers must use .then()/await
-    // instead of treating this as an instant synchronous result.
-    charge: function (resourceId, description) {
-      return authFetch(API_BASE + "/wallet/charge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resourceId: resourceId }),
-      })
-        .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
-        .then(function (result) {
-          var data = result.data;
+    // Charges for a resource by id. By default this opens the Confirm
+    // Download modal above and waits for the person to agree before
+    // charging anything — cost is required so that modal can show what
+    // they're actually agreeing to pay. Pass { skipConfirm: true } for a
+    // caller that already has its own explicit "confirm this purchase" UI
+    // (currently only the dashboard's own download modal below, which
+    // already shows the price and requires clicking "Download File · ₦X"
+    // — a second confirm on top of that would just be two confirmations
+    // back to back for the same action).
+    //
+    // The backend computes the real cost from the resource's page count,
+    // never trusts a client-supplied amount. Returns a Promise resolving
+    // to the server's response object ({ success, alreadyOwned, fileUrl,
+    // ... }, { success:false, insufficientBalance:true, ... }, or
+    // { success:false, cancelled:true } if they backed out of the
+    // confirmation), so callers must use .then()/await instead of treating
+    // this as an instant synchronous result.
+    charge: function (resourceId, description, cost, opts) {
+      var skipConfirm = opts && opts.skipConfirm;
+      var confirmStep = skipConfirm ? Promise.resolve(true) : openConfirmDownloadModal(description, cost);
 
-          if (!data.success) {
-            if (data.insufficientBalance) {
-              openInsufficientModal(data.required, data.currentBalance);
-            } else {
-              showWalletToast(data.message || "Could not process download.");
-            }
-            return data;
-          }
+      return confirmStep.then(function (confirmed) {
+        if (!confirmed) return { success: false, cancelled: true };
 
-          if (typeof data.newBalance === "number") updateChipDisplay(data.newBalance);
-          return data;
+        return authFetch(API_BASE + "/wallet/charge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ resourceId: resourceId }),
         })
-        .catch(function (err) {
-          showWalletToast("Network error — could not process download.");
-          console.error(err);
-          return { success: false };
-        });
+          .then(function (res) { return res.json().then(function (data) { return { status: res.status, data: data }; }); })
+          .then(function (result) {
+            var data = result.data;
+
+            if (!data.success) {
+              if (data.insufficientBalance) {
+                openInsufficientModal(data.required, data.currentBalance);
+              } else {
+                showWalletToast(data.message || "Could not process download.");
+              }
+              return data;
+            }
+
+            if (typeof data.newBalance === "number") updateChipDisplay(data.newBalance);
+            return data;
+          })
+          .catch(function (err) {
+            showWalletToast("Network error — could not process download.");
+            console.error(err);
+            return { success: false };
+          });
+      });
     },
   };
 });
@@ -1114,16 +1200,22 @@ document.addEventListener("DOMContentLoaded", function () {
   downloadConfirmBtn.addEventListener("click", function () {
     if (!currentResource) return;
     var resource = currentResource;
+    var cost = calculateResourceCost(resource.pages);
 
+    // This modal (price shown, explicit "Download File · ₦X" click) is
+    // already the confirmation step, so charge() skips its own Confirm
+    // Download modal here — otherwise it'd be two confirmations back to
+    // back for the same action. Because the charge fires immediately with
+    // no intermediate dialog, "Processing…" feedback is worth showing here.
     downloadConfirmBtn.disabled = true;
     downloadConfirmBtn.textContent = "Processing...";
 
-    window.SharefWallet.charge(resource.id, resource.course + " — " + resource.title).then(function (data) {
+    window.SharefWallet.charge(resource.id, resource.course + " — " + resource.title, cost, { skipConfirm: true }).then(function (data) {
       downloadConfirmBtn.disabled = false;
 
       if (!data.success) {
         // Insufficient-balance case already opened its own modal inside
-        // charge() — just restore this modal's button text and stop here.
+        // charge() — just restore this button's text and stop here.
         downloadConfirmBtn.textContent = DOWNLOAD_BTN_DEFAULT_TEXT;
         return;
       }
