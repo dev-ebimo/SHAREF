@@ -20,17 +20,22 @@ document.addEventListener("DOMContentLoaded", () => {
   const FILE_ICON_TYPES = { pdf: "pdf", doc: "doc", docx: "doc", ppt: "ppt", pptx: "ppt" };
 
   /* ---- Filter options (departments) ---- */
+  const filterDept = document.getElementById("filterDept");
+  // Department list grows with real adoption, so this uses the searchable
+  // combobox instead of a plain <select> — see searchable-select.js.
+  const filterDeptEnhanced = new SearchableSelect(filterDept, { placeholder: "Search departments…" });
+
   authFetch(`${API_BASE}/admin/resources/filter-options`)
     .then((res) => res.json())
     .then((data) => {
       if (!data.success) return;
-      const deptSelect = document.getElementById("filterDept");
       data.departments.forEach((dept) => {
         const opt = document.createElement("option");
         opt.value = dept;
         opt.textContent = dept;
-        deptSelect.appendChild(opt);
+        filterDept.appendChild(opt);
       });
+      filterDeptEnhanced.refresh();
     })
     .catch((err) => console.error("Could not load filter options:", err));
 
@@ -38,7 +43,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---- Search / filters / sort / pagination — real backend data ---- */
   const searchInput = document.getElementById("resourceSearch");
-  const filterDept = document.getElementById("filterDept");
   const filterType = document.getElementById("filterType");
   const filterReason = document.getElementById("filterReason");
   const filterDate = document.getElementById("filterDate");

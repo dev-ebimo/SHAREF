@@ -12,6 +12,7 @@
     />
     <link rel="stylesheet" href="dashboard.css" />
     <link rel="stylesheet" href="lecture-notes.css" />
+    <link rel="stylesheet" href="searchable-select.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -331,9 +332,6 @@
             <div class="filter-group">
               <select id="deptFilter">
                 <option value="all">All Departments</option>
-                <option value="Computer Science">Computer Science</option>
-                <option value="Mathematics">Mathematics</option>
-                <option value="Physics">Physics</option>
               </select>
               <select id="levelFilter">
                 <option value="all">All Levels</option>
@@ -350,9 +348,6 @@
               </select>
               <select id="courseFilter">
                 <option value="all">All Courses</option>
-                <option value="CSC 201">CSC 201</option>
-                <option value="CSC 202">CSC 202</option>
-                <option value="CSC 301">CSC 301</option>
               </select>
               <select id="sortOrder" class="sort-select">
                 <option value="newest">Newest</option>
@@ -484,6 +479,7 @@
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
+    <script src="searchable-select.js"></script>
     <script src="lecture-notes.js"></script>
   </body>
 </html>

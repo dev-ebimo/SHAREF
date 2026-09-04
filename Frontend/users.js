@@ -5,17 +5,22 @@ document.addEventListener("DOMContentLoaded", () => {
   wireLogoutButton();
 
   /* ---- Filter options (departments) ---- */
+  const filterDept = document.getElementById("filterDept");
+  // Department list grows with real adoption, so this uses the searchable
+  // combobox instead of a plain <select> — see searchable-select.js.
+  const filterDeptEnhanced = new SearchableSelect(filterDept, { placeholder: "Search departments…" });
+
   authFetch(`${API_BASE}/admin/users/filter-options`)
     .then((res) => res.json())
     .then((data) => {
       if (!data.success) return;
-      const deptSelect = document.getElementById("filterDept");
       data.departments.forEach((dept) => {
         const opt = document.createElement("option");
         opt.value = dept;
         opt.textContent = dept;
-        deptSelect.appendChild(opt);
+        filterDept.appendChild(opt);
       });
+      filterDeptEnhanced.refresh();
     })
     .catch((err) => console.error("Could not load filter options:", err));
 
@@ -43,7 +48,6 @@ document.addEventListener("DOMContentLoaded", () => {
      USERS TAB
      ===================================================================== */
   const userSearchInput = document.getElementById("userSearch");
-  const filterDept = document.getElementById("filterDept");
   const filterLevel = document.getElementById("filterLevel");
   const filterStatus = document.getElementById("filterStatus");
   const filterContribution = document.getElementById("filterContribution");

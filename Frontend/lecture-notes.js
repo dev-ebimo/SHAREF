@@ -78,6 +78,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const courseFilter = document.getElementById('courseFilter');
     const sortOrder = document.getElementById('sortOrder');
     const quickFilters = document.querySelectorAll('.qf-btn');
+    // Department/course lists grow with real adoption, so both use the
+    // searchable combobox instead of a plain <select> — see
+    // searchable-select.js. Level/Semester stay plain selects; they're
+    // small, fixed enums that will never need searching.
+    const deptFilterEnhanced = new SearchableSelect(deptFilter, { placeholder: 'Search departments…' });
+    const courseFilterEnhanced = new SearchableSelect(courseFilter, { placeholder: 'Search courses…' });
 
     // Mobile Sheet
     const mobileFilterToggle = document.getElementById('mobileFilterToggle');
@@ -102,32 +108,74 @@ document.addEventListener('DOMContentLoaded', () => {
     mobileFilterToggle.addEventListener('click', () => filterPanel.classList.add('open'));
     closeFilters.addEventListener('click', () => filterPanel.classList.remove('open'));
 
+    // Department is free text at profile-edit time, not a fixed enum, so —
+    // same reasoning as courses — both option lists are built from
+    // whatever actually shows up in the fetched notes, letting the
+    // searchable filters stay useful as more departments/courses appear
+    // with real adoption, instead of the fixed few baked into the HTML.
+    function populateDeptOptions() {
+        const departments = Array.from(new Set(mockNotes.map(n => n.dept).filter(Boolean))).sort();
+        const currentValue = deptFilter.value;
+
+        deptFilter.innerHTML = '<option value="all">All Departments</option>';
+        departments.forEach(dept => {
+            const opt = document.createElement('option');
+            opt.value = dept;
+            opt.textContent = dept;
+            deptFilter.appendChild(opt);
+        });
+        const stillValid = Array.from(deptFilter.options).some(opt => opt.value === currentValue);
+        deptFilter.value = stillValid ? currentValue : 'all';
+        deptFilterEnhanced.refresh();
+    }
+
+    function populateCourseOptions() {
+        const courses = Array.from(new Set(mockNotes.map(n => n.course).filter(Boolean))).sort();
+        const currentValue = courseFilter.value;
+
+        courseFilter.innerHTML = '<option value="all">All Courses</option>';
+        courses.forEach(course => {
+            const opt = document.createElement('option');
+            opt.value = course;
+            opt.textContent = course;
+            courseFilter.appendChild(opt);
+        });
+        const stillValid = Array.from(courseFilter.options).some(opt => opt.value === currentValue);
+        courseFilter.value = stillValid ? currentValue : 'all';
+        courseFilterEnhanced.refresh();
+    }
+
     // Pre-fills department/level from the user's completed profile — the
     // payoff for completing the "Add your department" banner. Department is
     // free-text at profile-edit time, so a matching <option> is added on the
-    // fly if it isn't one of this page's fixed presets.
-    async function fetchAndApplyProfilePrefill() {
+    // fly if it isn't already one the notes data produced.
+    async function fetchProfile() {
         try {
             const res = await authFetch(`${API_BASE}/users/me`);
             const data = await res.json();
-            if (!data.success) return;
-            const profile = data.user;
-
-            if (profile.department) {
-                const hasOption = Array.from(deptFilter.options).some(opt => opt.value === profile.department);
-                if (!hasOption) {
-                    const opt = document.createElement('option');
-                    opt.value = profile.department;
-                    opt.textContent = profile.department;
-                    deptFilter.appendChild(opt);
-                }
-                deptFilter.value = profile.department;
-            }
-            if (profile.level) {
-                levelFilter.value = profile.level;
-            }
+            return data.success ? data.user : null;
         } catch (err) {
             console.error('Could not load profile for filter prefill:', err);
+            return null;
+        }
+    }
+
+    function applyProfilePrefill(profile) {
+        if (!profile) return;
+
+        if (profile.department) {
+            const hasOption = Array.from(deptFilter.options).some(opt => opt.value === profile.department);
+            if (!hasOption) {
+                const opt = document.createElement('option');
+                opt.value = profile.department;
+                opt.textContent = profile.department;
+                deptFilter.appendChild(opt);
+            }
+            deptFilter.value = profile.department;
+            deptFilterEnhanced.refresh();
+        }
+        if (profile.level) {
+            levelFilter.value = profile.level;
         }
     }
 
@@ -135,9 +183,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // sort/render entirely client-side (same pipeline as before, just fed
     // with real data instead of a fixed mock array).
     renderSkeletons();
-    Promise.all([fetchAllLectureNotes(), fetchAndApplyProfilePrefill()])
-        .then(([notes]) => {
+    Promise.all([fetchAllLectureNotes(), fetchProfile()])
+        .then(([notes, profile]) => {
             mockNotes = notes;
+            populateDeptOptions();
+            populateCourseOptions();
+            applyProfilePrefill(profile); // runs after populate, so its added option/selection survives
             applyFiltersAndRender();
         })
         .catch(err => {

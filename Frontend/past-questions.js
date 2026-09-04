@@ -50,6 +50,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const semesterFilter = document.getElementById("semesterFilter");
   const levelFilter = document.getElementById("levelFilter");
   const sortOrder = document.getElementById("sortOrder");
+  // Session values grow by one every academic year with real adoption, so
+  // this uses the searchable combobox instead of a plain <select> — see
+  // searchable-select.js. Semester/Level stay plain selects; they're
+  // small, fixed enums that will never need searching.
+  const sessionFilterEnhanced = new SearchableSelect(sessionFilter, { placeholder: "Search sessions…" });
 
   const previewModal = document.getElementById("previewModal");
   const previewScrim = document.getElementById("previewScrim");
@@ -249,10 +254,43 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // Session isn't a fixed enum — it's whatever academic sessions actually
+  // have past questions uploaded, and grows every year — so the option
+  // list is fetched fresh rather than hardcoded, letting the searchable
+  // filter stay useful as more sessions pile up. This is a separate,
+  // always-unfiltered request (not reused from fetchPastQuestions) so it
+  // stays correct no matter what filters end up pre-applied at load time.
+  async function populateSessionOptions() {
+    try {
+      const res = await authFetch(`${API_BASE}/resources/past-questions?session=all&semester=all&level=all&search=`);
+      const data = await res.json();
+      if (!data.success) return;
+
+      const sessions = Array.from(new Set(data.resources.map((r) => r.session).filter(Boolean)))
+        .sort()
+        .reverse(); // "2025/2026" before "2024/2025" — most recent session first
+      const currentValue = sessionFilter.value;
+
+      sessionFilter.innerHTML = '<option value="all">All Sessions</option>';
+      sessions.forEach((session) => {
+        const opt = document.createElement("option");
+        opt.value = session;
+        opt.textContent = session;
+        sessionFilter.appendChild(opt);
+      });
+      const stillValid = Array.from(sessionFilter.options).some((opt) => opt.value === currentValue);
+      sessionFilter.value = stillValid ? currentValue : "all";
+      sessionFilterEnhanced.refresh();
+    } catch (err) {
+      console.error("Could not load session list:", err);
+    }
+  }
+
   applyProfileLevelPrefill().then(fetchPastQuestions).catch((err) => {
     console.error(err);
     showToast("Could not load past questions.");
   });
+  populateSessionOptions();
 
   // The backend already applied search/session/semester/level filtering
   // and sorting server-side (see fetchPastQuestions) — this just groups

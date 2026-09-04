@@ -95,6 +95,12 @@ document.addEventListener("DOMContentLoaded", function () {
   var semesterSelect = document.getElementById("filterSemester");
   var typeSelect = document.getElementById("filterType");
   var sortSelect = document.getElementById("sortBySelect");
+  // Department/course lists grow with real adoption, so both filters use
+  // the searchable combobox instead of a plain <select> — see
+  // searchable-select.js. Semester/Type stay plain selects; they're small,
+  // fixed enums that will never need searching.
+  var departmentSelectEnhanced = new SearchableSelect(departmentSelect, { placeholder: "Search departments…" });
+  var courseSelectEnhanced = new SearchableSelect(courseSelect, { placeholder: "Search courses…" });
   var viewToggleBtns = document.querySelectorAll(".view-toggle-btn");
   var resultsCountText = document.getElementById("resultsCountText");
   var clearFiltersInline = document.getElementById("clearFiltersInline");
@@ -130,6 +136,25 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  // Department is free text at signup (see fetchProfileDepartment below),
+  // not a fixed enum, so — same reasoning as courses — the option list is
+  // built from whatever departments actually show up in the data rather
+  // than a hardcoded few. This is what lets the searchable department
+  // filter stay useful as more departments show up with real adoption.
+  function populateDepartmentOptions() {
+    var departments = Array.from(new Set(RESOURCES.map(function (r) { return r.department; }).filter(Boolean))).sort();
+
+    departmentSelect.innerHTML = '<option value="all">All Departments</option>';
+    departments.forEach(function (dept) {
+      var opt = document.createElement("option");
+      opt.value = dept;
+      opt.textContent = dept;
+      departmentSelect.appendChild(opt);
+    });
+    departmentSelect.value = "all";
+    if (departmentSelectEnhanced) departmentSelectEnhanced.refresh();
+  }
+
   function populateCourseOptions(department) {
     var courses;
     if (department === "all") {
@@ -147,6 +172,7 @@ document.addEventListener("DOMContentLoaded", function () {
       courseSelect.appendChild(opt);
     });
     courseSelect.value = "all";
+    if (courseSelectEnhanced) courseSelectEnhanced.refresh();
   }
 
   // ==========================================================================
@@ -367,6 +393,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     searchInput.value = "";
     departmentSelect.value = "all";
+    departmentSelectEnhanced.refresh();
     populateCourseOptions("all");
     semesterSelect.value = "all";
     typeSelect.value = "all";
@@ -600,6 +627,7 @@ document.addEventListener("DOMContentLoaded", function () {
       departmentSelect.appendChild(newOption);
     }
     departmentSelect.value = department;
+    departmentSelectEnhanced.refresh();
     state.department = department;
     populateCourseOptions(department);
   }
@@ -614,6 +642,8 @@ document.addEventListener("DOMContentLoaded", function () {
       bookmarkedIds = results[1];
       var profileDepartment = results[2];
       buildCourseMap();
+      populateDepartmentOptions();
+      departmentSelectEnhanced.refresh();
       populateCourseOptions("all");
       applyDepartmentPrefill(profileDepartment);
       render();

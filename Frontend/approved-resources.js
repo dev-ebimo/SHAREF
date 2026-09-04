@@ -20,24 +20,33 @@ document.addEventListener("DOMContentLoaded", () => {
   const FILE_ICON_TYPES = { pdf: "pdf", doc: "doc", docx: "doc", ppt: "ppt", pptx: "ppt" };
 
   /* ---- Filter options (departments + courses) ---- */
+  const filterDept = document.getElementById("filterDept");
+  const filterCourse = document.getElementById("filterCourse");
+  // Department/course lists grow with real adoption, so both use the
+  // searchable combobox instead of a plain <select> — see
+  // searchable-select.js. Type stays a plain select; it's a small, fixed
+  // enum that will never need searching.
+  const filterDeptEnhanced = new SearchableSelect(filterDept, { placeholder: "Search departments…" });
+  const filterCourseEnhanced = new SearchableSelect(filterCourse, { placeholder: "Search courses…" });
+
   authFetch(`${API_BASE}/admin/resources/filter-options`)
     .then((res) => res.json())
     .then((data) => {
       if (!data.success) return;
-      const deptSelect = document.getElementById("filterDept");
       data.departments.forEach((dept) => {
         const opt = document.createElement("option");
         opt.value = dept;
         opt.textContent = dept;
-        deptSelect.appendChild(opt);
+        filterDept.appendChild(opt);
       });
-      const courseSelect = document.getElementById("filterCourse");
+      filterDeptEnhanced.refresh();
       data.courses.forEach((course) => {
         const opt = document.createElement("option");
         opt.value = course;
         opt.textContent = course;
-        courseSelect.appendChild(opt);
+        filterCourse.appendChild(opt);
       });
+      filterCourseEnhanced.refresh();
     })
     .catch((err) => console.error("Could not load filter options:", err));
 
@@ -45,9 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /* ---- Search / filters / sort / pagination — real backend data ---- */
   const searchInput = document.getElementById("resourceSearch");
-  const filterDept = document.getElementById("filterDept");
   const filterType = document.getElementById("filterType");
-  const filterCourse = document.getElementById("filterCourse");
   const filterApprovalDate = document.getElementById("filterApprovalDate");
   const sortResources = document.getElementById("sortResources");
   const tableBody = document.getElementById("resourceTableBody");

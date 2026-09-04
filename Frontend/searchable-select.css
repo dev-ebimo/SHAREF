@@ -1,0 +1,110 @@
+/* Searchable Select — visually mimics a normal filter <select> until
+   focused, then behaves like a type-to-filter combobox. Uses the same
+   design tokens defined in dashboard.css / admin-moderation.css so it
+   blends in on both student and admin pages without page-specific tweaks. */
+
+.searchable-select-native {
+  /* The real <select> stays in the DOM (for value/change semantics) but is
+     never shown — .searchable-select is what the user actually sees. */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select-input {
+  width: 100%;
+  height: 42px;
+  padding: 0 2.2rem 0 0.9rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-sm, 8px);
+  color: var(--text-pure);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: text;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.searchable-select-input::placeholder {
+  color: var(--text-faint);
+}
+.searchable-select-input:focus {
+  outline: none;
+  border-color: var(--border-hover, var(--purple));
+  background: var(--surface-02);
+}
+
+/* Small chevron/search cue, purely visual — matches the affordance of the
+   native <select> it replaced so it still reads as "click to choose". */
+.searchable-select::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: 0.85rem;
+  width: 8px;
+  height: 8px;
+  border-right: 1.5px solid var(--text-faint);
+  border-bottom: 1.5px solid var(--text-faint);
+  transform: translateY(-65%) rotate(45deg);
+  pointer-events: none;
+  transition: transform 0.15s ease;
+}
+.searchable-select.is-open::after {
+  transform: translateY(-35%) rotate(-135deg);
+}
+
+.searchable-select-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+  background: var(--bg-void);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+.searchable-select-list.hidden {
+  display: none;
+}
+
+.searchable-select-option {
+  padding: 0.55rem 0.7rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-lead);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.searchable-select-option:hover,
+.searchable-select-option.is-highlighted {
+  background: var(--surface-02);
+  color: var(--text-pure);
+}
+.searchable-select-option.is-selected {
+  color: var(--purple-soft);
+  font-weight: 700;
+}
+
+.searchable-select-empty {
+  padding: 0.6rem 0.7rem;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  font-style: italic;
+}
