@@ -127,6 +127,9 @@ async function uploadResource(req, res) {
     });
   } catch (err) {
     if (req.file) fs.unlink(req.file.path, () => {});
+    if (err.isPageCountError) {
+      return res.status(422).json({ success: false, message: err.message });
+    }
     return res.status(500).json({ success: false, message: "Upload failed", error: sanitizeError(err) });
   }
 }

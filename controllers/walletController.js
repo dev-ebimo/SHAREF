@@ -74,18 +74,31 @@ async function verifyFunding(req, res) {
     const paystackData = await verifyTransaction(reference);
 
     if (paystackData.status === "success") {
-      transaction.status = "successful";
-      await transaction.save();
+      // Atomically flip pending -> successful. Only the caller that wins this
+      // race (this route vs. the webhook, whichever gets here first) gets a
+      // non-null result back and is allowed to credit the wallet — the loser
+      // just sees the money already applied. This closes a double-credit
+      // window that existed when the status check and the update were two
+      // separate steps.
+      const claimed = await Transaction.findOneAndUpdate(
+        { reference, status: { $ne: "successful" } },
+        { $set: { status: "successful" } },
+        { new: true }
+      );
 
-      await User.findByIdAndUpdate(transaction.user, {
-        $inc: { walletBalance: transaction.amount },
-      });
+      if (claimed) {
+        await User.findByIdAndUpdate(claimed.user, {
+          $inc: { walletBalance: claimed.amount },
+        });
+      }
 
       return res.status(200).json({ success: true, message: "Wallet funded successfully" });
     }
 
-    transaction.status = "failed";
-    await transaction.save();
+    await Transaction.updateOne(
+      { reference, status: { $ne: "successful" } },
+      { $set: { status: "failed" } }
+    );
     return res.status(400).json({ success: false, message: "Payment was not successful" });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not verify payment", error: err.message });
@@ -109,13 +122,18 @@ async function paystackWebhook(req, res) {
 
     if (event.event === "charge.success") {
       const { reference, amount } = event.data;
-      const transaction = await Transaction.findOne({ reference });
 
-      if (transaction && transaction.status !== "successful") {
-        transaction.status = "successful";
-        await transaction.save();
+      // Same atomic claim pattern as verifyFunding — whichever of the two
+      // (this webhook or the frontend's verify call) gets here first wins
+      // and credits the wallet; the other is a no-op.
+      const claimed = await Transaction.findOneAndUpdate(
+        { reference, status: { $ne: "successful" } },
+        { $set: { status: "successful" } },
+        { new: true }
+      );
 
-        await User.findByIdAndUpdate(transaction.user, {
+      if (claimed) {
+        await User.findByIdAndUpdate(claimed.user, {
           $inc: { walletBalance: amount / 100 }, // convert kobo back to naira
         });
       }

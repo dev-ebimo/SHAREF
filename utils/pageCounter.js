@@ -50,8 +50,16 @@ async function countPages(fileBuffer, originalName) {
 
     return 1;
   } catch (err) {
-    console.error(`Page count detection failed for "${originalName}", defaulting to 1:`, err.stack || err.message);
-    return 1;
+    // Previously this defaulted to 1 page, which silently priced any
+    // malformed/adversarial file (e.g. a large PDF with its page tree
+    // stripped or corrupted) at the cheapest tier. Fail the upload instead
+    // so a student can't exploit undetectable page counts to underpay.
+    console.error(`Page count detection failed for "${originalName}":`, err.stack || err.message);
+    const detectionError = new Error(
+      `Could not determine the page count for "${originalName}". The file may be corrupted or in an unsupported format.`
+    );
+    detectionError.isPageCountError = true;
+    throw detectionError;
   }
 }
 

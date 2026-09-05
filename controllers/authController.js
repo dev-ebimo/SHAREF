@@ -79,8 +79,6 @@ async function verifyOTP(req, res) {
     user.isVerified = true;
     user.verificationOTP = undefined;
     user.verificationOTPExpires = undefined;
-    await user.save();
-
     user.lastLoginAt = new Date();
     await user.save();
 
