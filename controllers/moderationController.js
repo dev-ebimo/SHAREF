@@ -130,16 +130,12 @@ async function rejectResource(req, res) {
 
 // @route GET /api/admin/moderation/:id/preview
 // Admin review needs the ENTIRE document, unlike the student preview (which
-// only ever shows a fraction of page 1). Inline PDF rendering (an <iframe>
-// pointed at the raw file) turned out to be unreliable across hosting
-// setups, so PDFs are no longer embedded inline at all — instead every
-// response includes `fileUrl`, and the admin downloads the original file
-// for free to review offline. DOCX/PPTX still get a genuine inline
-// preview (the complete extracted text) alongside that same download
-// option, extracted fresh on demand: nothing is kept locally after upload,
-// so the original file is re-fetched from Cloudinary's public raw URL
-// first. This only runs when an admin actually opens a preview, not for
-// every item in the queue.
+// only ever shows a fraction of page 1). DOCX/PPTX/PDF (previewType
+// "text") all get a genuine inline preview — the complete extracted text —
+// alongside a download option, extracted fresh on demand: nothing is kept
+// locally after upload, so the original file is re-fetched from
+// Cloudinary's public raw URL first. This only runs when an admin actually
+// opens a preview, not for every item in the queue.
 async function getResourcePreviewForAdmin(req, res) {
   try {
     const resource = await Resource.findById(req.params.id);
@@ -173,7 +169,8 @@ async function getResourcePreviewForAdmin(req, res) {
       }
     }
 
-    // "image" (PDF) and "none" both land here: no inline content, just the
+    // Legacy "image" PDFs (uploaded before the preview-image pipeline was
+    // removed) and "none" both land here: no inline content, just the
     // download link so the admin can review the original file directly.
     return res.status(200).json({
       success: true,

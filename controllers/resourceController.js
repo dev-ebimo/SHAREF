@@ -49,20 +49,19 @@ async function uploadResource(req, res) {
     const { title, type, department, course, level, semester, session, description } = req.body;
 
     const fileExtension = req.file.originalname.split(".").pop().toLowerCase();
-    const isPdf = fileExtension === "pdf";
 
     const fileBuffer = fs.readFileSync(req.file.path);
     const pages = await countPages(fileBuffer, req.file.originalname);
 
-    // PDFs get a real image preview (top half of page 1) generated on-demand
-    // by Cloudinary — see buildPdfHalfPagePreviewUrl — so there's no text to
-    // extract here. DOCX/PPTX still get a text snippet (half of page 1).
-    const previewResult = isPdf
-      ? { available: true }
-      : await getPreviewSnippet(fileBuffer, req.file.originalname);
+    // Same call, same treatment, for every file type — PDF included.
+    // getPreviewSnippet now extracts real page-1 text from PDFs via
+    // pdf-parse, same idea as DOCX/PPTX. Only truly unsupported types
+    // (.zip, scanned/image-only PDFs with no text layer, etc.) come back
+    // { available: false }.
+    const previewResult = await getPreviewSnippet(fileBuffer, req.file.originalname);
 
-    // The actual stored file always uploads as "raw", regardless of type.
-    // PDFs briefly used "image" here to unlock the pg_1 transformation, but
+    // The stored file always uploads as "raw", regardless of type. PDFs used
+    // to briefly use "image" here to unlock a page-crop transformation, but
     // Cloudinary blocks serving the UNTRANSFORMED original through the
     // "image" resource type by default — that broke both downloads and the
     // admin full-document preview, which both need the real, unmodified
@@ -72,30 +71,9 @@ async function uploadResource(req, res) {
       folder: "sharef_resources",
     });
 
-    // PDFs additionally get a second, purpose-only Cloudinary asset
-    // (resource_type: "image") whose sole job is to make the pg_1 crop
-    // transformation available. Its untransformed URL is never linked or
-    // exposed anywhere — only ever requested with a transformation attached
-    // (see buildPdfHalfPagePreviewUrl), which Cloudinary always permits
-    // since that produces a genuine converted image, not a raw PDF.
-    let previewImagePublicId = null;
-    if (isPdf) {
-      try {
-        const previewImageResult = await cloudinary.uploader.upload(req.file.path, {
-          resource_type: "image",
-          folder: "sharef_resources_preview",
-        });
-        previewImagePublicId = previewImageResult.public_id;
-      } catch (err) {
-        console.error("PDF preview-image upload failed (main file upload still succeeded):", err.message);
-      }
-    }
-
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
 
-    let previewType = "none";
-    if (isPdf && previewImagePublicId) previewType = "image";
-    else if (!isPdf && previewResult.available) previewType = "text";
+    const previewType = previewResult.available ? "text" : "none";
 
     const resource = await Resource.create({
       title, type, department, course, level, semester, session, description,
@@ -104,7 +82,6 @@ async function uploadResource(req, res) {
       fileUrl: cloudinaryResult.secure_url,
       cloudinaryPublicId: cloudinaryResult.public_id,
       cloudinaryResourceType: "raw",
-      previewImagePublicId,
       fileSizeBytes: req.file.size,
       fileExtension,
       pages,

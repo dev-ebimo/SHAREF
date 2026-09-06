@@ -136,9 +136,11 @@ async function searchPastQuestions(req, res) {
 }
 // @route GET /api/resources/:id/preview
 // Student-facing preview — only ever shows a fraction of page 1, never the
-// full document. PDFs get an image URL (top half of page 1, cropped by
-// Cloudinary on request — nothing is generated or fetched here, this just
-// returns the URL). DOCX/PPTX get the pre-extracted half-page text snippet.
+// full document. DOCX/PPTX get the pre-extracted half-page text snippet.
+// New PDF uploads no longer get a preview image generated at all (they're
+// treated the same as ZIP — previewType "none") — the "image" branch below
+// only still fires for PDFs that were uploaded before that change and
+// already have a previewImagePublicId stored.
 async function getResourcePreview(req, res) {
   try {
     const resource = await Resource.findById(req.params.id);
