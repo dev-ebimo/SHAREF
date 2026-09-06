@@ -39,7 +39,6 @@ const resourceSchema = new mongoose.Schema(
     // "text"   -> DOCX/PPTX; student preview is half of page 1's extracted text
     // "none"   -> extraction failed or unsupported type; previewMessage explains why
     previewType: { type: String, enum: ["image", "text", "none"], default: "none" },
-    previewAvailable: { type: Boolean, default: false },
     previewSnippet: { type: String, default: "" },
     previewMessage: { type: String, default: "" },
 

@@ -86,7 +86,6 @@ async function uploadResource(req, res) {
       fileExtension,
       pages,
       previewType,
-      previewAvailable: previewType !== "none",
       previewSnippet: previewType === "text" ? previewResult.snippet : "",
       previewMessage: previewType === "none" ? (previewResult.message || "Preview not available for this file type.") : "",
     });

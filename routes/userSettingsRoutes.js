@@ -8,7 +8,7 @@ const {
   updateProfileValidator, changePasswordValidator, deleteAccountValidator,
 } = require("../validators/userValidator");
 const validateRequest = require("../middleware/validateRequest");
-const { protect, restrictTo } = require("../middleware/protect");
+const { protect } = require("../middleware/protect");
 
 router.use(protect);
 
