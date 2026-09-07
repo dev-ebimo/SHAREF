@@ -6,6 +6,7 @@ const { sendResourceStatusEmail } = require("../services/emailService");
 
 const timeAgo = require("../utils/timeAgo");
 const { getFullText } = require("../utils/previewSnippet");
+const buildDownloadUrl = require("../utils/buildDownloadUrl");
 
 const AGED_THRESHOLD_DAYS = 4;
 
@@ -149,14 +150,14 @@ async function getResourcePreviewForAdmin(req, res) {
 
         if (result.available) {
           return res.status(200).json({
-            success: true, previewType: "text", fullText: result.fullText, fileUrl: resource.fileUrl,
+            success: true, previewType: "text", fullText: result.fullText, fileUrl: buildDownloadUrl(resource),
           });
         }
         return res.status(200).json({
           success: true,
           previewType: "none",
           message: result.message || "Preview could not be generated for this document.",
-          fileUrl: resource.fileUrl,
+          fileUrl: buildDownloadUrl(resource),
         });
       } catch (extractErr) {
         console.error(`Admin full-text preview failed for resource ${resource._id}:`, extractErr.message);
@@ -164,7 +165,7 @@ async function getResourcePreviewForAdmin(req, res) {
           success: true,
           previewType: "none",
           message: "Preview could not be generated for this document.",
-          fileUrl: resource.fileUrl,
+          fileUrl: buildDownloadUrl(resource),
         });
       }
     }
@@ -178,7 +179,7 @@ async function getResourcePreviewForAdmin(req, res) {
       message: resource.previewType === "image"
         ? "Download the file to review it in full."
         : (resource.previewMessage || "Preview not available for this file type."),
-      fileUrl: resource.fileUrl,
+      fileUrl: buildDownloadUrl(resource),
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not load preview", error: err.message });

@@ -1,6 +1,7 @@
 const fs = require("fs");
 const Resource = require("../models/Resource");
 const timeAgo = require("../utils/timeAgo");
+const buildDownloadUrl = require("../utils/buildDownloadUrl");
 
 const REJECTION_REASONS = [
   "duplicate", "wrong_course", "wrong_dept", "poor_quality",
@@ -28,7 +29,7 @@ function shapeAdminResource(r, extra = {}) {
     session: r.session,
     description: r.description,
     fileExtension: r.fileExtension,
-    fileUrl: r.fileUrl,
+    fileUrl: buildDownloadUrl(r),
     size: formatFileSize(r.fileSizeBytes),
     downloads: r.downloads,
     uploader: r.uploader?.fullName || "Unknown",

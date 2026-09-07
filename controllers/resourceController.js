@@ -69,6 +69,7 @@ async function uploadResource(req, res) {
     const cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
       resource_type: "raw",
       folder: "sharef_resources",
+      access_mode: "public",
     });
 
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless

@@ -230,55 +230,6 @@ button {
   flex-shrink: 0;
 }
 
-.momentum-widget {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  border-radius: var(--radius-md);
-  padding: 0.85rem;
-  margin-top: 1rem;
-}
-.momentum-ring {
-  --pct: 68;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: conic-gradient(
-    var(--purple) calc(var(--pct, 0) * 1%),
-    rgba(255, 255, 255, 0.06) 0%
-  );
-  position: relative;
-}
-.momentum-ring::before {
-  content: "";
-  position: absolute;
-  inset: 4px;
-  border-radius: 50%;
-  background: #0c0a14;
-}
-.momentum-ring span {
-  position: relative;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--purple-soft);
-}
-.momentum-text h4 {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-pure);
-  margin-bottom: 0.1rem;
-}
-.momentum-text p {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
 .scrim {
   display: none;
   position: fixed;
@@ -1410,6 +1361,18 @@ button {
   font-size: 0.75rem;
   color: var(--text-faint);
   margin-bottom: 0.75rem;
+}
+
+/* Overrides .wallet-hint specifically for the document preview snippet in
+   the download-confirmation modal — everywhere else .wallet-hint is a
+   short one-line caption, but this one can hold a full extracted PDF/DOCX
+   page-1 snippet and shouldn't grow the whole modal to fit it. */
+#downloadModalPreview {
+  display: block;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
 }
 
 /* Document preview box: shows either a cropped top-half-of-page-1 image

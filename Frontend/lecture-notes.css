@@ -668,6 +668,10 @@
   text-align: center;
   line-height: 1.5;
   margin-bottom: 1.5rem;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
 }
 
 .preview-modal-actions {

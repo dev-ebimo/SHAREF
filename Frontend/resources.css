@@ -533,6 +533,11 @@
   font-style: italic;
   line-height: 1.55;
   margin-bottom: 1rem;
+  max-height: 140px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  word-break: break-word;
+  padding-right: 0.35rem; /* keeps text clear of the scrollbar */
 }
 .preview-doc-snippet.hidden {
   display: none;
