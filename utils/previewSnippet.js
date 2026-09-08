@@ -51,8 +51,11 @@ const NO_PREVIEW_MESSAGE = "A text preview isn't available for this file type.";
 // Above this size, skip pdf-parse entirely and degrade to "no preview"
 // (the same outcome an unsupported type like .zip already gets) rather
 // than risk the crash. This only affects the optional inline preview —
-// upload, payment, and download all still work at any size up to the
-// 20MB upload cap.
+// upload, payment, and download all still work regardless of file size.
+// Note: this also still matters for any resource uploaded before the
+// app's own upload cap (see middleware/uploadMiddleware.js) was lowered —
+// those larger files are already stored and can still hit this path when
+// an admin opens their preview.
 const MAX_PDF_EXTRACTION_BYTES = 8 * 1024 * 1024; // 8MB
 
 // Runs a PDFParse extraction and always tears the parser down afterwards

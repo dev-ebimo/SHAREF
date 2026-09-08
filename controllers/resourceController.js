@@ -108,6 +108,24 @@ async function uploadResource(req, res) {
       return res.status(422).json({ success: false, message: err.message });
     }
     console.error(`Upload failed for "${req.file?.originalname}" (${req.file?.size} bytes):`, err.stack || err.message);
+
+    // Cloudinary enforces its own account-level maximum file size,
+    // independent of and possibly smaller than this app's own upload cap
+    // (see the uploadMiddleware.js fileSize limit). Its error for that is
+    // always exactly this shape: "File size too large. Got <bytes>.
+    // Maximum is <bytes>." — recognizable and safe to surface directly,
+    // since it's actionable operational info, not a security-sensitive
+    // detail. Without this check, a file that passes this app's own limit
+    // but exceeds Cloudinary's would silently fail as a generic,
+    // unhelpful "Upload failed" after the user has already waited through
+    // the entire upload.
+    if (typeof err.message === "string" && /File size too large\. Got \d+\. Maximum is \d+\./.test(err.message)) {
+      return res.status(413).json({
+        success: false,
+        message: "This file is too large for our current storage plan. Please try a smaller file or contact the site admin.",
+      });
+    }
+
     return res.status(500).json({ success: false, message: "Upload failed", error: sanitizeError(err) });
   }
 }

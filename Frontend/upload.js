@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const stateProgress = document.getElementById('uploadStateProgress');
     const stateSuccess = document.getElementById('uploadStateSuccess');
     
-    const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+    const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB — must match middleware/uploadMiddleware.js on the server
     const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'];
 
     let currentFile = null;
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Validate Size
         if (file.size > MAX_FILE_SIZE) {
-            showFileError('File exceeds the 20MB maximum size limit.');
+            showFileError('File exceeds the 8MB maximum size limit.');
             return;
         }
 

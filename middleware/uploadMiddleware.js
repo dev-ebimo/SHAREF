@@ -26,7 +26,7 @@ function fileFilter(req, file, cb) {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB — kept comfortably under Cloudinary's free-tier 10MB per-file cap (see errorHandler.js and resourceController.js for what happens if that's ever exceeded anyway). Raise this back to 20MB once/if the Cloudinary account is upgraded to a plan that accepts larger files.
 });
 
 module.exports = upload;
