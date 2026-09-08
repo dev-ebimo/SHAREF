@@ -1,7 +1,7 @@
 const fs = require("fs");
 const Resource = require("../models/Resource");
 const timeAgo = require("../utils/timeAgo");
-const buildDownloadUrl = require("../utils/buildDownloadUrl");
+const { buildDownloadStreamUrl } = require("../utils/downloadToken");
 
 const REJECTION_REASONS = [
   "duplicate", "wrong_course", "wrong_dept", "poor_quality",
@@ -17,7 +17,7 @@ function formatDate(date) {
   return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function shapeAdminResource(r, extra = {}) {
+function shapeAdminResource(r, req, extra = {}) {
   return {
     id: r._id,
     title: r.title,
@@ -29,7 +29,7 @@ function shapeAdminResource(r, extra = {}) {
     session: r.session,
     description: r.description,
     fileExtension: r.fileExtension,
-    fileUrl: buildDownloadUrl(r),
+    fileUrl: buildDownloadStreamUrl(req, r._id, req.user.id),
     size: formatFileSize(r.fileSizeBytes),
     downloads: r.downloads,
     uploader: r.uploader?.fullName || "Unknown",
@@ -104,7 +104,7 @@ async function getApprovedResources(req, res) {
 
     return res.status(200).json({
       success: true,
-      resources: resources.map((r) => shapeAdminResource(r)),
+      resources: resources.map((r) => shapeAdminResource(r, req)),
       totalApproved: totalApprovedOverall,
       pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
     });
@@ -152,7 +152,7 @@ async function getRejectedResources(req, res) {
 
     return res.status(200).json({
       success: true,
-      resources: resources.map((r) => shapeAdminResource(r, { rejectionReason: r.rejectionReason })),
+      resources: resources.map((r) => shapeAdminResource(r, req, { rejectionReason: r.rejectionReason })),
       totalRejected: totalRejectedOverall,
       pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
     });
@@ -171,7 +171,7 @@ async function getResourceDetails(req, res) {
 
     if (!resource) return res.status(404).json({ success: false, message: "Resource not found" });
 
-    return res.status(200).json({ success: true, resource: shapeAdminResource(resource, { rejectionReason: resource.rejectionReason }) });
+    return res.status(200).json({ success: true, resource: shapeAdminResource(resource, req, { rejectionReason: resource.rejectionReason }) });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch resource", error: err.message });
   }

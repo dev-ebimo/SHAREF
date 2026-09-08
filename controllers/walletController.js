@@ -4,7 +4,7 @@ const Transaction = require("../models/Transaction");
 const Resource = require("../models/Resource");
 const DownloadLog = require("../models/DownloadLog");
 const calculateResourceCost = require("../utils/pricing");
-const buildDownloadUrl = require("../utils/buildDownloadUrl");
+const { buildDownloadStreamUrl } = require("../utils/downloadToken");
 
 const { initializeTransaction, verifyTransaction } = require("../services/paystackService");
 
@@ -169,7 +169,12 @@ async function chargeForDownload(req, res) {
       resource.downloads += 1;
       await resource.save();
       await DownloadLog.create({ user: req.user.id, resource: resourceId });
-      return res.status(200).json({ success: true, alreadyOwned: true, fileUrl: buildDownloadUrl(resource), message: "Download starting" });
+      return res.status(200).json({
+        success: true,
+        alreadyOwned: true,
+        fileUrl: buildDownloadStreamUrl(req, resourceId, req.user.id),
+        message: "Download starting",
+      });
     }
 
     const cost = calculateResourceCost(resource.pages);
@@ -204,7 +209,7 @@ async function chargeForDownload(req, res) {
     return res.status(200).json({
       success: true,
       alreadyOwned: false,
-      fileUrl: buildDownloadUrl(resource),
+      fileUrl: buildDownloadStreamUrl(req, resourceId, req.user.id),
       newBalance: user.walletBalance,
       message: "Payment successful, download starting",
     });
