@@ -107,6 +107,7 @@ async function uploadResource(req, res) {
     if (err.isPageCountError) {
       return res.status(422).json({ success: false, message: err.message });
     }
+    console.error(`Upload failed for "${req.file?.originalname}" (${req.file?.size} bytes):`, err.stack || err.message);
     return res.status(500).json({ success: false, message: "Upload failed", error: sanitizeError(err) });
   }
 }

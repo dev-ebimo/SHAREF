@@ -39,6 +39,22 @@ const MAX_SNIPPET_CHARS = 1000;
 
 const NO_PREVIEW_MESSAGE = "A text preview isn't available for this file type.";
 
+// pdf-parse runs the full pdf.js engine, which has to parse a PDF's entire
+// internal structure to extract text from ANY page — including just page
+// 1 — since there's no way to know where page 1 ends without first
+// reading the document's cross-reference table. For a large or
+// structurally complex PDF (many embedded fonts/images, scanned pages),
+// that parsed in-memory representation can run to several times the raw
+// file size. On a memory-constrained host, that's enough to crash the
+// whole process — which drops the connection outright rather than
+// returning a clean error, since the process itself goes down mid-request.
+// Above this size, skip pdf-parse entirely and degrade to "no preview"
+// (the same outcome an unsupported type like .zip already gets) rather
+// than risk the crash. This only affects the optional inline preview —
+// upload, payment, and download all still work at any size up to the
+// 20MB upload cap.
+const MAX_PDF_EXTRACTION_BYTES = 8 * 1024 * 1024; // 8MB
+
 // Runs a PDFParse extraction and always tears the parser down afterwards
 // (it holds pdf.js worker resources) whether extraction succeeded or not.
 // `pageNumbers`, when given, limits extraction to those 1-indexed pages —
@@ -79,6 +95,9 @@ async function getPreviewSnippet(fileBuffer, originalName) {
 
     if (ext === ".pdf") {
       if (!PDFParse) return { available: false, message: NO_PREVIEW_MESSAGE };
+      if (fileBuffer.length > MAX_PDF_EXTRACTION_BYTES) {
+        return { available: false, message: NO_PREVIEW_MESSAGE };
+      }
 
       // Real page boundaries, unlike the word-count approximation DOCX
       // needs — [1] extracts only page 1's text rather than parsing the
@@ -125,6 +144,9 @@ async function getFullText(fileBuffer, originalName) {
 
     if (ext === ".pdf") {
       if (!PDFParse) return { available: false, message: NO_PREVIEW_MESSAGE };
+      if (fileBuffer.length > MAX_PDF_EXTRACTION_BYTES) {
+        return { available: false, message: NO_PREVIEW_MESSAGE };
+      }
 
       // No page restriction here — admin review gets the whole document,
       // same as DOCX/PPTX above.
