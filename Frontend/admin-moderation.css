@@ -423,6 +423,10 @@ button {
   background: var(--red);
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.8);
+  display: none; /* shown only by admin-shared.js, once it confirms a genuine unread notification exists */
+}
+.badge-dot.is-visible {
+  display: block;
 }
 
 .avatar-frame {

@@ -429,6 +429,10 @@ button {
   background: var(--red);
   border-radius: 50%;
   box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.8);
+  display: none; /* shown only by dashboard.js, once it confirms a genuine unread notification exists */
+}
+.badge-dot.is-visible {
+  display: block;
 }
 
 .avatar-frame {
@@ -1568,8 +1572,14 @@ button {
 }
 
 @media (max-width: 480px) {
-  .wallet-chip span {
-    display: none; /* icon only on very small screens, chip still tappable */
+  .wallet-chip {
+    gap: 0.3rem;
+    padding: 0.45rem 0.65rem;
+    font-size: 0.72rem;
+  }
+  .wallet-chip svg {
+    width: 13px;
+    height: 13px;
   }
   .wallet-modal {
     padding: 1.5rem;

@@ -61,7 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const countUnread = document.getElementById('countUnread');
   const countRead = document.getElementById('countRead');
   const unreadInsightCount = document.getElementById('unreadInsightCount');
-  const sidebarNotifCount = document.getElementById('sidebarNotifCount');
   const markAllReadBtn = document.getElementById('markAllReadBtn');
   const tabButtons = document.querySelectorAll('.tab-btn');
 
@@ -75,10 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
     countUnread.textContent = unreadItems.length;
     countRead.textContent = readItems.length;
     unreadInsightCount.textContent = unreadItems.length;
-    if (sidebarNotifCount) {
-      sidebarNotifCount.textContent = unreadItems.length;
-      sidebarNotifCount.style.display = unreadItems.length > 0 ? 'inline-block' : 'none';
-    }
     markAllReadBtn.disabled = unreadItems.length === 0;
   }
 

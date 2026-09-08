@@ -34,6 +34,63 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   })();
 
+  // Every page ships the same static "Ebimotimi Shadrack" placeholder in
+  // its account-menu dropdown — replace it with the logged-in user's real
+  // name, the same way updateAvatarInitials above replaces "EB". Also
+  // updates dashboard.html's greeting heading specifically (the only page
+  // that has one), with a time-of-day-appropriate "Good morning/afternoon/
+  // evening" instead of a hardcoded "Good evening".
+  (function updateNameAndGreeting() {
+    if (!currentUser || !currentUser.fullName) return;
+    var fullName = currentUser.fullName.trim();
+    var firstName = fullName.split(/\s+/)[0];
+
+    document.querySelectorAll(".account-dropdown-identity h4").forEach(function (el) {
+      el.textContent = fullName;
+    });
+    var trigger = document.getElementById("accountMenuTrigger");
+    if (trigger) trigger.setAttribute("aria-label", "Account menu for " + fullName);
+
+    var greetingEl = document.getElementById("dashboardGreeting");
+    if (greetingEl) {
+      var hour = new Date().getHours();
+      var timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+      greetingEl.textContent = timeGreeting + ", " + firstName + ".";
+    }
+  })();
+
+  // Every page ships its notification bell with a hardcoded, always-visible
+  // red badge dot (and a stale "3 unread" aria-label) — replace both with
+  // the real unread state. Defaults to hidden (see dashboard.css) and is
+  // only revealed here once the actual notification list confirms at
+  // least one unread item; a failed fetch just leaves it hidden rather
+  // than risking a wrong badge.
+  (function updateNotificationBadge() {
+    var badgeEls = document.querySelectorAll(".badge-dot");
+    var bellLink = document.querySelector(".icon-btn-badge");
+    if (badgeEls.length === 0 && !bellLink) return;
+
+    authFetch(API_BASE + "/notifications/mine")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) return;
+        var unreadCount = data.notifications.filter(function (n) { return n.unread; }).length;
+
+        badgeEls.forEach(function (el) {
+          el.classList.toggle("is-visible", unreadCount > 0);
+        });
+        if (bellLink) {
+          bellLink.setAttribute(
+            "aria-label",
+            unreadCount > 0 ? "Notifications, " + unreadCount + " unread" : "Notifications, no unread"
+          );
+        }
+      })
+      .catch(function (err) {
+        console.error("Could not fetch notification status:", err);
+      });
+  })();
+
   // ==========================================================================
   // "COMPLETE YOUR PROFILE" PROMPT
   //    Signup now only collects fullName/email/password — department, level,
