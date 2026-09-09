@@ -872,6 +872,64 @@ button {
   display: none;
 }
 
+/* --- Empty state (Recently Added, when nothing was added in 7 days) ---
+   Same visual language as the empty states on bookmarks.html/my-uploads.html. */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: var(--surface-01);
+  border: 1px dashed var(--border-hair);
+  border-radius: var(--radius-lg);
+}
+.empty-state.hidden {
+  display: none;
+}
+.empty-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0 auto 1.1rem;
+  border-radius: 50%;
+  background: var(--surface-02);
+  border: 1px solid var(--border-hair);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+}
+.empty-icon svg {
+  width: 26px;
+  height: 26px;
+}
+.empty-state h3 {
+  color: var(--text-pure);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.empty-state p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin-bottom: 1.5rem;
+}
+.btn-primary-sm {
+  display: inline-block;
+  background: var(--purple);
+  color: #fff;
+  text-decoration: none;
+  padding: 0.65rem 1.3rem;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.87rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s var(--ease-snap);
+}
+.btn-primary-sm:hover {
+  background: #b55fe6;
+  transform: translateY(-1px);
+}
+
 /* --- MINIMALIST FEED SEE MORE BUTTON --- */
 .feed-more-trigger-container {
   display: flex;

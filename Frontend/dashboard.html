@@ -443,69 +443,62 @@
         <main class="main-workspace" id="main-content">
           <header class="workspace-header">
             <h1 id="dashboardGreeting">Good evening, Ebimotimi.</h1>
-            <p class="contextual-insight">
-              What would you like to study today? •
-              <span>3 new Computer Science resources</span> added today.
-            </p>
           </header>
-
-          <div class="stats-micro-grid">
-            <a href="resources.html" class="stat-badge-link"
-              ><svg
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V4a2 2 0 00-2-2H6.5A2.5 2.5 0 004 4.5v15z"
-                />
-              </svg>
-              <strong>5</strong> Resources waiting</a
-            >
-            <a href="my-uploads.html" class="stat-badge-link"
-              ><svg
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"
-                />
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 10v6m0-6l-2.5 2.5M12 10l2.5 2.5"
-                />
-              </svg>
-              <strong>3</strong> New uploads</a
-            >
-            <a href="community.html" class="stat-badge-link"
-              ><svg
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                />
-              </svg>
-              <strong>No</strong> Active discussions</a
-            >
-          </div>
 
           <section class="dashboard-section" id="continueLearningSection">
             <h2 class="section-title">Continue Learning</h2>
             <div id="continueLearningContainer">
               <!-- Rendered by dashboard.js from GET /api/resources/continue-learning -->
+            </div>
+          </section>
+
+          <section class="dashboard-section" id="trendingSection">
+            <h2 class="section-title">
+              Trending Today
+              <a class="see-all-link" href="resources.html">See all</a>
+            </h2>
+            <div class="resource-grid" id="trendingGrid">
+              <!-- Trending cards are rendered by dashboard.js from GET /api/resources/trending -->
+              <!-- Whole section is hidden by dashboard.js if no trending resources are found -->
+            </div>
+          </section>
+
+          <section class="dashboard-section">
+            <h2 class="section-title">Recently Added</h2>
+            <div class="feed-stack" id="recentFeedStack">
+              <!-- Feed items are rendered by dashboard.js from GET /api/resources/recent -->
+            </div>
+
+            <!-- Shown instead of the feed above when nothing was added in
+                 the last 7 days -->
+            <div class="empty-state hidden" id="recentFeedEmptyState">
+              <div class="empty-icon" aria-hidden="true">
+                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <h3>You're up to date</h3>
+              <p>Browse for more resources to keep learning.</p>
+              <a href="resources.html" class="btn-primary-sm">Browse Resources</a>
+            </div>
+
+            <!-- See More interaction panel -->
+            <div class="feed-more-trigger-container">
+              <button
+                class="feed-more-btn"
+                id="feedMoreBtn"
+                aria-label="Load more recently added items"
+              >
+                <span>See more updates</span>
+                <svg
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  viewBox="0 0 24 24"
+                >
+                  <path d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
             </div>
           </section>
 
@@ -547,42 +540,6 @@
                 </svg>
                 <span>Bookmarks</span>
               </a>
-            </div>
-          </section>
-
-          <section class="dashboard-section">
-            <h2 class="section-title">
-              Trending Today
-              <a class="see-all-link" href="resources.html">See all</a>
-            </h2>
-            <div class="resource-grid" id="trendingGrid">
-              <!-- Trending cards are rendered by dashboard.js from GET /api/resources/trending -->
-            </div>
-          </section>
-
-          <section class="dashboard-section">
-            <h2 class="section-title">Recently Added</h2>
-            <div class="feed-stack" id="recentFeedStack">
-              <!-- Feed items are rendered by dashboard.js from GET /api/resources/recent -->
-            </div>
-
-            <!-- See More interaction panel -->
-            <div class="feed-more-trigger-container">
-              <button
-                class="feed-more-btn"
-                id="feedMoreBtn"
-                aria-label="Load more recently added items"
-              >
-                <span>See more updates</span>
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
             </div>
           </section>
         </main>

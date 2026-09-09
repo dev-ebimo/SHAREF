@@ -25,12 +25,16 @@ function shapeResource(r) {
 }
 
 // @route GET /api/resources/recent
-// Powers the "Recently Added" feed on the dashboard
+// Powers the "Recently Added" feed on the dashboard — only resources
+// uploaded in the last 7 days. If nothing was added that recently, the
+// frontend shows an empty state rather than falling back to older items,
+// so "Recently Added" doesn't quietly become "Added at some point".
 async function getRecentFeed(req, res) {
   try {
     const limit = Number(req.query.limit) || 10;
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const resources = await Resource.find({ status: "approved" })
+    const resources = await Resource.find({ status: "approved", createdAt: { $gte: sevenDaysAgo } })
       .sort({ createdAt: -1 })
       .limit(limit);
 
@@ -41,14 +45,34 @@ async function getRecentFeed(req, res) {
 }
 
 // @route GET /api/resources/trending
-// Powers the Trending resource cards — most downloaded in the last 7 days
+// Powers the Trending resource cards — most downloaded in the last 3 days,
+// scoped to the logged-in student's own department. A student with no
+// department set yet (profile incomplete) has no "specific department" to
+// scope to, so they just see an empty list — the frontend hides the
+// section entirely rather than showing trending data from departments
+// that aren't theirs.
 async function getTrending(req, res) {
   try {
     const limit = Number(req.query.limit) || 6;
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const department = req.user.department;
+
+    if (!department) {
+      return res.status(200).json({ success: true, resources: [] });
+    }
+
+    // Scope to this department's resources first, then rank by recent
+    // download activity within just that set — a resource from another
+    // department should never edge out an in-department one just because
+    // it has more total downloads.
+    const departmentResourceIds = await Resource.find({ status: "approved", department }).distinct("_id");
+
+    if (departmentResourceIds.length === 0) {
+      return res.status(200).json({ success: true, resources: [] });
+    }
 
     const trendingIds = await DownloadLog.aggregate([
-      { $match: { createdAt: { $gte: sevenDaysAgo } } },
+      { $match: { createdAt: { $gte: threeDaysAgo }, resource: { $in: departmentResourceIds } } },
       { $group: { _id: "$resource", recentDownloads: { $sum: 1 } } },
       { $sort: { recentDownloads: -1 } },
       { $limit: limit },

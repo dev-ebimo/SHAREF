@@ -248,7 +248,9 @@ document.addEventListener("DOMContentLoaded", function () {
   // 2. RECENTLY ADDED + TRENDING — real data from the backend
   // ==========================================================================
   var recentFeedStack = document.getElementById("recentFeedStack");
+  var recentFeedEmptyState = document.getElementById("recentFeedEmptyState");
   var feedMoreBtn = document.getElementById("feedMoreBtn");
+  var trendingSection = document.getElementById("trendingSection");
   var trendingGrid = document.getElementById("trendingGrid");
 
   // Shared with section 7 (download modal) so it can look up a resource's
@@ -272,6 +274,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function renderRecentFeed(resources) {
     if (!recentFeedStack) return;
+
+    if (resources.length === 0) {
+      recentFeedStack.innerHTML = "";
+      recentFeedStack.classList.add("hidden");
+      if (recentFeedEmptyState) recentFeedEmptyState.classList.remove("hidden");
+      if (feedMoreBtn) feedMoreBtn.style.display = "none";
+      return;
+    }
+
+    recentFeedStack.classList.remove("hidden");
+    if (recentFeedEmptyState) recentFeedEmptyState.classList.add("hidden");
     recentFeedStack.innerHTML = "";
 
     resources.forEach(function (resource, index) {
@@ -299,6 +312,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function renderTrending(resources, bookmarkedIds) {
     if (!trendingGrid) return;
+
+    if (resources.length === 0) {
+      if (trendingSection) trendingSection.style.display = "none";
+      return;
+    }
+    if (trendingSection) trendingSection.style.display = "";
+
     trendingGrid.innerHTML = "";
     bookmarkedIds = bookmarkedIds || [];
 
