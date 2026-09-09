@@ -90,6 +90,8 @@ document.addEventListener("DOMContentLoaded", function () {
   // ==========================================================================
   var searchInput = document.getElementById("resourceSearchInput");
   if (initialSearch) searchInput.value = initialSearch;
+  var filterToggleBtn = document.getElementById("filterToggleBtn");
+  var resourcesFilterBar = document.getElementById("resourcesFilterBar");
   var departmentSelect = document.getElementById("filterDepartment");
   var courseSelect = document.getElementById("filterCourse");
   var semesterSelect = document.getElementById("filterSemester");
@@ -410,6 +412,18 @@ document.addEventListener("DOMContentLoaded", function () {
 
   clearFiltersBtn.addEventListener("click", resetAllFilters);
   clearFiltersInline.addEventListener("click", resetAllFilters);
+
+  // Mobile-only filter toggle — see resources.css for the hide-by-default
+  // behavior this controls. On desktop this button is display:none, so
+  // clicking it is impossible there and the filter bar just stays visible
+  // as it always has.
+  if (filterToggleBtn && resourcesFilterBar) {
+    filterToggleBtn.addEventListener("click", function () {
+      var isNowVisible = resourcesFilterBar.classList.toggle("is-visible");
+      filterToggleBtn.classList.toggle("is-active", isNowVisible);
+      filterToggleBtn.setAttribute("aria-expanded", String(isNowVisible));
+    });
+  }
 
   prevPageBtn.addEventListener("click", function () {
     if (state.page > 1) {

@@ -91,6 +91,18 @@
 }
 
 /* --------------------------------------------------------------------------
+   MOBILE FILTER TOGGLE
+   Hidden entirely on desktop — the filter bar there behaves exactly as
+   before. Below the 860px breakpoint (same one the sidebar hamburger
+   already uses site-wide), this button appears and the filter bar starts
+   hidden by default, so resources are the first thing visible on
+   entering the page rather than a full screen of dropdowns.
+   -------------------------------------------------------------------------- */
+.filter-toggle-btn {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
    VIEW TOGGLE (All Resources / Recently Added)
    -------------------------------------------------------------------------- */
 .view-toggle-group {
@@ -647,6 +659,47 @@
   }
   .resource-grid-large {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .filter-toggle-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    height: 44px;
+    margin-bottom: 1.25rem;
+    background: var(--surface-01);
+    border: 1px solid var(--border-hair);
+    border-radius: 10px;
+    color: var(--text-pure);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .filter-toggle-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .filter-toggle-btn.is-active {
+    border-color: rgba(168, 85, 247, 0.55);
+    background: var(--surface-02);
+    color: var(--purple-soft);
+  }
+
+  /* Hidden by default on mobile — revealed only once .is-visible is
+     toggled on by resources.js. The grid-template-columns rules below
+     (700px/480px) still apply once it's visible; this just controls
+     whether it takes up space at all. */
+  .resources-filter-bar {
+    display: none;
+  }
+  .resources-filter-bar.is-visible {
+    display: grid;
   }
 }
 

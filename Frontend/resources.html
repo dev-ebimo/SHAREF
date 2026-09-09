@@ -442,8 +442,26 @@
             />
           </div>
 
+          <!-- Mobile-only: filters are hidden by default below the search
+               bar on small screens (see resources.css) so resources are
+               the first thing visible on entering the page, not a wall of
+               dropdowns. Desktop is unaffected — this button stays hidden
+               there and the filter bar stays visible as always. -->
+          <button
+            type="button"
+            class="filter-toggle-btn"
+            id="filterToggleBtn"
+            aria-expanded="false"
+            aria-controls="resourcesFilterBar"
+          >
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18l-7 8v6l-4 2v-8L3 4z" />
+            </svg>
+            <span>Filters</span>
+          </button>
+
           <!-- FILTERS -->
-          <div class="resources-filter-bar">
+          <div class="resources-filter-bar" id="resourcesFilterBar">
             <div class="filter-field">
               <label for="filterDepartment">Department</label>
               <select id="filterDepartment">

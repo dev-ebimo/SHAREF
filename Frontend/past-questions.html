@@ -271,8 +271,25 @@
             <input type="text" id="pqSearch" placeholder="Search course code (e.g., CSC 201, MTH 102)..." autocomplete="off" />
           </div>
 
+          <!-- Mobile-only: filters are hidden by default below the search
+               bar on small screens (see past-questions.css) so resources
+               are the first thing visible on entering the page, not a
+               wall of dropdowns. Desktop is unaffected. -->
+          <button
+            type="button"
+            class="filter-toggle-btn"
+            id="filterToggleBtn"
+            aria-expanded="false"
+            aria-controls="pqFilterBar"
+          >
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18l-7 8v6l-4 2v-8L3 4z" />
+            </svg>
+            <span>Filters</span>
+          </button>
+
           <!-- FILTERS -->
-          <div class="pq-filter-bar">
+          <div class="pq-filter-bar" id="pqFilterBar">
             <div class="filter-field">
               <label for="sessionFilter">Session</label>
               <select id="sessionFilter">

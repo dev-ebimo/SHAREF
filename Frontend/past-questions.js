@@ -46,6 +46,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const resultsCounter = document.getElementById("resultsCounter");
 
   const searchInput = document.getElementById("pqSearch");
+  const filterToggleBtn = document.getElementById("filterToggleBtn");
+  const pqFilterBar = document.getElementById("pqFilterBar");
   const sessionFilter = document.getElementById("sessionFilter");
   const semesterFilter = document.getElementById("semesterFilter");
   const levelFilter = document.getElementById("levelFilter");
@@ -106,6 +108,18 @@ document.addEventListener("DOMContentLoaded", () => {
   [sessionFilter, semesterFilter, levelFilter, sortOrder].forEach((el) => {
     el.addEventListener("input", fetchPastQuestions);
   });
+
+  // Mobile-only filter toggle — see past-questions.css for the
+  // hide-by-default behavior this controls. On desktop this button is
+  // display:none, so clicking it is impossible there and the filter bar
+  // just stays visible as it always has.
+  if (filterToggleBtn && pqFilterBar) {
+    filterToggleBtn.addEventListener("click", () => {
+      const isNowVisible = pqFilterBar.classList.toggle("is-visible");
+      filterToggleBtn.classList.toggle("is-active", isNowVisible);
+      filterToggleBtn.setAttribute("aria-expanded", String(isNowVisible));
+    });
+  }
 
   // The static info-strip only ships with Size / Pages / Downloads — this
   // adds a matching "Price" item once, dynamically, so no HTML edit is
