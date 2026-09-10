@@ -1,9 +1,14 @@
 const Transaction = require("../models/Transaction");
 
+const ACTIVE_WINDOW_DAYS = 7;
+
 // @route GET /api/admin/transactions/summary
-// Powers the category-breakdown cards (Active/Suspended/Inactive)
+// Powers the category-breakdown cards (Active/Suspended/Inactive) and the
+// overview stat cards (Total Deposit Volume, Total Spent, etc).
 async function getTransactionSummary(req, res) {
   try {
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+
     const results = await Transaction.aggregate([
       {
         $lookup: {
@@ -15,8 +20,35 @@ async function getTransactionSummary(req, res) {
       },
       { $unwind: "$userInfo" },
       {
+        $addFields: {
+          // Same rule as adminUserController.js's getUsers/getUserProfile:
+          // suspension (an explicit admin action) always wins; otherwise a
+          // student who hasn't logged in within the active window is
+          // "inactive". Computed here rather than read off a stored
+          // field, since accountStatus itself never actually holds
+          // "inactive" — nothing else in the app writes that value.
+          effectiveStatus: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$userInfo.accountStatus", "suspended"] }, then: "suspended" },
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$userInfo.lastLoginAt", null] },
+                      { $lt: ["$userInfo.lastLoginAt", activeSince] },
+                    ],
+                  },
+                  then: "inactive",
+                },
+              ],
+              default: "active",
+            },
+          },
+        },
+      },
+      {
         $group: {
-          _id: { $ifNull: ["$userInfo.accountStatus", "active"] },
+          _id: "$effectiveStatus",
           count: { $sum: 1 },
           users: { $addToSet: "$user" },
           volume: {
@@ -28,23 +60,36 @@ async function getTransactionSummary(req, res) {
               ],
             },
           },
+          spent: {
+            $sum: {
+              $cond: [
+                { $and: [{ $eq: ["$type", "purchase"] }, { $eq: ["$status", "successful"] }] },
+                "$amount",
+                0,
+              ],
+            },
+          },
         },
       },
     ]);
 
     const summary = {
-      active: { volume: 0, count: 0, users: 0 },
-      suspended: { volume: 0, count: 0, users: 0 },
-      inactive: { volume: 0, count: 0, users: 0 },
+      active: { volume: 0, spent: 0, count: 0, users: 0 },
+      suspended: { volume: 0, spent: 0, count: 0, users: 0 },
+      inactive: { volume: 0, spent: 0, count: 0, users: 0 },
     };
 
     results.forEach((r) => {
       if (summary[r._id]) {
-        summary[r._id] = { volume: r.volume, count: r.count, users: r.users.length };
+        summary[r._id] = { volume: r.volume, spent: r.spent, count: r.count, users: r.users.length };
       }
     });
 
-    return res.status(200).json({ success: true, summary });
+    // Site-wide totals across all categories, for the overview stat cards.
+    const totalDepositVolume = summary.active.volume + summary.suspended.volume + summary.inactive.volume;
+    const totalSpentVolume = summary.active.spent + summary.suspended.spent + summary.inactive.spent;
+
+    return res.status(200).json({ success: true, summary, totalDepositVolume, totalSpentVolume });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch summary", error: err.message });
   }
@@ -55,9 +100,10 @@ async function getTransactionSummary(req, res) {
 async function getTransactions(req, res) {
   try {
     const { search = "", category = "", type = "", status = "", page = 1, limit = 20 } = req.query;
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     const matchConditions = {};
-    if (category) matchConditions["userInfo.accountStatus"] = category;
+    if (category) matchConditions.effectiveStatus = category;
     if (type) matchConditions.type = type;
     if (status) matchConditions.status = status;
     if (search) {
@@ -77,6 +123,30 @@ async function getTransactions(req, res) {
         },
       },
       { $unwind: "$userInfo" },
+      {
+        $addFields: {
+          // Same rule as getTransactionSummary/adminUserController.js —
+          // see the comment there for why this can't just read
+          // userInfo.accountStatus directly.
+          effectiveStatus: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$userInfo.accountStatus", "suspended"] }, then: "suspended" },
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$userInfo.lastLoginAt", null] },
+                      { $lt: ["$userInfo.lastLoginAt", activeSince] },
+                    ],
+                  },
+                  then: "inactive",
+                },
+              ],
+              default: "active",
+            },
+          },
+        },
+      },
       { $match: matchConditions },
       { $sort: { createdAt: -1 } },
       {
@@ -89,7 +159,7 @@ async function getTransactions(req, res) {
                 id: "$_id",
                 user: "$userInfo.fullName",
                 email: "$userInfo.email",
-                category: "$userInfo.accountStatus",
+                category: "$effectiveStatus",
                 type: 1,
                 amount: 1,
                 status: 1,

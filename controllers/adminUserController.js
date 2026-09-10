@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const Resource = require("../models/Resource");
+const Transaction = require("../models/Transaction");
 
 const ACTIVE_WINDOW_DAYS = 7;
 
@@ -30,6 +31,7 @@ async function getUsers(req, res) {
 
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 20;
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     const matchStage = { role: "student" };
     if (search) {
@@ -41,7 +43,6 @@ async function getUsers(req, res) {
     }
     if (department) matchStage.department = department;
     if (level) matchStage.level = level;
-    if (status) matchStage.accountStatus = status;
 
     const pipeline = [
       { $match: matchStage },
@@ -62,9 +63,33 @@ async function getUsers(req, res) {
           rejectedCount: {
             $size: { $filter: { input: "$uploads", cond: { $eq: ["$$this.status", "rejected"] } } },
           },
+          // Suspension (an explicit admin action) always wins. Otherwise,
+          // a student who hasn't logged in within the active window is
+          // "inactive" — this is computed here rather than stored on
+          // accountStatus itself, so it's always accurate and never goes
+          // stale the way a periodically-updated flag could.
+          effectiveStatus: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$accountStatus", "suspended"] }, then: "suspended" },
+                {
+                  case: {
+                    $or: [
+                      { $eq: ["$lastLoginAt", null] },
+                      { $lt: ["$lastLoginAt", activeSince] },
+                    ],
+                  },
+                  then: "inactive",
+                },
+              ],
+              default: "active",
+            },
+          },
         },
       },
     ];
+
+    if (status) pipeline.push({ $match: { effectiveStatus: status } });
 
     if (contribution === "has_uploads") pipeline.push({ $match: { uploadsCount: { $gt: 0 } } });
     if (contribution === "no_uploads") pipeline.push({ $match: { uploadsCount: 0 } });
@@ -84,6 +109,8 @@ async function getUsers(req, res) {
                 department: 1,
                 level: 1,
                 accountStatus: 1,
+                effectiveStatus: 1,
+                lastLoginAt: 1,
                 uploadsCount: 1,
                 approvedCount: 1,
                 rejectedCount: 1,
@@ -99,7 +126,6 @@ async function getUsers(req, res) {
     const users = result[0].data;
     const total = result[0].totalCount[0]?.count || 0;
 
-    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     const [totalUsers, activeThisWeek, contributorIds] = await Promise.all([
       User.countDocuments({ role: "student" }),
       User.countDocuments({ role: "student", lastLoginAt: { $gte: activeSince } }),
@@ -131,6 +157,31 @@ async function getUserProfile(req, res) {
     const approvalRate = uploadsCount > 0 ? Math.round((approvedCount / uploadsCount) * 100) : 0;
     const totalDownloads = uploads.reduce((sum, u) => sum + (u.downloads || 0), 0);
 
+    // Suspension always wins; otherwise a student who hasn't logged in
+    // within the active window is "inactive" — same rule as getUsers
+    // above, computed here rather than stored, so it's never stale.
+    const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const effectiveStatus = user.accountStatus === "suspended"
+      ? "suspended"
+      : (!user.lastLoginAt || user.lastLoginAt < activeSince) ? "inactive" : "active";
+
+    // Only successful transactions count toward these totals — a pending
+    // or failed deposit was never actually money in the wallet, and a
+    // purchase can't reach "successful" status without the charge having
+    // gone through (see chargeForDownload in walletController.js).
+    const [depositResult, purchaseResult] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { user: user._id, type: "deposit", status: "successful" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Transaction.aggregate([
+        { $match: { user: user._id, type: "purchase", status: "successful" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+    ]);
+    const totalDeposited = depositResult[0]?.total || 0;
+    const totalSpent = purchaseResult[0]?.total || 0;
+
     const recentUploads = uploads.slice(0, 5).map((u) => ({
       title: u.title,
       date: formatShortDate(u.createdAt),
@@ -146,12 +197,16 @@ async function getUserProfile(req, res) {
         department: user.department,
         level: user.level,
         accountStatus: user.accountStatus,
+        effectiveStatus,
+        lastLoginAt: user.lastLoginAt,
         joinedDate: formatJoinDate(user.createdAt),
         uploadsCount,
         approvedCount,
         rejectedCount,
         approvalRate,
         totalDownloads,
+        totalDeposited,
+        totalSpent,
         recentUploads,
       },
     });

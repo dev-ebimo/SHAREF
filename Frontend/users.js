@@ -40,10 +40,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
   }
 
-  function formatNaira(n) {
-    return "₦" + Number(n || 0).toLocaleString("en-NG");
-  }
-
   /* =====================================================================
      USERS TAB
      ===================================================================== */
@@ -138,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${u.uploadsCount}</td>
         <td>${u.approvedCount}</td>
         <td>${u.rejectedCount}</td>
-        <td><span class="status-badge ${u.accountStatus}">${capitalize(u.accountStatus)}</span></td>
+        <td><span class="status-badge ${u.effectiveStatus}">${capitalize(u.effectiveStatus)}</span></td>
         <td><button class="btn-view" onclick="openUserProfile('${u.id}')">View</button></td>
       `;
       userTableBody.appendChild(tr);
@@ -243,6 +239,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const txnTableContainer = txnTableBody.closest("table");
   const txnEmptyState = document.getElementById("txnEmptyState");
   const statTotalVolume = document.getElementById("statTotalVolume");
+  const statTotalSpent = document.getElementById("statTotalSpent");
   const statTotalTxns = document.getElementById("statTotalTxns");
   const statPendingTxns = document.getElementById("statPendingTxns");
   const txnPrevPageBtn = document.getElementById("txnPrevPageBtn");
@@ -260,9 +257,10 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!data.success) return;
         renderCategoryBreakdown(data.summary);
 
-        let totalVolume = 0, totalCount = 0;
-        Object.values(data.summary).forEach((s) => { totalVolume += s.volume; totalCount += s.count; });
+        let totalVolume = 0, totalSpent = 0, totalCount = 0;
+        Object.values(data.summary).forEach((s) => { totalVolume += s.volume; totalSpent += s.spent; totalCount += s.count; });
         if (statTotalVolume) statTotalVolume.textContent = formatNaira(totalVolume);
+        if (statTotalSpent) statTotalSpent.textContent = formatNaira(totalSpent);
         if (statTotalTxns) statTotalTxns.textContent = totalCount.toLocaleString();
       })
       .catch((err) => console.error("Could not load transaction summary:", err));
@@ -416,6 +414,10 @@ function switchUsersTab(tab) {
 }
 
 /* ---- Modal Control Functions ---- */
+function formatNaira(n) {
+  return "₦" + Number(n || 0).toLocaleString("en-NG");
+}
+
 function openUserProfile(userId) {
   window.__currentModalUserId = userId;
 
@@ -465,10 +467,10 @@ function populateUserProfileModal(u) {
   const joinDateEl = modal.querySelector(".join-date");
   if (joinDateEl) joinDateEl.textContent = `Joined ${u.joinedDate}`;
 
-  const statusLabel = u.accountStatus.charAt(0).toUpperCase() + u.accountStatus.slice(1);
+  const statusLabel = u.effectiveStatus.charAt(0).toUpperCase() + u.effectiveStatus.slice(1);
   const headerBadge = modal.querySelector(".profile-header .status-badge");
   if (headerBadge) {
-    headerBadge.className = `status-badge ${u.accountStatus}`;
+    headerBadge.className = `status-badge ${u.effectiveStatus}`;
     headerBadge.textContent = statusLabel;
   }
 
@@ -492,6 +494,11 @@ function populateUserProfileModal(u) {
     statNums[1].textContent = `${u.approvalRate}%`;
     statNums[2].textContent = u.totalDownloads;
   }
+
+  const modalTotalDeposited = document.getElementById("modalTotalDeposited");
+  if (modalTotalDeposited) modalTotalDeposited.textContent = formatNaira(u.totalDeposited);
+  const modalTotalSpent = document.getElementById("modalTotalSpent");
+  if (modalTotalSpent) modalTotalSpent.textContent = formatNaira(u.totalSpent);
 
   const historyList = modal.querySelector(".upload-history");
   if (historyList) {
