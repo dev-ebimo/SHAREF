@@ -29,6 +29,26 @@ function isTokenExpired(token) {
   }
 }
 
+// Called from public-facing pages (currently just index.html) that should
+// send an already-logged-in visitor straight to their dashboard instead of
+// showing the public landing page every time they type the site URL.
+// Tokens are issued with a 7-day expiry by default (see
+// utils/generateToken.js's JWT_EXPIRE), so "not expired" here already
+// means "signed in within the last 7 days" — no separate timestamp needed.
+// Deliberately does NOT touch localStorage or redirect anyone away if
+// there's no valid session, unlike requireAuth() — this page is public
+// and should render normally for a logged-out visitor. The moment someone
+// logs out, logout() below clears the token, so their next visit here
+// shows the normal landing page again.
+function redirectIfLoggedIn() {
+  const token = getToken();
+  const user = getCurrentUser();
+
+  if (token && user && !isTokenExpired(token)) {
+    window.location.href = user.role === "admin" ? "admin-moderation.html" : "dashboard.html";
+  }
+}
+
 function logout(redirectTo = "login.html") {
   localStorage.removeItem("token");
   localStorage.removeItem("user");

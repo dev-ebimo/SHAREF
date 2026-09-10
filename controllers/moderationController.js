@@ -7,6 +7,7 @@ const { sendResourceStatusEmail } = require("../services/emailService");
 const timeAgo = require("../utils/timeAgo");
 const { getFullText } = require("../utils/previewSnippet");
 const { buildDownloadStreamUrl } = require("../utils/downloadToken");
+const { startOfTodayInLagos } = require("../utils/lagosDay");
 
 const AGED_THRESHOLD_DAYS = 4;
 
@@ -46,16 +47,22 @@ async function getModerationQueue(req, res) {
       };
     });
 
-    const [pending, approved, rejected] = await Promise.all([
+    const todayStart = startOfTodayInLagos();
+    const [pending, approved, rejected, approvedToday, rejectedToday] = await Promise.all([
       Resource.countDocuments({ status: "pending" }),
       Resource.countDocuments({ status: "approved" }),
       Resource.countDocuments({ status: "rejected" }),
+      Resource.countDocuments({ status: "approved", reviewedAt: { $gte: todayStart } }),
+      Resource.countDocuments({ status: "rejected", reviewedAt: { $gte: todayStart } }),
     ]);
 
     return res.status(200).json({
       success: true,
       queue,
-      stats: { pending, approved, rejected },
+      // approved/rejected stay all-time (Total Resources and the queue
+      // health ring both depend on that), approvedToday/rejectedToday are
+      // the actual "Approved Today"/"Rejected Today" card counts.
+      stats: { pending, approved, rejected, approvedToday, rejectedToday },
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch queue", error: err.message });

@@ -267,8 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateStatsUI() {
         statPending.textContent = stats.pending;
         if (statPendingCard) statPendingCard.textContent = stats.pending;
-        statApproved.textContent = stats.approved;
-        statRejected.textContent = stats.rejected;
+        statApproved.textContent = stats.approvedToday;
+        statRejected.textContent = stats.rejectedToday;
         if (sidebarQueueCount) sidebarQueueCount.textContent = stats.pending;
 
         const statTotalResources = document.getElementById('statTotalResources');

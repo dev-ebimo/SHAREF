@@ -8,6 +8,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="about.css">
+    <!-- Runs before the page paints: sends an already-logged-in visitor
+         straight to their dashboard instead of showing the landing page
+         every time they type the site URL. See auth-guard.js for the
+         logic — logging out clears the session this depends on, so this
+         only applies until someone logs out on their own. -->
+    <script src="auth-guard.js"></script>
+    <script>redirectIfLoggedIn();</script>
 </head>
 <body>
     <!-- Ambient Background Lighting Glows -->
