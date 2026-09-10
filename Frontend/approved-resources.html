@@ -275,11 +275,21 @@
         <main class="main-workspace" id="main-content">
           <header class="workspace-header">
             <h1>Approved Resources</h1>
-            <p class="contextual-insight">
-              <span id="statTotalResources">1,284</span> resources are currently
-              live for students.
-            </p>
           </header>
+
+          <div class="stats-micro-grid">
+            <div class="stat-card approved-stat">
+              <div class="stat-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3>Total Approved</h3>
+                <div class="stat-value" id="statTotalResources">0</div>
+              </div>
+            </div>
+          </div>
 
           <!-- SEARCH, FILTERS & SORTING -->
           <div class="dashboard-controls">

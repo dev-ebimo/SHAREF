@@ -276,11 +276,21 @@
         <main class="main-workspace" id="main-content">
           <header class="workspace-header">
             <h1>Rejected Resources</h1>
-            <p class="contextual-insight">
-              <span id="statTotalRejected">6</span> resources were declined
-              today.
-            </p>
           </header>
+
+          <div class="stats-micro-grid">
+            <div class="stat-card rejected-stat">
+              <div class="stat-icon">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path d="M15 9l-6 6m0-6l6 6m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3>Total Rejected</h3>
+                <div class="stat-value" id="statTotalRejected">0</div>
+              </div>
+            </div>
+          </div>
 
           <!-- SEARCH, FILTERS & SORTING -->
           <div class="dashboard-controls">

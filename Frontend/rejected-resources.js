@@ -4,6 +4,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireLogoutButton();
 
+  // MOBILE NAVIGATION (HAMBURGER MENU) — the button and sidebar markup
+  // were already in the HTML, but nothing ever wired up a click handler,
+  // so it did nothing on mobile. Same logic as admin-moderation.js.
+  const hamburgerBtn = document.getElementById("hamburgerBtn");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+  const scrim = document.getElementById("scrim");
+
+  function openSidebar() {
+    sidebar.classList.add("is-open");
+    scrim.classList.add("is-visible");
+    hamburgerBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeSidebar() {
+    sidebar.classList.remove("is-open");
+    scrim.classList.remove("is-visible");
+    hamburgerBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if (hamburgerBtn) hamburgerBtn.addEventListener("click", openSidebar);
+  if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeSidebar);
+  if (scrim) scrim.addEventListener("click", closeSidebar);
+
   const REASON_LABELS = {
     duplicate: "Duplicate Resource",
     wrong_course: "Wrong Course",
