@@ -4,6 +4,52 @@ document.addEventListener("DOMContentLoaded", () => {
 
   wireLogoutButton();
 
+  // MOBILE NAVIGATION (HAMBURGER MENU) — the button and sidebar markup
+  // were already in the HTML, but nothing ever wired up a click handler,
+  // so it did nothing on mobile. Same logic as admin-moderation.js.
+  const hamburgerBtn = document.getElementById("hamburgerBtn");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+  const scrim = document.getElementById("scrim");
+
+  function openSidebar() {
+    sidebar.classList.add("is-open");
+    scrim.classList.add("is-visible");
+    hamburgerBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeSidebar() {
+    sidebar.classList.remove("is-open");
+    scrim.classList.remove("is-visible");
+    hamburgerBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if (hamburgerBtn) hamburgerBtn.addEventListener("click", openSidebar);
+  if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeSidebar);
+  if (scrim) scrim.addEventListener("click", closeSidebar);
+
+  // ACCOUNT MENU (PROFILE ICON) DROPDOWN — same gap as the hamburger
+  // above: the trigger/panel markup existed, but nothing ever wired up
+  // the click-to-open behavior, so the profile icon did nothing.
+  const accountWrapper = document.getElementById("accountMenuWrapper");
+  const accountTrigger = document.getElementById("accountMenuTrigger");
+  const accountPanel = document.getElementById("accountMenuPanel");
+
+  if (accountTrigger) {
+    accountTrigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = accountWrapper.classList.toggle("is-open");
+      accountTrigger.setAttribute("aria-expanded", String(isOpen));
+      accountPanel.setAttribute("aria-hidden", String(!isOpen));
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (accountWrapper && !accountWrapper.contains(e.target)) {
+      accountWrapper.classList.remove("is-open");
+      accountTrigger?.setAttribute("aria-expanded", "false");
+      accountPanel?.setAttribute("aria-hidden", "true");
+    }
+  });
+
   /* ---- Filter options (departments) ---- */
   const filterDept = document.getElementById("filterDept");
   // Department list grows with real adoption, so this uses the searchable

@@ -27,6 +27,29 @@ document.addEventListener("DOMContentLoaded", () => {
   if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeSidebar);
   if (scrim) scrim.addEventListener("click", closeSidebar);
 
+  // ACCOUNT MENU (PROFILE ICON) DROPDOWN — same gap as the hamburger
+  // above: the trigger/panel markup existed, but nothing ever wired up
+  // the click-to-open behavior, so the profile icon did nothing.
+  const accountWrapper = document.getElementById("accountMenuWrapper");
+  const accountTrigger = document.getElementById("accountMenuTrigger");
+  const accountPanel = document.getElementById("accountMenuPanel");
+
+  if (accountTrigger) {
+    accountTrigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const isOpen = accountWrapper.classList.toggle("is-open");
+      accountTrigger.setAttribute("aria-expanded", String(isOpen));
+      accountPanel.setAttribute("aria-hidden", String(!isOpen));
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (accountWrapper && !accountWrapper.contains(e.target)) {
+      accountWrapper.classList.remove("is-open");
+      accountTrigger?.setAttribute("aria-expanded", "false");
+      accountPanel?.setAttribute("aria-hidden", "true");
+    }
+  });
+
   const REASON_LABELS = {
     duplicate: "Duplicate Resource",
     wrong_course: "Wrong Course",
