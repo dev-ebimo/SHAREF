@@ -83,4 +83,57 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error("Could not fetch notification status:", err);
       });
   })();
+
+  // Every admin page ships a "Log Out" link in the sidebar nav (separate
+  // from the one inside the account-menu dropdown, which wireLogoutButton
+  // in auth-guard.js already handles) — but it's always been a plain
+  // href="#" with nothing wired to it, so clicking it did nothing.
+  (function wireSidebarLogout() {
+    var sidebarLogoutLink = document.querySelector(".menu-link.danger-link");
+    if (sidebarLogoutLink) {
+      sidebarLogoutLink.addEventListener("click", function (e) {
+        e.preventDefault();
+        logout();
+      });
+    }
+  })();
+
+  // Every admin page ships a "Review Queue" sidebar badge and a queue-health
+  // ring widget, both hardcoded to "18" (and a hardcoded "1 item aging 4+
+  // days" caption) — none of that was ever wired to real data except on
+  // admin-moderation.html itself, and even there the aging caption was
+  // never actually updated. This fetches the one lightweight endpoint
+  // that has all three numbers and updates every instance of these
+  // elements, on every page (including moderation — redundant with its
+  // own fuller fetch there, but harmless, and it means this logic only
+  // has to live in one place instead of being duplicated per page).
+  (function updateQueueWidgets() {
+    var countEls = document.querySelectorAll("#sidebarQueueCount");
+    var ringEls = document.querySelectorAll(".queue-health-ring");
+    var agingTextEls = document.querySelectorAll(".queue-health-text p");
+    if (countEls.length === 0 && ringEls.length === 0) return;
+
+    authFetch(API_BASE + "/admin/moderation/pending-count")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) return;
+        var total = data.pending + data.approved + data.rejected;
+        var pct = total > 0 ? Math.round((data.pending / total) * 100) : 0;
+
+        countEls.forEach(function (el) { el.textContent = data.pending; });
+        ringEls.forEach(function (el) {
+          el.style.setProperty("--pct", pct);
+          var label = el.querySelector("span");
+          if (label) label.textContent = data.pending;
+        });
+        agingTextEls.forEach(function (el) {
+          el.textContent = data.agedCount === 1
+            ? "1 item aging 4+ days"
+            : data.agedCount + " items aging 4+ days";
+        });
+      })
+      .catch(function (err) {
+        console.error("Could not fetch pending review count:", err);
+      });
+  })();
 });

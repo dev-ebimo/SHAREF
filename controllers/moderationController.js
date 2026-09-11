@@ -196,6 +196,28 @@ async function getResourcePreviewForAdmin(req, res) {
   }
 }
 
+// @route GET /api/admin/moderation/pending-count
+// Powers the sidebar "Review Queue" badge and queue-health ring that
+// appear on every admin page, not just the moderation queue itself. Kept
+// deliberately separate from getModerationQueue (which returns the full
+// pending list with populated uploader info, file sizes, etc.) — pages
+// that just need to show a number in the sidebar shouldn't have to pay
+// for fetching and populating the entire queue to get it.
+async function getPendingCount(req, res) {
+  try {
+    const fourDaysAgo = new Date(Date.now() - AGED_THRESHOLD_DAYS * 24 * 60 * 60 * 1000);
+    const [pending, approved, rejected, agedCount] = await Promise.all([
+      Resource.countDocuments({ status: "pending" }),
+      Resource.countDocuments({ status: "approved" }),
+      Resource.countDocuments({ status: "rejected" }),
+      Resource.countDocuments({ status: "pending", createdAt: { $lt: fourDaysAgo } }),
+    ]);
+    return res.status(200).json({ success: true, pending, approved, rejected, agedCount });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not load pending count", error: err.message });
+  }
+}
+
 module.exports = {
-  getModerationQueue, approveResource, rejectResource, formatFileSize, getResourcePreviewForAdmin,
+  getModerationQueue, approveResource, rejectResource, formatFileSize, getResourcePreviewForAdmin, getPendingCount,
 };
