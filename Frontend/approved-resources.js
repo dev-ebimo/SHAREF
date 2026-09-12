@@ -235,6 +235,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Toggles the overlay placeholder label (see approved-resources.css) —
+  // hidden once a date is actually picked, since the native input then
+  // shows the chosen date itself; shown again if the filter is cleared.
+  const filterApprovalDatePlaceholder = document.getElementById("filterApprovalDatePlaceholder");
+  if (filterApprovalDatePlaceholder) {
+    const toggleDatePlaceholder = () => {
+      filterApprovalDatePlaceholder.style.display = filterApprovalDate.value ? "none" : "";
+    };
+    filterApprovalDate.addEventListener("change", toggleDatePlaceholder);
+    toggleDatePlaceholder();
+  }
+
   if (prevPageBtn) {
     prevPageBtn.addEventListener("click", () => {
       if (currentPage > 1) { currentPage -= 1; loadApprovedResources(); }

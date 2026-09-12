@@ -1,6 +1,29 @@
 document.addEventListener('DOMContentLoaded', () => {
     if (!currentUser) return; // dashboard.js already ran requireAuth() at the top of the file
 
+    // ACADEMIC SESSION OPTIONS — generated from today's date instead of
+    // hardcoded years, which went stale every single year (this was found
+    // still offering 2025/2026 as the newest option well into 2026).
+    // Nigerian academic sessions typically start around September, so a
+    // session is labelled by the calendar year it starts in — before
+    // September, "this session" is still the one that started last year.
+    (function populateAcademicSessionOptions() {
+        const sessionSelect = document.getElementById('academicSession');
+        if (!sessionSelect) return;
+
+        const now = new Date();
+        const startYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1; // getMonth() is 0-indexed, so 8 = September
+        const SESSIONS_TO_SHOW = 5; // current session plus the last 4
+
+        for (let i = 0; i < SESSIONS_TO_SHOW; i++) {
+            const year = startYear - i;
+            const option = document.createElement('option');
+            option.value = `${year}/${year + 1}`;
+            option.textContent = `${year}/${year + 1}`;
+            sessionSelect.appendChild(option);
+        }
+    })();
+
     // DOM Elements
     const dropZone = document.getElementById('dropZone');
     const fileInput = document.getElementById('fileInput');

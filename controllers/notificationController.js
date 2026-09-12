@@ -10,25 +10,51 @@ async function getNotifications(req, res) {
         path: "resource",
         populate: { path: "uploader", select: "fullName" },
       })
+      .populate("deletedAccountLog")
       .sort({ createdAt: -1 });
 
     const feed = notifications
-      .filter((n) => n.resource) // guard against a resource having been deleted directly
-      .map((n) => ({
-        id: n._id,
-        resourceId: n.resource._id,
-        title: n.resource.title,
-        type: n.resource.type,
-        dept: n.resource.department,
-        course: n.resource.course,
-        level: `${n.resource.level} Level`,
-        semester: n.resource.semester,
-        session: n.resource.session,
-        uploader: n.resource.uploader.fullName,
-        size: formatFileSize(n.resource.fileSizeBytes),
-        timeAgo: timeAgo(n.createdAt),
-        unread: n.unread,
-      }));
+      // Guard against the referenced resource/log having been removed
+      // directly, for whichever kind this notification actually is.
+      .filter((n) => (n.type === "account_deleted" ? n.deletedAccountLog : n.resource))
+      .map((n) => {
+        if (n.type === "account_deleted") {
+          const log = n.deletedAccountLog;
+          return {
+            id: n._id,
+            notifType: n.type,
+            fullName: log.fullName,
+            email: log.email,
+            department: log.department,
+            level: log.level,
+            uploadsCount: log.uploadsCount,
+            totalDeposited: log.totalDeposited,
+            totalSpent: log.totalSpent,
+            deletedAt: timeAgo(log.createdAt),
+            timeAgo: timeAgo(n.createdAt),
+            unread: n.unread,
+          };
+        }
+
+        // Unchanged from before — `type` here is the resource's own
+        // category (e.g. "Past Question"), not the notification's kind.
+        return {
+          id: n._id,
+          notifType: n.type,
+          resourceId: n.resource._id,
+          title: n.resource.title,
+          type: n.resource.type,
+          dept: n.resource.department,
+          course: n.resource.course,
+          level: `${n.resource.level} Level`,
+          semester: n.resource.semester,
+          session: n.resource.session,
+          uploader: n.resource.uploader.fullName,
+          size: formatFileSize(n.resource.fileSizeBytes),
+          timeAgo: timeAgo(n.createdAt),
+          unread: n.unread,
+        };
+      });
 
     return res.status(200).json({ success: true, notifications: feed });
   } catch (err) {
@@ -66,6 +92,9 @@ async function markAllRead(req, res) {
 async function quickPreview(req, res) {
   const notification = await Notification.findById(req.params.id);
   if (!notification) return res.status(404).json({ success: false, message: "Notification not found" });
+  if (!notification.resource) {
+    return res.status(400).json({ success: false, message: "This notification has no associated resource" });
+  }
 
   req.params.id = notification.resource; // reuse getResourcePreviewForAdmin by resource id
   return getResourcePreviewForAdmin(req, res);
@@ -76,6 +105,9 @@ async function quickPreview(req, res) {
 async function quickApprove(req, res) {
   const notification = await Notification.findById(req.params.id);
   if (!notification) return res.status(404).json({ success: false, message: "Notification not found" });
+  if (!notification.resource) {
+    return res.status(400).json({ success: false, message: "This notification has no associated resource" });
+  }
 
   req.params.id = notification.resource; // reuse approveResource by resource id
   return approveResource(req, res);
@@ -85,7 +117,9 @@ async function quickApprove(req, res) {
 async function quickReject(req, res) {
   const notification = await Notification.findById(req.params.id);
   if (!notification) return res.status(404).json({ success: false, message: "Notification not found" });
-
+  if (!notification.resource) {
+    return res.status(400).json({ success: false, message: "This notification has no associated resource" });
+  }
   req.params.id = notification.resource;
   return rejectResource(req, res);
 }

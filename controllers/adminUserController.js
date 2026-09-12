@@ -1,6 +1,7 @@
 const User = require("../models/User");
 const Resource = require("../models/Resource");
 const Transaction = require("../models/Transaction");
+const DeletedAccountLog = require("../models/DeletedAccountLog");
 
 const ACTIVE_WINDOW_DAYS = 7;
 
@@ -252,4 +253,48 @@ async function reactivateUser(req, res) {
   }
 }
 
-module.exports = { getUserFilterOptions, getUsers, getUserProfile, suspendUser, reactivateUser };
+// @route GET /api/admin/users/deleted-log
+// Powers the "Deleted Accounts" tab — a read-only history of accounts
+// that were removed via deleteMyAccount (see userSettingsController.js),
+// each one a snapshot taken right before the actual User document was
+// deleted, since nothing here can be looked up live anymore.
+async function getDeletedAccountLogs(req, res) {
+  try {
+    const { page = 1, limit = 20 } = req.query;
+    const pageNum = Number(page) || 1;
+    const limitNum = Number(limit) || 20;
+
+    const [logs, total] = await Promise.all([
+      DeletedAccountLog.find()
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum),
+      DeletedAccountLog.countDocuments(),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      logs: logs.map((log) => ({
+        id: log._id,
+        fullName: log.fullName,
+        email: log.email,
+        department: log.department,
+        level: log.level,
+        accountStatus: log.accountStatus,
+        joinedAt: log.joinedAt,
+        deletedAt: log.createdAt,
+        walletBalanceAtDeletion: log.walletBalanceAtDeletion,
+        uploadsCount: log.uploadsCount,
+        totalDeposited: log.totalDeposited,
+        totalSpent: log.totalSpent,
+      })),
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: "Could not fetch deleted account logs", error: err.message });
+  }
+}
+
+module.exports = {
+  getUserFilterOptions, getUsers, getUserProfile, suspendUser, reactivateUser, getDeletedAccountLogs,
+};

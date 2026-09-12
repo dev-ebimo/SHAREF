@@ -1,5 +1,8 @@
 const User = require("../models/User");
 const Resource = require("../models/Resource");
+const Transaction = require("../models/Transaction");
+const Notification = require("../models/Notification");
+const DeletedAccountLog = require("../models/DeletedAccountLog");
 const generateOTP = require("../utils/generateOTP");
 const { sendVerificationEmail } = require("../services/emailService");
 
@@ -173,6 +176,43 @@ async function deleteMyAccount(req, res) {
   try {
     const cloudinary = require("../config/cloudinary");
     const userResources = await Resource.find({ uploader: req.user.id });
+
+    // Only successful transactions count toward these totals — matches
+    // the same logic used for the admin-facing per-user totals in
+    // adminUserController.js's getUserProfile.
+    const [depositResult, purchaseResult] = await Promise.all([
+      Transaction.aggregate([
+        { $match: { user: req.user._id, type: "deposit", status: "successful" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Transaction.aggregate([
+        { $match: { user: req.user._id, type: "purchase", status: "successful" } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+    ]);
+
+    // The User document is about to be permanently deleted — capture
+    // everything an admin might need to see later before it's gone.
+    const deletedLog = await DeletedAccountLog.create({
+      fullName: req.user.fullName,
+      email: req.user.email,
+      matricNumber: req.user.matricNumber || "",
+      university: req.user.university || "",
+      department: req.user.department || "",
+      level: req.user.level || "",
+      accountStatus: req.user.accountStatus,
+      joinedAt: req.user.createdAt,
+      walletBalanceAtDeletion: req.user.walletBalance,
+      uploadsCount: userResources.length,
+      totalDeposited: depositResult[0]?.total || 0,
+      totalSpent: purchaseResult[0]?.total || 0,
+    });
+
+    await Notification.create({
+      type: "account_deleted",
+      recipient: null,
+      deletedAccountLog: deletedLog._id,
+    });
 
     for (const r of userResources) {
       // Must match the resource_type the file was actually uploaded with

@@ -85,6 +85,32 @@
   color: var(--text-pure);
 }
 
+/* Overlay placeholder for the date filter — native <input type="date">
+   doesn't support a real placeholder attribute, and mobile Safari in
+   particular shows a completely blank field when empty (desktop browsers
+   at least fall back to "mm/dd/yyyy"). This sits visually on top of the
+   native input and disappears once a date is actually picked (see the
+   input/change listener in the page's own JS file). pointer-events: none
+   ensures clicks always reach the real input underneath, so the native
+   date picker still opens normally. */
+.date-filter-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.date-placeholder {
+  position: absolute;
+  left: 0.9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-lead);
+  font-size: 0.8rem;
+  font-weight: 500;
+  pointer-events: none;
+}
+.date-filter-wrap input[type="date"] {
+  min-width: 150px;
+}
+
 .select-wrap {
   position: relative;
   display: inline-flex;

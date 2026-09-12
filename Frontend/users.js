@@ -284,6 +284,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const txnTableBody = document.getElementById("transactionsTableBody");
   const txnTableContainer = txnTableBody.closest("table");
   const txnEmptyState = document.getElementById("txnEmptyState");
+  const deletedTableBody = document.getElementById("deletedAccountsTableBody");
+  const deletedTableContainer = deletedTableBody.closest("table");
+  const deletedEmptyState = document.getElementById("deletedAccountsEmptyState");
   const statTotalVolume = document.getElementById("statTotalVolume");
   const statTotalSpent = document.getElementById("statTotalSpent");
   const statTotalTxns = document.getElementById("statTotalTxns");
@@ -413,8 +416,59 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function loadDeletedAccounts() {
+    if (!deletedTableBody) return;
+    deletedTableBody.innerHTML = `<tr><td colspan="9" class="table-loading">Loading deleted accounts…</td></tr>`;
+    deletedTableContainer.style.display = "table";
+    deletedEmptyState.style.display = "none";
+
+    authFetch(`${API_BASE}/admin/users/deleted-log`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success) {
+          deletedTableBody.innerHTML = "";
+          return;
+        }
+        renderDeletedAccountsTable(data.logs);
+      })
+      .catch((err) => {
+        console.error("Could not load deleted account logs:", err);
+        deletedTableBody.innerHTML = `<tr><td colspan="9" class="table-error">Could not load deleted accounts. Please refresh the page.</td></tr>`;
+      });
+  }
+
+  function renderDeletedAccountsTable(logs) {
+    deletedTableBody.innerHTML = "";
+
+    if (logs.length === 0) {
+      deletedTableContainer.style.display = "none";
+      deletedEmptyState.style.display = "block";
+      return;
+    }
+
+    deletedTableContainer.style.display = "table";
+    deletedEmptyState.style.display = "none";
+
+    logs.forEach((log) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${log.fullName}</td>
+        <td>${log.email}</td>
+        <td>${log.department || "—"}</td>
+        <td>${log.level || "—"}</td>
+        <td>${log.joinedAt ? new Date(log.joinedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}</td>
+        <td>${new Date(log.deletedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</td>
+        <td>${log.uploadsCount}</td>
+        <td>${formatNaira(log.totalDeposited)}</td>
+        <td>${formatNaira(log.totalSpent)}</td>
+      `;
+      deletedTableBody.appendChild(tr);
+    });
+  }
+
   loadTransactionSummary();
   loadTransactions();
+  loadDeletedAccounts();
 
   txnSearchInput.addEventListener("input", () => {
     clearTimeout(txnSearchDebounce);
@@ -447,16 +501,20 @@ document.addEventListener("DOMContentLoaded", () => {
 function switchUsersTab(tab) {
   const usersPanel = document.getElementById("usersTabPanel");
   const txnPanel = document.getElementById("transactionsTabPanel");
+  const deletedPanel = document.getElementById("deletedTabPanel");
   const usersBtn = document.getElementById("tabUsersBtn");
   const txnBtn = document.getElementById("tabTransactionsBtn");
+  const deletedBtn = document.getElementById("tabDeletedBtn");
 
-  const showUsers = tab === "users";
-  usersPanel.classList.toggle("hidden", !showUsers);
-  txnPanel.classList.toggle("hidden", showUsers);
-  usersBtn.classList.toggle("is-active", showUsers);
-  txnBtn.classList.toggle("is-active", !showUsers);
-  usersBtn.setAttribute("aria-selected", String(showUsers));
-  txnBtn.setAttribute("aria-selected", String(!showUsers));
+  usersPanel.classList.toggle("hidden", tab !== "users");
+  txnPanel.classList.toggle("hidden", tab !== "transactions");
+  deletedPanel.classList.toggle("hidden", tab !== "deleted");
+  usersBtn.classList.toggle("is-active", tab === "users");
+  txnBtn.classList.toggle("is-active", tab === "transactions");
+  deletedBtn.classList.toggle("is-active", tab === "deleted");
+  usersBtn.setAttribute("aria-selected", String(tab === "users"));
+  txnBtn.setAttribute("aria-selected", String(tab === "transactions"));
+  deletedBtn.setAttribute("aria-selected", String(tab === "deleted"));
 }
 
 /* ---- Modal Control Functions ---- */

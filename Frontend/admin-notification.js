@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabButtons = document.querySelectorAll('.tab-btn');
 
   const ICON_UPLOAD = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M12 12v9m0-9l-3 3m3-3l3 3" /></svg>';
+  const ICON_ACCOUNT_DELETED = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7zM18 9l3 3m0-3l-3 3" /></svg>';
 
   function updateCounts() {
     const unreadItems = notifications.filter(n => n.unread);
@@ -96,6 +97,33 @@ document.addEventListener('DOMContentLoaded', () => {
     items.forEach(n => {
       const card = document.createElement('div');
       card.className = `notif-card ${n.unread ? 'is-unread' : 'is-read'}`;
+
+      if (n.notifType === 'account_deleted') {
+        card.innerHTML = `
+          <div class="notif-icon">${ICON_ACCOUNT_DELETED}</div>
+          <div class="notif-body">
+            <p class="notif-text"><strong>${n.fullName}</strong> (${n.email}) deleted their account</p>
+            <div class="notif-meta">
+              <span>${n.department || 'No department'}</span>
+              <span class="dot-sep"></span>
+              <span>${n.uploadsCount} upload${n.uploadsCount === 1 ? '' : 's'}</span>
+              <span class="dot-sep"></span>
+              <span>${n.timeAgo}</span>
+            </div>
+          </div>
+          ${n.unread ? '<span class="unread-dot" aria-hidden="true"></span>' : ''}
+          <div class="notif-actions">
+            <button class="btn-mark-toggle" title="${n.unread ? 'Mark as read' : 'Mark as unread'}" aria-label="${n.unread ? 'Mark as read' : 'Mark as unread'}" onclick="toggleRead('${n.id}')">
+              ${n.unread
+                ? '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" /></svg>'
+                : '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'}
+            </button>
+          </div>
+        `;
+        notifFeed.appendChild(card);
+        return;
+      }
+
       card.innerHTML = `
         <div class="notif-icon">${ICON_UPLOAD}</div>
         <div class="notif-body">

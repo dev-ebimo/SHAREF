@@ -343,12 +343,15 @@
                 <option value="other">Other</option>
               </select>
 
-              <input
-                type="date"
-                id="filterDate"
-                aria-label="Filter by Rejection Date"
-                title="Rejection Date"
-              />
+              <div class="date-filter-wrap">
+                <input
+                  type="date"
+                  id="filterDate"
+                  aria-label="Filter by Rejection Date"
+                  title="Rejection Date"
+                />
+                <span class="date-placeholder" id="filterDatePlaceholder">Rejection Date</span>
+              </div>
 
               <div class="select-wrap">
                 <select id="sortResources" aria-label="Sort Resources">

@@ -333,12 +333,15 @@
                 <!-- populated dynamically by JS, see below -->
               </select>
 
-              <input
-                type="date"
-                id="filterApprovalDate"
-                aria-label="Filter by Approval Date"
-                title="Approval Date"
-              />
+              <div class="date-filter-wrap">
+                <input
+                  type="date"
+                  id="filterApprovalDate"
+                  aria-label="Filter by Approval Date"
+                  title="Approval Date"
+                />
+                <span class="date-placeholder" id="filterApprovalDatePlaceholder">Approval Date</span>
+              </div>
 
               <div class="select-wrap">
                 <select id="sortResources" aria-label="Sort Resources">
