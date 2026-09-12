@@ -459,8 +459,8 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${log.joinedAt ? new Date(log.joinedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}</td>
         <td>${new Date(log.deletedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</td>
         <td>${log.uploadsCount}</td>
-        <td>${formatNaira(log.totalDeposited)}</td>
-        <td>${formatNaira(log.totalSpent)}</td>
+        <td class="amount-cell">${formatNaira(log.totalDeposited)}</td>
+        <td class="amount-cell">${formatNaira(log.totalSpent)}</td>
       `;
       deletedTableBody.appendChild(tr);
     });
