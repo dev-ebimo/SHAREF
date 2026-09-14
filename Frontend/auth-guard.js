@@ -29,6 +29,26 @@ function isTokenExpired(token) {
   }
 }
 
+// Maps a user's stored landing-page preference (see admin-settings.html /
+// settings.html's "Default Landing Page") to an actual destination URL.
+// Shared between login.js (right after signing in) and redirectIfLoggedIn
+// below, so the two can't drift out of sync with each other.
+function resolveLandingPage(user) {
+  if (user.role === "admin") {
+    // There's no separate admin "dashboard" page, and "pending" is just
+    // the default view of the moderation queue — both collapse to the
+    // same destination as "approved" is the only option that actually
+    // goes somewhere else.
+    return user.moderationLandingPage === "approved" ? "approved-resources.html" : "admin-moderation.html";
+  }
+
+  switch (user.landingPage) {
+    case "resources": return "resources.html";
+    case "bookmarks": return "bookmarks.html";
+    default: return "dashboard.html";
+  }
+}
+
 // Called from public-facing pages (currently just index.html) that should
 // send an already-logged-in visitor straight to their dashboard instead of
 // showing the public landing page every time they type the site URL.
@@ -45,7 +65,7 @@ function redirectIfLoggedIn() {
   const user = getCurrentUser();
 
   if (token && user && !isTokenExpired(token)) {
-    window.location.href = user.role === "admin" ? "admin-moderation.html" : "dashboard.html";
+    window.location.href = resolveLandingPage(user);
   }
 }
 
@@ -69,7 +89,7 @@ function requireAuth(requiredRole) {
   if (requiredRole && user.role !== requiredRole) {
     // Valid session, just the wrong role for this page — send them to
     // their own home instead of logging out a perfectly valid user.
-    window.location.href = user.role === "admin" ? "admin-moderation.html" : "dashboard.html";
+    window.location.href = resolveLandingPage(user);
     return null;
   }
 

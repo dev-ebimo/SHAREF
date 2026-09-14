@@ -110,7 +110,6 @@ const userSchema = new mongoose.Schema(
         confirmBeforeRejection: { type: Boolean, default: true },
       },
       review: {
-        previewTab: { type: String, enum: ["same", "new"], default: "new" },
         defaultSort: {
           type: String,
           enum: ["oldest", "newest"],
@@ -118,34 +117,14 @@ const userSchema = new mongoose.Schema(
         },
       },
       notifications: {
-        newResources: {
-          email: { type: Boolean, default: true },
-          inApp: { type: Boolean, default: true },
-        },
         uploadStatus: {
           email: { type: Boolean, default: true },
-          inApp: { type: Boolean, default: true },
-        },
-        discussionReplies: {
-          email: { type: Boolean, default: false },
-          inApp: { type: Boolean, default: true },
-        },
-        pendingUploads: {
-          email: { type: Boolean, default: true },
-          inApp: { type: Boolean, default: true },
-        },
-        rejectedResources: {
-          email: { type: Boolean, default: false },
           inApp: { type: Boolean, default: true },
         },
         announcements: {
           email: { type: Boolean, default: true },
           inApp: { type: Boolean, default: true },
         },
-      },
-      privacy: {
-        publicProfile: { type: Boolean, default: true },
-        showStats: { type: Boolean, default: true },
       },
     },
   },

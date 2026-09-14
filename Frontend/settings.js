@@ -25,8 +25,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var departmentInput = document.getElementById("settingsDepartment");
   var levelSelect = document.getElementById("settingsLevel");
   var landingPageSelect = document.getElementById("settingsLandingPage");
-  var privacyPublicToggle = document.getElementById("privacyPublicProfileToggle");
-  var privacyStatsToggle = document.getElementById("privacyStatsToggle");
 
   function setSwitchState(el, isOn) {
     if (!el) return;
@@ -58,11 +56,6 @@ document.addEventListener("DOMContentLoaded", function () {
             setSwitchState(btn, section[channel]);
           }
         });
-
-        if (prefs.privacy) {
-          if (typeof prefs.privacy.publicProfile === "boolean") setSwitchState(privacyPublicToggle, prefs.privacy.publicProfile);
-          if (typeof prefs.privacy.showStats === "boolean") setSwitchState(privacyStatsToggle, prefs.privacy.showStats);
-        }
       })
       .catch(function (err) { console.error("Could not load settings:", err); });
   }
@@ -165,10 +158,6 @@ document.addEventListener("DOMContentLoaded", function () {
     var preferences = {
       landingPage: landingPageSelect ? landingPageSelect.value : undefined,
       notifications: notifications,
-      privacy: {
-        publicProfile: privacyPublicToggle ? privacyPublicToggle.classList.contains("is-on") : undefined,
-        showStats: privacyStatsToggle ? privacyStatsToggle.classList.contains("is-on") : undefined,
-      },
     };
 
     return authFetch(API_BASE + "/users/me/preferences", {

@@ -16,9 +16,6 @@ document.addEventListener("DOMContentLoaded", function () {
   var editMatricInput = document.getElementById("editMatricNumber");
   var editGenderInput = document.getElementById("editGender");
 
-  var publicToggleEl = document.getElementById("publicProfileToggle");
-  var publicToggleDescEl = document.getElementById("publicToggleDesc");
-
   var myProfile = null; // cached, so the edit form has something to fall back on
 
   authFetch(API_BASE + "/users/me")
@@ -47,17 +44,6 @@ document.addEventListener("DOMContentLoaded", function () {
       var params = new URLSearchParams(window.location.search);
       if (params.get("complete") === "1" && typeof window.__openEditProfileModal === "function") {
         window.__openEditProfileModal();
-      }
-
-      var isPublic = !!(myProfile.preferences && myProfile.preferences.privacy && myProfile.preferences.privacy.publicProfile);
-      if (publicToggleEl) {
-        publicToggleEl.classList.toggle("is-on", isPublic);
-        publicToggleEl.setAttribute("aria-checked", isPublic ? "true" : "false");
-      }
-      if (publicToggleDescEl) {
-        publicToggleDescEl.textContent = isPublic
-          ? "Students can view your uploaded resources."
-          : "Your profile is currently private.";
       }
     })
     .catch(function (err) { console.error("Could not load profile:", err); });
@@ -260,40 +246,6 @@ document.addEventListener("DOMContentLoaded", function () {
           }
           console.error(err);
         });
-    });
-  }
-
-  // ==========================================================================
-  // 2. PUBLIC PROFILE TOGGLE
-  // ==========================================================================
-  var publicToggle = document.getElementById("publicProfileToggle");
-  var publicToggleDesc = document.getElementById("publicToggleDesc");
-
-  if (publicToggle && publicToggleDesc) {
-    publicToggle.addEventListener("click", function () {
-      var isOn = publicToggle.classList.toggle("is-on");
-      publicToggle.setAttribute("aria-checked", isOn ? "true" : "false");
-      publicToggleDesc.textContent = isOn
-        ? "Students can view your uploaded resources."
-        : "Your profile is currently private.";
-
-      authFetch(API_BASE + "/users/me/preferences", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences: { privacy: { publicProfile: isOn } } }),
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (!data.success) {
-            // Revert the visual state if the save actually failed
-            publicToggle.classList.toggle("is-on", !isOn);
-            publicToggle.setAttribute("aria-checked", !isOn ? "true" : "false");
-            publicToggleDesc.textContent = !isOn
-              ? "Students can view your uploaded resources."
-              : "Your profile is currently private.";
-          }
-        })
-        .catch(function (err) { console.error("Could not save privacy preference:", err); });
     });
   }
 

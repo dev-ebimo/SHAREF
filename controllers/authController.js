@@ -164,6 +164,8 @@ async function login(req, res) {
       token,
       user: {
         id: user._id, fullName: user.fullName, email: user.email, role: user.role,
+        landingPage: user.preferences.landingPage,
+        moderationLandingPage: user.preferences.moderation.landingPage,
       },
     });
   } catch (err) {

@@ -20,9 +20,14 @@ function formatFileSize(bytes) {
 async function getModerationQueue(req, res) {
   try {
     const sortOrder = req.query.sort === "newest" ? -1 : 1;
-    const pendingResources = await Resource.find({ status: "pending" })
+    const limit = Number(req.query.limit) || 0; // 0 means "no limit" to Mongoose
+
+    let query = Resource.find({ status: "pending" })
       .populate("uploader", "fullName")
       .sort({ createdAt: sortOrder });
+    if (limit > 0) query = query.limit(limit);
+
+    const pendingResources = await query;
 
     const now = new Date();
     const queue = pendingResources.map((r) => {

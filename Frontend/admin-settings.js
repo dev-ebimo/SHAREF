@@ -47,10 +47,7 @@ document.addEventListener("DOMContentLoaded", function () {
   var autoOpenNextSwitch = document.getElementById("settingsAutoOpenNext");
   var confirmApprovalSwitch = document.getElementById("settingsConfirmApproval");
   var confirmRejectionSwitch = document.getElementById("settingsConfirmRejection");
-  var previewTabSelect = document.getElementById("settingsPreviewTab");
   var defaultSortSelect = document.getElementById("settingsDefaultSort");
-  var privacyPublicToggle = document.getElementById("privacyPublicProfileToggle");
-  var privacyStatsToggle = document.getElementById("privacyStatsToggle");
 
   function setSwitchState(el, isOn) {
     if (!el) return;
@@ -82,7 +79,6 @@ document.addEventListener("DOMContentLoaded", function () {
         if (typeof mod.confirmBeforeRejection === "boolean") setSwitchState(confirmRejectionSwitch, mod.confirmBeforeRejection);
 
         var review = prefs.review || {};
-        if (previewTabSelect && review.previewTab) previewTabSelect.value = review.previewTab;
         if (defaultSortSelect && review.defaultSort) defaultSortSelect.value = review.defaultSort;
 
         document.querySelectorAll(".switch[data-pref-category]").forEach(function (btn) {
@@ -93,11 +89,6 @@ document.addEventListener("DOMContentLoaded", function () {
             setSwitchState(btn, section[channel]);
           }
         });
-
-        if (prefs.privacy) {
-          if (typeof prefs.privacy.publicProfile === "boolean") setSwitchState(privacyPublicToggle, prefs.privacy.publicProfile);
-          if (typeof prefs.privacy.showStats === "boolean") setSwitchState(privacyStatsToggle, prefs.privacy.showStats);
-        }
       })
       .catch(function (err) { console.error("Could not load settings:", err); });
   }
@@ -204,14 +195,9 @@ document.addEventListener("DOMContentLoaded", function () {
         confirmBeforeRejection: confirmRejectionSwitch ? confirmRejectionSwitch.classList.contains("is-on") : undefined,
       },
       review: {
-        previewTab: previewTabSelect ? previewTabSelect.value : undefined,
         defaultSort: defaultSortSelect ? defaultSortSelect.value : undefined,
       },
       notifications: notifications,
-      privacy: {
-        publicProfile: privacyPublicToggle ? privacyPublicToggle.classList.contains("is-on") : undefined,
-        showStats: privacyStatsToggle ? privacyStatsToggle.classList.contains("is-on") : undefined,
-      },
     };
 
     return authFetch(API_BASE + "/users/me/preferences", {

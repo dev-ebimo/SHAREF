@@ -56,8 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
 
-        // Route by role — admins and students land on different home pages
-        window.location.href = data.user.role === "admin" ? "admin-moderation.html" : "dashboard.html";
+        // Route by role and the user's own landing-page preference
+        window.location.href = resolveLandingPage(data.user);
       })
       .catch((err) => {
         submitBtn.disabled = false;

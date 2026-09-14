@@ -9,6 +9,24 @@ document.addEventListener('DOMContentLoaded', () => {
     let stats = { pending: 0, approved: 0, rejected: 0 };
     let currentReviewId = null;
 
+    // The admin's own preferences (see admin-settings.html's "Moderation
+    // Preferences" / "Review Preferences") — fetched once on load and
+    // applied to the default sort, page size, and confirm-before-action
+    // behavior below. Empty objects here just mean "use the fetch's own
+    // fallback defaults" if this request hasn't resolved yet or fails.
+    let adminPreferences = { review: {}, moderation: {} };
+
+    function loadAdminPreferences() {
+        return authFetch(API_BASE + '/users/me')
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.user && data.user.preferences) {
+                    adminPreferences = data.user.preferences;
+                }
+            })
+            .catch(err => console.error('Could not load admin preferences:', err));
+    }
+
     // Reusable inline icon markup (kept in one place so cards/badges stay in sync)
     const ICONS = {
         doc: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
@@ -54,8 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function loadQueue() {
         const sortSelect = document.getElementById('sortQueue');
         const sortValue = sortSelect ? sortSelect.value : 'oldest';
+        const itemsPerPage = (adminPreferences.moderation && adminPreferences.moderation.itemsPerPage) || 0;
 
-        authFetch(API_BASE + '/admin/moderation/queue?sort=' + sortValue)
+        let url = API_BASE + '/admin/moderation/queue?sort=' + sortValue;
+        if (itemsPerPage > 0) url += '&limit=' + itemsPerPage;
+
+        return authFetch(url)
             .then(res => res.json())
             .then(data => {
                 if (!data.success) return;
@@ -178,9 +200,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.quickApprove = (id) => {
-        currentReviewId = id;
-        approveModal.classList.remove('hidden');
+        requestApprove(id);
     };
+
+    function requestApprove(id) {
+        currentReviewId = id;
+        const skipConfirm = adminPreferences.moderation && adminPreferences.moderation.confirmBeforeApproval === false;
+        if (skipConfirm) {
+            processApprove();
+        } else {
+            approveModal.classList.remove('hidden');
+        }
+    }
 
     window.quickReject = (id) => {
         currentReviewId = id;
@@ -209,7 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(data => {
                 if (!data.success) { alert(data.message || 'Could not approve resource.'); return; }
                 closeAllModals();
-                loadQueue();
+                loadQueue().then(maybeOpenNextItem);
             })
             .catch(err => { console.error(err); alert('Network error — could not approve resource.'); });
     }
@@ -225,9 +256,19 @@ document.addEventListener('DOMContentLoaded', () => {
             .then(data => {
                 if (!data.success) { alert(data.message || 'Could not reject resource.'); return; }
                 closeAllModals();
-                loadQueue();
+                loadQueue().then(maybeOpenNextItem);
             })
             .catch(err => { console.error(err); alert('Network error — could not reject resource.'); });
+    }
+
+    // Called after a successful approve/reject refreshes the queue — see
+    // "Auto-open Next Resource" in admin-settings.html's Moderation
+    // Preferences.
+    function maybeOpenNextItem() {
+        const shouldAutoOpen = adminPreferences.moderation && adminPreferences.moderation.autoOpenNext;
+        if (shouldAutoOpen && pendingQueue.length > 0) {
+            window.openPreview(pendingQueue[0].id);
+        }
     }
 
     document.getElementById('confirmApprove').addEventListener('click', processApprove);
@@ -238,12 +279,20 @@ document.addEventListener('DOMContentLoaded', () => {
             alert('Please select a rejection reason.');
             return;
         }
+        // The reason-selection modal itself can't be skipped — a reason is
+        // always required — but "Confirm Before Rejection" (on by default,
+        // see admin-settings.html) adds one more explicit "are you sure"
+        // step on top of it.
+        const requireExtraConfirm = !adminPreferences.moderation || adminPreferences.moderation.confirmBeforeRejection !== false;
+        if (requireExtraConfirm && !confirm('Reject this resource? This cannot be undone.')) {
+            return;
+        }
         processReject(selectedReason.value);
     });
 
     // Sticky Action Bar in Preview Modal
     document.getElementById('btnPreviewApprove').addEventListener('click', () => {
-        approveModal.classList.remove('hidden');
+        requestApprove(currentReviewId);
     });
 
     document.getElementById('btnPreviewReject').addEventListener('click', () => {
@@ -325,6 +374,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const sortQueueSelect = document.getElementById('sortQueue');
     if (sortQueueSelect) sortQueueSelect.addEventListener('change', loadQueue);
 
-    // Init
-    loadQueue();
+    // Init — load this admin's own preferences first, since defaultSort
+    // and itemsPerPage need to be applied before the very first fetch,
+    // not after.
+    loadAdminPreferences().then(() => {
+        if (sortQueueSelect && adminPreferences.review && adminPreferences.review.defaultSort) {
+            sortQueueSelect.value = adminPreferences.review.defaultSort;
+        }
+        loadQueue();
+    });
 });

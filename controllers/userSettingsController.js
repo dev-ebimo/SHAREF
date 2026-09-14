@@ -13,10 +13,6 @@ function filterPreferencesForRole(preferences, role) {
   if (role !== "admin") {
     delete filtered.moderation;
     delete filtered.review;
-    if (filtered.notifications) {
-      delete filtered.notifications.pendingUploads;
-      delete filtered.notifications.rejectedResources;
-    }
   }
   return filtered;
 }
@@ -119,10 +115,6 @@ async function updateMyPreferences(req, res) {
     if (req.user.role !== "admin") {
       delete incoming.moderation;
       delete incoming.review;
-      if (incoming.notifications) {
-          delete incoming.notifications.pendingUploads;
-          delete incoming.notifications.rejectedResources;
-      }
     }
 
     const current = user.preferences.toObject();
