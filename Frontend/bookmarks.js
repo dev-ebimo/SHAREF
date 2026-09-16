@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const typeFilter = document.getElementById('typeFilter');
 
     function loadBookmarks() {
-        bookmarksGrid.innerHTML = '<p class="bookmarks-loading">Loading your bookmarks…</p>';
+        bookmarksGrid.innerHTML = (function(){var h="";for(var i=0;i<6;i++){h+='<div class="skeleton-card"><div class="skeleton-line short"></div><div class="skeleton-line tall long"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>';}return h;})();
         emptyState.classList.add('hidden');
 
         authFetch(API_BASE + '/bookmarks')
@@ -68,8 +68,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             card.innerHTML = `
                 <div class="card-body">
-                    <h3 class="card-title">${item.title}</h3>
-                    <p class="card-meta">${item.course} • ${item.type}</p>
+                    <h3 class="card-title">${escapeHtml(item.title)}</h3>
+                    <p class="card-meta">${escapeHtml(item.course)} • ${escapeHtml(item.type)}</p>
                 </div>
                 <div class="card-actions">
                     <a href="#" class="btn-view">Open File &rarr;</a>
@@ -107,8 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             window.SharefWallet.showToast(
                 data.alreadyOwned
-                    ? `"${item.title}" download started.`
-                    : `${window.SharefWallet.formatNaira(data.amountCharged)} deducted · "${item.title}" download started.`
+                    ? `"${escapeHtml(item.title)}" download started.`
+                    : `${window.SharefWallet.formatNaira(data.amountCharged)} deducted · "${escapeHtml(item.title)}" download started.`
             );
         });
     }

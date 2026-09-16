@@ -272,6 +272,44 @@ document.addEventListener("DOMContentLoaded", function () {
     return days + " days ago";
   }
 
+  // Shared card builder — used by both Recently Added and Trending so the
+  // dashboard renders resources as consistent blocks, the same way the
+  // resources page does, instead of Trending being cards and Recently
+  // Added being a plain text list.
+  function buildResourceCard(resource, opts) {
+    opts = opts || {};
+    var isBookmarked = !!opts.isBookmarked;
+    var metricIcon = opts.metricIcon ||
+      '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>';
+    var metricLabel = opts.metricLabel != null ? opts.metricLabel : "";
+
+    var card = document.createElement("article");
+    card.className = "resource-card";
+    card.dataset.resourceId = resource.id;
+    card.innerHTML =
+      '<div class="card-top-meta">' +
+        '<span class="type-tag pdf-type">' + escapeHtml(resource.type) + "</span>" +
+        '<button class="icon-btn-badge' + (isBookmarked ? " is-bookmarked" : "") + '" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
+          '<svg fill="' + (isBookmarked ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
+        "</button>" +
+      "</div>" +
+      '<div class="card-body-zone">' +
+        "<h3>" + escapeHtml(resource.title) + "</h3>" +
+        '<span class="course-code-sub">' + escapeHtml(resource.course) + "</span>" +
+      "</div>" +
+      '<div class="card-bottom-metrics">' +
+        '<div class="metric-node">' + metricIcon + "<span>" + escapeHtml(metricLabel) + "</span></div>" +
+      "</div>" +
+      '<div class="card-hover-actions">' +
+        '<button type="button" class="card-mini-btn is-primary" data-action="open">Preview &amp; Download</button>' +
+      "</div>";
+    return card;
+  }
+
+  // Bookmark ids for the Recently Added cards — populated by the same
+  // fetch that feeds Trending, so both render a consistent bookmark state.
+  var recentBookmarkedIds = [];
+
   function renderRecentFeed(resources) {
     if (!recentFeedStack) return;
 
@@ -290,23 +328,18 @@ document.addEventListener("DOMContentLoaded", function () {
     resources.forEach(function (resource, index) {
       window.__dashboardResourceCache[resource.id] = resource;
 
-      var itemEl = document.createElement("div");
-      itemEl.className = "feed-item" + (index >= 2 ? " hidden" : "");
-      itemEl.dataset.resourceId = resource.id;
-      itemEl.innerHTML =
-        '<div class="item-info">' +
-        "<h3>" + resource.title + "</h3>" +
-        "<p>Added " + timeAgoLabel(resource.date) + " • " + resource.type + "</p>" +
-        "</div>" +
-        '<div class="item-control-links">' +
-        '<a href="#" class="feed-inline-link" data-action="download">Download</a>' +
-        '<a href="#" class="feed-inline-link" data-action="preview">Preview</a>' +
-        "</div>";
-      recentFeedStack.appendChild(itemEl);
+      var card = buildResourceCard(resource, {
+        isBookmarked: (recentBookmarkedIds || []).indexOf(resource.id) !== -1,
+        metricIcon: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+        metricLabel: timeAgoLabel(resource.date),
+      });
+      // Only the first 6 show until "See more updates" is clicked
+      if (index >= 6) card.classList.add("hidden");
+      recentFeedStack.appendChild(card);
     });
 
     if (feedMoreBtn) {
-      feedMoreBtn.style.display = resources.length > 2 ? "" : "none";
+      feedMoreBtn.style.display = resources.length > 6 ? "" : "none";
     }
   }
 
@@ -324,51 +357,72 @@ document.addEventListener("DOMContentLoaded", function () {
 
     resources.forEach(function (resource) {
       window.__dashboardResourceCache[resource.id] = resource;
-      var isBookmarked = bookmarkedIds.indexOf(resource.id) !== -1;
-
-      var card = document.createElement("article");
-      card.className = "resource-card";
-      card.dataset.resourceId = resource.id;
-      card.innerHTML =
-        '<div class="card-top-meta">' +
-        '<span class="type-tag pdf-type">' + resource.type + "</span>" +
-        '<button class="icon-btn-badge' + (isBookmarked ? " is-bookmarked" : "") + '" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
-        '<svg fill="' + (isBookmarked ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
-        "</button>" +
-        "</div>" +
-        '<div class="card-body-zone">' +
-        "<h3>" + resource.title + "</h3>" +
-        '<span class="course-code-sub">' + resource.course + "</span>" +
-        "</div>" +
-        '<div class="card-bottom-metrics">' +
-        '<div class="metric-node">' +
-        '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>' +
-        "<span>" + resource.recentDownloads + "</span>" +
-        "</div>" +
-        "</div>";
-      trendingGrid.appendChild(card);
+      trendingGrid.appendChild(buildResourceCard(resource, {
+        isBookmarked: bookmarkedIds.indexOf(resource.id) !== -1,
+        metricLabel: resource.recentDownloads,
+      }));
     });
   }
 
-  if (recentFeedStack) {
-    authFetch(API_BASE + "/resources/recent?limit=10")
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (data.success) renderRecentFeed(data.resources);
-      })
-      .catch(function (err) { console.error("Could not load recent resources:", err); });
+  // Renders N shimmer placeholder cards into a grid while its real data is
+  // in flight, so the section has structure immediately instead of
+  // collapsing to an empty gap and then jumping when data lands.
+  function showSkeletonCards(container, count) {
+    if (!container) return;
+    var html = "";
+    for (var i = 0; i < count; i++) {
+      html +=
+        '<div class="skeleton-card">' +
+          '<div class="skeleton-line short"></div>' +
+          '<div class="skeleton-line tall long"></div>' +
+          '<div class="skeleton-line medium"></div>' +
+          '<div class="skeleton-line short"></div>' +
+        "</div>";
+    }
+    container.innerHTML = html;
   }
 
-  if (trendingGrid) {
+  // One coordinated load for the whole resource area: recent, trending and
+  // bookmarks all resolve together. Previously recent and trending fetched
+  // separately and each pulled bookmarks independently, which meant two
+  // requests for the same data and two separate content pops.
+  if (recentFeedStack || trendingGrid) {
+    showSkeletonCards(recentFeedStack, 4);
+    showSkeletonCards(trendingGrid, 4);
+
     Promise.all([
-      authFetch(API_BASE + "/resources/trending?limit=6").then(function (res) { return res.json(); }),
+      authFetch(API_BASE + "/resources/recent?limit=12").then(function (res) { return res.json(); }).catch(function () { return { success: false }; }),
+      authFetch(API_BASE + "/resources/trending?limit=6").then(function (res) { return res.json(); }).catch(function () { return { success: false }; }),
       authFetch(API_BASE + "/bookmarks").then(function (res) { return res.json(); }).catch(function () { return { success: false }; }),
     ]).then(function (results) {
-      var trendingData = results[0];
-      var bookmarksData = results[1];
-      var bookmarkedIds = bookmarksData.success ? bookmarksData.resources.map(function (r) { return r.id; }) : [];
-      if (trendingData.success) renderTrending(trendingData.resources, bookmarkedIds);
-    }).catch(function (err) { console.error("Could not load trending resources:", err); });
+      var recentData = results[0];
+      var trendingData = results[1];
+      var bookmarksData = results[2];
+
+      recentBookmarkedIds = bookmarksData.success
+        ? bookmarksData.resources.map(function (r) { return r.id; })
+        : [];
+
+      if (recentFeedStack) {
+        if (recentData.success) {
+          renderRecentFeed(recentData.resources);
+        } else {
+          recentFeedStack.innerHTML = "";
+        }
+      }
+      if (trendingGrid) {
+        if (trendingData.success) {
+          renderTrending(trendingData.resources, recentBookmarkedIds);
+        } else {
+          trendingGrid.innerHTML = "";
+          if (trendingSection) trendingSection.style.display = "none";
+        }
+      }
+    }).catch(function (err) {
+      console.error("Could not load dashboard resources:", err);
+      if (recentFeedStack) recentFeedStack.innerHTML = "";
+      if (trendingGrid) trendingGrid.innerHTML = "";
+    });
   }
 
   // ------------------------------------------------------------------
@@ -418,8 +472,10 @@ document.addEventListener("DOMContentLoaded", function () {
   // still just operates on whatever .feed-item elements exist at click time.
   if (feedMoreBtn) {
     feedMoreBtn.addEventListener("click", function () {
-      var hiddenItems = recentFeedStack.querySelectorAll(".feed-item.hidden");
-      var allItems = recentFeedStack.querySelectorAll(".feed-item");
+      // Recently Added renders .resource-card blocks now, not the old
+      // .feed-item rows — and shows 6 before collapsing, not 2.
+      var hiddenItems = recentFeedStack.querySelectorAll(".resource-card.hidden");
+      var allItems = recentFeedStack.querySelectorAll(".resource-card");
       var labelSpan = feedMoreBtn.querySelector("span");
 
       if (hiddenItems.length > 0) {
@@ -430,7 +486,7 @@ document.addEventListener("DOMContentLoaded", function () {
         feedMoreBtn.classList.add("expanded");
       } else {
         allItems.forEach(function (el, index) {
-          if (index >= 2) el.classList.add("hidden");
+          if (index >= 6) el.classList.add("hidden");
         });
         labelSpan.textContent = "See more updates";
         feedMoreBtn.classList.remove("expanded");
@@ -1338,13 +1394,19 @@ document.addEventListener("DOMContentLoaded", function () {
       return;
     }
 
-    var feedLink = e.target.closest(".feed-inline-link");
-    if (feedLink) {
+    // Preview / Download buttons on a resource card. The dashboard has a
+    // single modal that already fetches and shows the page-1 preview
+    // snippet alongside the download confirmation (see openDownloadModal),
+    // so both buttons open it — there's no separate preview-only modal on
+    // this page, unlike resources.html.
+    var miniBtn = e.target.closest(".card-mini-btn");
+    if (miniBtn) {
       e.preventDefault();
-      var feedItem = feedLink.closest(".feed-item");
-      var feedId = feedItem && feedItem.dataset.resourceId;
-      var feedResource = feedId && window.__dashboardResourceCache[feedId];
-      if (feedResource) openDownloadModal(feedResource);
+      e.stopPropagation();
+      var miniCard = miniBtn.closest(".resource-card");
+      var miniId = miniCard && miniCard.dataset.resourceId;
+      var miniResource = miniId && window.__dashboardResourceCache[miniId];
+      if (miniResource) openDownloadModal(miniResource);
       return;
     }
 

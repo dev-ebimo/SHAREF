@@ -14,6 +14,16 @@ function getToken() {
   return localStorage.getItem("token");
 }
 
+// Escapes user-supplied text before it goes into an innerHTML template.
+// Lives here because auth-guard.js is loaded on every authenticated page,
+// so every page's own script can reach it. Uses the DOM's own escaping
+// rather than a hand-rolled regex, which is easy to get subtly wrong.
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+
 function getCurrentUser() {
   const raw = localStorage.getItem("user");
   return raw ? JSON.parse(raw) : null;

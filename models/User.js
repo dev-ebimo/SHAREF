@@ -142,4 +142,10 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return bcrypt.compare(enteredPassword, this.password);
 };
 
+// email/matricNumber already get unique indexes from their field
+// definitions. This covers the admin user-directory queries, which always
+// filter by role and usually check login recency (the active/inactive
+// status calculation).
+userSchema.index({ role: 1, lastLoginAt: -1 });
+
 module.exports = mongoose.model("User", userSchema);

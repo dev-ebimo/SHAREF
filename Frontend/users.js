@@ -170,12 +170,12 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="user-cell">
             <div class="avatar">${initials(u.fullName)}</div>
             <div class="user-info">
-              <span class="user-name">${u.fullName}</span>
-              <span class="user-email">${u.email}</span>
+              <span class="user-name">${escapeHtml(u.fullName)}</span>
+              <span class="user-email">${escapeHtml(u.email)}</span>
             </div>
           </div>
         </td>
-        <td>${u.department}</td>
+        <td>${escapeHtml(u.department)}</td>
         <td>${u.level}</td>
         <td>${u.uploadsCount}</td>
         <td>${u.approvedCount}</td>
@@ -401,8 +401,8 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="user-cell">
             <div class="avatar">${initials(t.user)}</div>
             <div class="user-info">
-              <span class="user-name">${t.user}</span>
-              <span class="user-email">${t.email}</span>
+              <span class="user-name">${escapeHtml(t.user)}</span>
+              <span class="user-email">${escapeHtml(t.email)}</span>
             </div>
           </div>
         </td>
@@ -452,8 +452,8 @@ document.addEventListener("DOMContentLoaded", () => {
     logs.forEach((log) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${log.fullName}</td>
-        <td>${log.email}</td>
+        <td>${escapeHtml(log.fullName)}</td>
+        <td>${escapeHtml(log.email)}</td>
         <td>${log.department || "—"}</td>
         <td>${log.level || "—"}</td>
         <td>${log.joinedAt ? new Date(log.joinedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—"}</td>

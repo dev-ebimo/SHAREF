@@ -19,4 +19,10 @@ const notificationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Both feeds filter by recipient (null = the shared admin feed, a user id
+// = that student's own) and sort newest-first; the unread variants power
+// the bell badge counts.
+notificationSchema.index({ recipient: 1, createdAt: -1 });
+notificationSchema.index({ recipient: 1, unread: 1 });
+
 module.exports = mongoose.model("Notification", notificationSchema);

@@ -58,4 +58,35 @@ const resourceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ---------------------------------------------------------------------------
+// INDEXES
+// Every one of these matches a query shape that actually runs in the app —
+// without them Mongo does a full collection scan on each call, which is fine
+// with 50 resources and increasingly slow as the library grows.
+// ---------------------------------------------------------------------------
+
+// The single most common filter, used by nearly every list view and every
+// stats counter (getModerationQueue, getApprovedResources, getRecentFeed,
+// getResources, the queue-health counts, etc). Compound with createdAt
+// because these queries almost always sort by it — a compound index lets
+// Mongo satisfy the filter AND the sort from the index alone, instead of
+// pulling matches into memory to sort them.
+resourceSchema.index({ status: 1, createdAt: -1 });
+
+// Admin "Approved/Rejected Today" counters filter on status + reviewedAt.
+resourceSchema.index({ status: 1, reviewedAt: -1 });
+
+// Trending scopes to one department before ranking (see getTrending), and
+// the browse page filters by department too.
+resourceSchema.index({ status: 1, department: 1 });
+
+// "My Uploads", and the per-user upload counts on the admin user profile.
+resourceSchema.index({ uploader: 1, createdAt: -1 });
+
+// Browse/search sorted by popularity.
+resourceSchema.index({ status: 1, downloads: -1 });
+
+// Course is the main thing students actually search past questions by.
+resourceSchema.index({ status: 1, course: 1 });
+
 module.exports = mongoose.model("Resource", resourceSchema);

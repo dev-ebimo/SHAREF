@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function loadUploads() {
-        uploadsGrid.innerHTML = '<p class="uploads-loading">Loading your uploads…</p>';
+        uploadsGrid.innerHTML = (function(){var h="";for(var i=0;i<6;i++){h+='<div class="skeleton-card"><div class="skeleton-line short"></div><div class="skeleton-line tall long"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>';}return h;})();
         emptyState.classList.add('hidden');
 
         authFetch(API_BASE + '/resources/my-uploads')
@@ -81,8 +81,8 @@ document.addEventListener('DOMContentLoaded', () => {
             let cardHTML = `
                 <div class="card-header">
                     <div>
-                        <h3 class="card-title">${item.title}</h3>
-                        <span class="card-meta">${item.course} • ${item.type}</span>
+                        <h3 class="card-title">${escapeHtml(item.title)}</h3>
+                        <span class="card-meta">${escapeHtml(item.course)} • ${escapeHtml(item.type)}</span>
                     </div>
                     <span class="status-badge status-${item.status}">${item.status}</span>
                 </div>
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // If rejected, inject the reason
             if (item.status === 'rejected' && item.rejectionReason) {
-                cardHTML += `<div class="rejection-reason"><strong>Note:</strong> ${item.rejectionReason}</div>`;
+                cardHTML += `<div class="rejection-reason"><strong>Note:</strong> ${escapeHtml(item.rejectionReason)}</div>`;
             }
 
             cardHTML += `

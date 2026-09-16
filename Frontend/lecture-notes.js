@@ -275,8 +275,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (popularNote && data.length > 0) {
                 courseHighlightArea.innerHTML = `
                     <div class="course-info">
-                        <h2>${popularNote.course}</h2>
-                        <p>${popularNote.dept} • ${popularNote.level} Level • ${data.length} Lecture Notes Available</p>
+                        <h2>${escapeHtml(popularNote.course)}</h2>
+                        <p>${escapeHtml(popularNote.dept)} • ${popularNote.level} Level • ${data.length} Lecture Notes Available</p>
                     </div>
                     <div class="popular-banner">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
@@ -304,20 +304,20 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="card-top">
                 <span class="doc-type-icon">${DOC_ICON_SVG}</span>
                 <div class="badges">
-                    <span class="badge">${note.type}</span>
+                    <span class="badge">${escapeHtml(note.type)}</span>
                     <span class="badge">${note.size}</span>
                 </div>
             </div>
-            <h3 class="note-title">${note.title}</h3>
+            <h3 class="note-title">${escapeHtml(note.title)}</h3>
             
             <div class="note-meta-grid">
                 <div class="meta-item">
                     <span class="meta-label">Course</span>
-                    <span class="meta-value">${note.course}</span>
+                    <span class="meta-value">${escapeHtml(note.course)}</span>
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Semester</span>
-                    <span class="meta-value">${note.semester}</span>
+                    <span class="meta-value">${escapeHtml(note.semester)}</span>
                 </div>
                 <div class="meta-item">
                     <span class="meta-label">Pages</span>
@@ -434,10 +434,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Runs the wallet charge, then a success callback if funds were enough.
     function attemptDownload(note, onSuccess) {
         const cost = getResourceCost(note);
-        window.SharefWallet.charge(note.id, `${note.course} — ${note.title}`, cost).then((data) => {
+        window.SharefWallet.charge(note.id, `${escapeHtml(note.course)} — ${escapeHtml(note.title)}`, cost).then((data) => {
             if (!data.success) return;
             if (data.fileUrl) window.open(data.fileUrl, "_blank");
-            window.SharefWallet.showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${note.title}" download started.`);
+            window.SharefWallet.showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${escapeHtml(note.title)}" download started.`);
             if (onSuccess) onSuccess();
         });
     }

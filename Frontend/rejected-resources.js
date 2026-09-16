@@ -178,14 +178,14 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </td>
         <td>
-          <span class="res-title">${r.title}</span>
+          <span class="res-title">${escapeHtml(r.title)}</span>
           <span class="res-type">${r.type}</span>
         </td>
         <td>
           <span class="res-dept">${r.department}</span>
-          <span class="res-course">${r.course}</span>
+          <span class="res-course">${escapeHtml(r.course)}</span>
         </td>
-        <td>${r.uploader}</td>
+        <td>${escapeHtml(r.uploader)}</td>
         <td><span class="reason-text">${reasonLabel}</span></td>
         <td>${r.reviewedBy}</td>
         <td>${r.date}</td>
@@ -294,7 +294,7 @@ function openRejectedDetails(resourceId) {
 
   const historyItems = modal.querySelectorAll(".history-text");
   if (historyItems.length >= 2) {
-    historyItems[0].querySelector(".resource-name").textContent = `Uploaded by ${r.uploader}`;
+    historyItems[0].querySelector(".resource-name").textContent = `Uploaded by ${escapeHtml(r.uploader)}`;
     historyItems[0].querySelector(".resource-date").textContent = r.uploadedDate;
     historyItems[1].querySelector(".resource-name").textContent = `Rejected by ${r.reviewedBy}`;
     historyItems[1].querySelector(".resource-date").textContent = r.date;

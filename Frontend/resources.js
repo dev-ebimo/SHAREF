@@ -232,11 +232,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     card.innerHTML =
       '<div class="browse-card-top">' +
-        '<span class="type-tag ' + typeTagClass + '">' + r.fileType + "</span>" +
-        '<span class="resource-type-label">' + r.type + "</span>" +
+        '<span class="type-tag ' + typeTagClass + '">' + escapeHtml(r.fileType) + "</span>" +
+        '<span class="resource-type-label">' + escapeHtml(r.type) + "</span>" +
       "</div>" +
-      '<h3 class="browse-card-title">' + r.title + "</h3>" +
-      '<p class="browse-card-sub">' + r.courseCode + " \u2022 " + r.semester + " Semester</p>" +
+      '<h3 class="browse-card-title">' + escapeHtml(r.title) + "</h3>" +
+      '<p class="browse-card-sub">' + escapeHtml(r.courseCode) + " \u2022 " + escapeHtml(r.semester) + " Semester</p>" +
       '<p class="browse-card-uploaded">Uploaded ' + daysAgoLabel(r.uploadedDaysAgo) + "</p>" +
       '<div class="browse-card-stats">' +
         '<span class="download-count">' + r.downloads.toLocaleString() + " Downloads</span>" +
@@ -649,7 +649,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // ==========================================================================
   // 6. INITIAL LOAD
   // ==========================================================================
-  resourceGrid.innerHTML = '<p class="browse-loading-text">Loading resources\u2026</p>';
+  resourceGrid.innerHTML = (function(){var h="";for(var i=0;i<6;i++){h+='<div class="skeleton-card"><div class="skeleton-line short"></div><div class="skeleton-line tall long"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>';}return h;})();
   Promise.all([fetchAllResources(), fetchBookmarkedIds(), fetchProfileDepartment()])
     .then(function (results) {
       RESOURCES = results[0];

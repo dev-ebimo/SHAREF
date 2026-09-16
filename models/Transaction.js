@@ -18,4 +18,11 @@ const transactionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// `reference` already has a unique sparse index from the field definition.
+// These cover the per-user lookups: the wallet history list, the
+// already-purchased check in chargeForDownload, and the deposited/spent
+// aggregations on the admin user profile.
+transactionSchema.index({ user: 1, createdAt: -1 });
+transactionSchema.index({ user: 1, type: 1, status: 1 });
+
 module.exports = mongoose.model("Transaction", transactionSchema);

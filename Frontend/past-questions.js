@@ -159,7 +159,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const cost = getResourceCost(item);
 
     modalTitle.textContent = item.title;
-    modalMeta.textContent = `${item.course} • ${item.session} Session • ${item.semester} Semester`;
+    modalMeta.textContent = `${escapeHtml(item.course)} • ${escapeHtml(item.session)} Session • ${escapeHtml(item.semester)} Semester`;
     modalSize.textContent = item.size;
     modalPages.textContent = `${item.pages} Pages`;
     modalDownloads.textContent = item.downloads;
@@ -190,7 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.previewType === "image") {
           showDocPreviewImage(data.imageUrl);
         } else if (data.previewType === "text") {
-          docPreviewText.textContent = `"${data.snippet}"`;
+          docPreviewText.textContent = `"${escapeHtml(data.snippet)}"`;
         } else {
           docPreviewText.textContent = data.message || "Preview not available for this file type.";
         }
@@ -220,10 +220,10 @@ document.addEventListener("DOMContentLoaded", () => {
   modalDownloadBtn.addEventListener("click", () => {
     if (!currentPreviewItem) return;
     const cost = getResourceCost(currentPreviewItem);
-    window.SharefWallet.charge(currentPreviewItem.id, `${currentPreviewItem.course} — ${currentPreviewItem.title}`, cost).then((data) => {
+    window.SharefWallet.charge(currentPreviewItem.id, `${escapeHtml(currentPreviewItem.course)} — ${escapeHtml(currentPreviewItem.title)}`, cost).then((data) => {
       if (!data.success) return;
       if (data.fileUrl) window.open(data.fileUrl, "_blank");
-      showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${currentPreviewItem.title}" download started.`);
+      showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${escapeHtml(currentPreviewItem.title)}" download started.`);
       closePreviewModal();
     });
   });
@@ -243,7 +243,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (currentPreviewItem === item) {
           modalBookmarkBtn.textContent = data.bookmarked ? "Remove Bookmark" : "Bookmark";
         }
-        showToast(data.bookmarked ? `"${item.title}" saved to bookmarks.` : `"${item.title}" removed from bookmarks.`);
+        showToast(data.bookmarked ? `"${escapeHtml(item.title)}" saved to bookmarks.` : `"${escapeHtml(item.title)}" removed from bookmarks.`);
       })
       .catch((err) => {
         modalBookmarkBtn.disabled = false;
@@ -349,9 +349,9 @@ document.addEventListener("DOMContentLoaded", () => {
                         <div class="card-left">
                             <span class="file-icon-badge" aria-hidden="true">${fileIconSvg}</span>
                             <div class="card-details">
-                                <h3>${item.title}</h3>
+                                <h3>${escapeHtml(item.title)}</h3>
                                 <div class="card-metrics">
-                                    <span>${item.semester} Semester</span>
+                                    <span>${escapeHtml(item.semester)} Semester</span>
                                     <span>•</span>
                                     <span>${item.pages} Pages</span>
                                     <span>•</span>
@@ -362,7 +362,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             </div>
                         </div>
                         <div class="card-right">
-                            <span class="year-badge">${item.session}</span>
+                            <span class="year-badge">${escapeHtml(item.session)}</span>
                             <div class="card-actions">
                                 <button class="btn-preview preview-trigger">Preview</button>
                                 <button class="btn-download-icon download-trigger" title="Download Resource" aria-label="Download File">
@@ -383,10 +383,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         itemRowNode.querySelector(".download-trigger").addEventListener("click", () => {
           const cost = getResourceCost(item);
-          window.SharefWallet.charge(item.id, `${item.course} — ${item.title}`, cost).then((data) => {
+          window.SharefWallet.charge(item.id, `${escapeHtml(item.course)} — ${escapeHtml(item.title)}`, cost).then((data) => {
             if (!data.success) return;
             if (data.fileUrl) window.open(data.fileUrl, "_blank");
-            showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${item.title}" download started.`);
+            showToast(`${window.SharefWallet.formatNaira(data.amountCharged || cost)} deducted · "${escapeHtml(item.title)}" download started.`);
           });
         });
 

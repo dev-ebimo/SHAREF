@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return {
                 ...base,
                 title: "Resource Approved",
-                message: `Your "${n.title}" has been approved.`,
+                message: `Your "${escapeHtml(n.title)}" has been approved.`,
                 actionText: "View My Uploads →",
                 actionUrl: "my-uploads.html",
             };
@@ -54,14 +54,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 ...base,
                 title: "Resource Rejected",
                 message: n.rejectionReason
-                    ? `Your upload "${n.title}" couldn't be approved. Reason: ${n.rejectionReason}.`
-                    : `Your upload "${n.title}" couldn't be approved.`,
+                    ? `Your upload "${escapeHtml(n.title)}" couldn't be approved. Reason: ${escapeHtml(n.rejectionReason)}.`
+                    : `Your upload "${escapeHtml(n.title)}" couldn't be approved.`,
                 actionText: "View Details →",
                 actionUrl: "my-uploads.html",
             };
         }
         // Fallback for any future notification type this page doesn't know about yet
-        return { ...base, title: n.title || "Notification", message: n.course ? `Related to ${n.course}.` : "", actionText: null, actionUrl: null };
+        return { ...base, title: n.title || "Notification", message: n.course ? `Related to ${escapeHtml(n.course)}.` : "", actionText: null, actionUrl: null };
     }
 
     async function fetchNotifications() {
@@ -134,9 +134,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${iconSvg}
                     </div>
                     <div class="notif-body">
-                        <h4 class="notif-title">${notif.title}</h4>
-                        <p class="notif-message">${notif.message}</p>
-                        ${notif.actionText ? `<a href="${notif.actionUrl}" class="notif-action">${notif.actionText}</a>` : ''}
+                        <h4 class="notif-title">${escapeHtml(notif.title)}</h4>
+                        <p class="notif-message">${escapeHtml(notif.message)}</p>
+                        ${notif.actionText ? `<a href="${notif.actionUrl}" class="notif-action">${escapeHtml(notif.actionText)}</a>` : ''}
                     </div>
                     <div class="notif-time">${notif.createdAt}</div>
                 `;

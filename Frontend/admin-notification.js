@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
         card.innerHTML = `
           <div class="notif-icon">${ICON_ACCOUNT_DELETED}</div>
           <div class="notif-body">
-            <p class="notif-text"><strong>${n.fullName}</strong> (${n.email}) deleted their account</p>
+            <p class="notif-text"><strong>${escapeHtml(n.fullName)}</strong> (${escapeHtml(n.email)}) deleted their account</p>
             <div class="notif-meta">
               <span>${n.department || 'No department'}</span>
               <span class="dot-sep"></span>
@@ -127,11 +127,11 @@ document.addEventListener('DOMContentLoaded', () => {
       card.innerHTML = `
         <div class="notif-icon">${ICON_UPLOAD}</div>
         <div class="notif-body">
-          <p class="notif-text"><strong>${n.uploader}</strong> uploaded <strong>${n.title}</strong></p>
+          <p class="notif-text"><strong>${escapeHtml(n.uploader)}</strong> uploaded <strong>${escapeHtml(n.title)}</strong></p>
           <div class="notif-meta">
-            <span>${n.course}</span>
+            <span>${escapeHtml(n.course)}</span>
             <span class="dot-sep"></span>
-            <span>${n.type}</span>
+            <span>${escapeHtml(n.type)}</span>
             <span class="dot-sep"></span>
             <span>${n.timeAgo}</span>
           </div>

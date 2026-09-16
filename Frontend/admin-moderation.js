@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let pendingQueue = [];
     let stats = { pending: 0, approved: 0, rejected: 0 };
     let currentReviewId = null;
+    let currentPage = 1;
 
     // The admin's own preferences (see admin-settings.html's "Moderation
     // Preferences" / "Review Preferences") — fetched once on load and
@@ -74,19 +75,41 @@ document.addEventListener('DOMContentLoaded', () => {
         const sortValue = sortSelect ? sortSelect.value : 'oldest';
         const itemsPerPage = (adminPreferences.moderation && adminPreferences.moderation.itemsPerPage) || 0;
 
-        let url = API_BASE + '/admin/moderation/queue?sort=' + sortValue;
+        let url = API_BASE + '/admin/moderation/queue?sort=' + sortValue + '&page=' + currentPage;
         if (itemsPerPage > 0) url += '&limit=' + itemsPerPage;
 
         return authFetch(url)
             .then(res => res.json())
             .then(data => {
                 if (!data.success) return;
+
+                // If approving/rejecting emptied out the page we were on
+                // (e.g. we were on the last page and just cleared its only
+                // remaining item), the requested page no longer exists —
+                // fall back to the new last page instead of showing an
+                // empty queue when items still exist on an earlier page.
+                if (data.pagination && data.pagination.page > data.pagination.pages && data.pagination.pages >= 1) {
+                    currentPage = data.pagination.pages;
+                    return loadQueue();
+                }
+
                 pendingQueue = data.queue;
                 stats = data.stats;
                 updateStatsUI();
                 renderQueue();
+                if (data.pagination) updatePaginationUI(data.pagination);
             })
             .catch(err => console.error('Could not load moderation queue:', err));
+    }
+
+    function updatePaginationUI(pagination) {
+        currentPage = pagination.page;
+        const pageInfo = document.getElementById('pageInfo');
+        const prevBtn = document.getElementById('prevPageBtn');
+        const nextBtn = document.getElementById('nextPageBtn');
+        if (pageInfo) pageInfo.textContent = `Page ${pagination.page} of ${pagination.pages}`;
+        if (prevBtn) prevBtn.disabled = pagination.page <= 1;
+        if (nextBtn) nextBtn.disabled = pagination.page >= pagination.pages;
     }
 
     // Render Queue
@@ -113,11 +136,11 @@ document.addEventListener('DOMContentLoaded', () => {
             card.innerHTML = `
                 <div class="q-left">
                     ${agedBadgeHTML}
-                    <div class="q-title">${ICONS.doc}${item.title}</div>
+                    <div class="q-title">${ICONS.doc}${escapeHtml(item.title)}</div>
                     <div class="q-meta">
-                        <span>${item.type}</span>
+                        <span>${escapeHtml(item.type)}</span>
                         <span class="dot-sep"></span>
-                        <span>${item.course}</span>
+                        <span>${escapeHtml(item.course)}</span>
                         <span class="dot-sep"></span>
                         <span>${item.level}</span>
                         <span class="dot-sep"></span>
@@ -126,7 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="q-right">
                     <div class="uploader-info">
-                        Uploaded by <strong>${item.uploader}</strong><br>
+                        Uploaded by <strong>${escapeHtml(item.uploader)}</strong><br>
                         ${item.uploadDate}
                     </div>
                     <div class="q-actions">
@@ -149,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         document.getElementById('previewType').textContent = item.type;
         document.getElementById('previewTitle').textContent = item.title;
-        document.getElementById('previewMeta').textContent = `${item.dept} • ${item.course} • ${item.semester} Semester • ${item.level}`;
+        document.getElementById('previewMeta').textContent = `${escapeHtml(item.dept)} • ${escapeHtml(item.course)} • ${item.semester} Semester • ${item.level}`;
         document.getElementById('previewUploader').textContent = item.uploader;
         document.getElementById('previewDate').textContent = item.uploadDate;
         document.getElementById('previewSize').textContent = item.size;
@@ -372,7 +395,20 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     const sortQueueSelect = document.getElementById('sortQueue');
-    if (sortQueueSelect) sortQueueSelect.addEventListener('change', loadQueue);
+    if (sortQueueSelect) sortQueueSelect.addEventListener('change', () => {
+        currentPage = 1;
+        loadQueue();
+    });
+
+    const prevPageBtn = document.getElementById('prevPageBtn');
+    const nextPageBtn = document.getElementById('nextPageBtn');
+    if (prevPageBtn) prevPageBtn.addEventListener('click', () => {
+        if (currentPage > 1) { currentPage -= 1; loadQueue(); }
+    });
+    if (nextPageBtn) nextPageBtn.addEventListener('click', () => {
+        currentPage += 1;
+        loadQueue();
+    });
 
     // Init — load this admin's own preferences first, since defaultSort
     // and itemsPerPage need to be applied before the very first fetch,

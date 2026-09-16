@@ -20,14 +20,19 @@ function formatFileSize(bytes) {
 async function getModerationQueue(req, res) {
   try {
     const sortOrder = req.query.sort === "newest" ? -1 : 1;
-    const limit = Number(req.query.limit) || 0; // 0 means "no limit" to Mongoose
+    // 25 matches moderation.itemsPerPage's own schema default, so a
+    // request with no explicit limit (or an admin who's never saved this
+    // preference) still gets a sensible, genuinely paginated page size
+    // rather than "no limit" — which doesn't make sense once there's a
+    // page number involved.
+    const limit = Number(req.query.limit) || 25;
+    const page = Math.max(1, Number(req.query.page) || 1);
 
-    let query = Resource.find({ status: "pending" })
+    const pendingResources = await Resource.find({ status: "pending" })
       .populate("uploader", "fullName")
-      .sort({ createdAt: sortOrder });
-    if (limit > 0) query = query.limit(limit);
-
-    const pendingResources = await query;
+      .sort({ createdAt: sortOrder })
+      .skip((page - 1) * limit)
+      .limit(limit);
 
     const now = new Date();
     const queue = pendingResources.map((r) => {
@@ -68,6 +73,9 @@ async function getModerationQueue(req, res) {
       // health ring both depend on that), approvedToday/rejectedToday are
       // the actual "Approved Today"/"Rejected Today" card counts.
       stats: { pending, approved, rejected, approvedToday, rejectedToday },
+      // pending doubles as the pagination total — it's the same count
+      // ("all resources with status: pending"), no need to query it twice.
+      pagination: { total: pending, page, limit, pages: Math.max(1, Math.ceil(pending / limit)) },
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch queue", error: err.message });

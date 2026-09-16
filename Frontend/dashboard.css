@@ -760,6 +760,91 @@ button {
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
 }
+
+/* --- Card hover actions -------------------------------------------------
+   Preview/Download surface on hover (and are always visible on touch
+   devices, which have no hover state — see the media query below). */
+.card-hover-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.resource-card:hover .card-hover-actions,
+.resource-card:focus-within .card-hover-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+.card-mini-btn {
+  flex: 1;
+  padding: 0.45rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--border-hair);
+  background: var(--surface-02);
+  color: var(--text-lead);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+.card-mini-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--text-pure);
+}
+.card-mini-btn.is-primary {
+  background: var(--purple);
+  border-color: var(--purple);
+  color: #fff;
+}
+.card-mini-btn.is-primary:hover {
+  background: #b55fe6;
+}
+@media (hover: none) {
+  /* No hover on touch — keep the actions permanently visible so they're
+     reachable at all. */
+  .card-hover-actions {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* --- Skeleton loaders ---------------------------------------------------
+   Shown while resources are being fetched, so the page has structure
+   immediately instead of an empty gap that suddenly fills in. */
+@keyframes skeleton-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton-card {
+  background: var(--surface-01);
+  border: 1px solid var(--border-hair);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  min-height: 140px;
+}
+.skeleton-line {
+  height: 10px;
+  border-radius: 5px;
+  margin-bottom: 0.65rem;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 0px,
+    rgba(255, 255, 255, 0.09) 200px,
+    rgba(255, 255, 255, 0.04) 400px
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s infinite linear;
+}
+.skeleton-line.short { width: 35%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long { width: 90%; }
+.skeleton-line.tall { height: 16px; }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-line { animation: none; }
+}
 .resource-card {
   background: var(--surface-01);
   border: 1px solid var(--border-hair);
@@ -828,9 +913,15 @@ button {
   height: 13px;
 }
 
+/* Recently Added now renders the same resource cards as Trending, so this
+   is a card grid rather than the vertical text list it used to be. */
 .feed-stack {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+.feed-stack.hidden {
+  display: none;
 }
 .feed-item {
   display: flex;
@@ -1003,7 +1094,8 @@ button {
    4. RESPONSIVE MEDIA QUERIES
    ========================================================================== */
 @media (max-width: 1024px) {
-  .resource-grid {
+  .resource-grid,
+  .feed-stack {
     grid-template-columns: 1fr;
   }
 }

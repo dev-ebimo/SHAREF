@@ -16,7 +16,12 @@ async function createAnnouncement(req, res) {
     if (departments.length > 0) query.department = { $in: departments };
     if (levels.length > 0) query.level = { $in: levels };
 
-    const recipients = await User.find(query);
+    // Only the fields the fan-out below actually uses — this can return
+    // thousands of documents, and there's no reason to pull every field
+    // (including the password hash and OTP fields) across the wire for it.
+    const recipients = await User.find(query)
+      .select("email fullName preferences.notifications.announcements")
+      .lean();
 
     const announcement = await Announcement.create({
       title, message,
@@ -27,22 +32,50 @@ async function createAnnouncement(req, res) {
     });
 
     // Fan out — each recipient's own preference decides in-app/email.
-    // Wrapped per-user so one bad email address can't stop the whole batch.
-    for (const student of recipients) {
+    //
+    // Both parts used to run one-at-a-time inside a single sequential loop,
+    // so an announcement to N students meant N round-trips to Mongo plus N
+    // round-trips to the email provider, all while the admin's request hung
+    // open. At a few hundred recipients that's minutes, or a gateway
+    // timeout. Now: one bulk insert for the in-app notifications, and
+    // emails sent in parallel batches.
+    const inAppRecipients = recipients.filter(
+      (s) => s.preferences?.notifications?.announcements?.inApp
+    );
+    const emailRecipients = recipients.filter(
+      (s) => s.preferences?.notifications?.announcements?.email
+    );
+
+    if (inAppRecipients.length > 0) {
       try {
-        if (student.preferences.notifications.announcements.inApp) {
-          await Notification.create({
+        await Notification.insertMany(
+          inAppRecipients.map((s) => ({
             announcement: announcement._id,
-            recipient: student._id,
+            recipient: s._id,
             type: "announcement",
-          });
-        }
-        if (student.preferences.notifications.announcements.email) {
-          await sendAnnouncementEmail(student.email, student.fullName, title, message);
-        }
-      } catch (innerErr) {
-        console.error(`Failed to notify ${student.email}:`, innerErr.message);
+          })),
+          { ordered: false } // one bad doc shouldn't drop the rest of the batch
+        );
+      } catch (notifyErr) {
+        console.error("Some in-app announcement notifications failed:", notifyErr.message);
       }
+    }
+
+    // Capped concurrency rather than firing every email at once — a few
+    // hundred simultaneous connections would get throttled or dropped by
+    // most providers. Each send is caught individually so one bad address
+    // can't take down the batch.
+    const EMAIL_BATCH_SIZE = 20;
+    for (let i = 0; i < emailRecipients.length; i += EMAIL_BATCH_SIZE) {
+      const batch = emailRecipients.slice(i, i + EMAIL_BATCH_SIZE);
+      await Promise.all(
+        batch.map((student) =>
+          sendAnnouncementEmail(student.email, student.fullName, title, message)
+            .catch((emailErr) =>
+              console.error(`Failed to email ${student.email}:`, emailErr.message)
+            )
+        )
+      );
     }
 
     return res.status(201).json({

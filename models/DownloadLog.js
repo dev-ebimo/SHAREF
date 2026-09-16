@@ -8,4 +8,10 @@ const downloadLogSchema = new mongoose.Schema(
   { timestamps: true } // createdAt is what trending/continue-learning will query against
 );
 
+// "Continue learning" reads a user's recent downloads; the trending
+// aggregation matches on createdAt + resource.
+downloadLogSchema.index({ user: 1, createdAt: -1 });
+downloadLogSchema.index({ user: 1, resource: 1 });
+downloadLogSchema.index({ createdAt: -1, resource: 1 });
+
 module.exports = mongoose.model("DownloadLog", downloadLogSchema);

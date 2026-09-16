@@ -119,8 +119,18 @@ async function updateMyPreferences(req, res) {
 
     const current = user.preferences.toObject();
 
+    // Keys that must never be merged: JSON.parse() turns "__proto__" in a
+    // request body into a real own enumerable property, so a for...in loop
+    // will hand it to the assignment below, where `target["__proto__"] = x`
+    // triggers the prototype setter and pollutes Object.prototype for the
+    // whole process — not just this request. "constructor"/"prototype" are
+    // blocked for the same class of reason.
+    const BLOCKED_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+
     function deepMerge(target, source) {
       for (const key in source) {
+        if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+        if (BLOCKED_KEYS.has(key)) continue;
         if (source[key] && typeof source[key] === "object" && !Array.isArray(source[key])) {
           target[key] = deepMerge(target[key] || {}, source[key]);
         } else {
@@ -206,17 +216,36 @@ async function deleteMyAccount(req, res) {
       deletedAccountLog: deletedLog._id,
     });
 
+    // Cloudinary deletions used to run strictly one-at-a-time, so a user
+    // with 30 uploads meant 30 sequential network round-trips before their
+    // deletion request returned. Batched in parallel instead. Each failure
+    // is caught individually — previously one rejected call would abort
+    // the whole handler, leaving the account half-deleted (snapshot and
+    // notification written, but user and resources still present).
+    const CLOUDINARY_BATCH_SIZE = 10;
+    const destroyJobs = [];
     for (const r of userResources) {
       // Must match the resource_type the file was actually uploaded with
       // (always "raw" for the main file) — destroying with the wrong type
       // silently no-ops on Cloudinary and leaves the file orphaned.
-      await cloudinary.uploader.destroy(r.cloudinaryPublicId, {
-        resource_type: r.cloudinaryResourceType || "raw",
-      });
+      destroyJobs.push({ id: r.cloudinaryPublicId, type: r.cloudinaryResourceType || "raw" });
       // PDFs also have a second, preview-only "image" asset — clean that up too.
       if (r.previewImagePublicId) {
-        await cloudinary.uploader.destroy(r.previewImagePublicId, { resource_type: "image" });
+        destroyJobs.push({ id: r.previewImagePublicId, type: "image" });
       }
+    }
+
+    for (let i = 0; i < destroyJobs.length; i += CLOUDINARY_BATCH_SIZE) {
+      const batch = destroyJobs.slice(i, i + CLOUDINARY_BATCH_SIZE);
+      await Promise.all(
+        batch.map((job) =>
+          cloudinary.uploader
+            .destroy(job.id, { resource_type: job.type })
+            .catch((destroyErr) =>
+              console.error(`Could not delete Cloudinary asset ${job.id}:`, destroyErr.message)
+            )
+        )
+      );
     }
     await Resource.deleteMany({ uploader: req.user.id });
 
