@@ -34,11 +34,16 @@ async function getRecentFeed(req, res) {
     const limit = Number(req.query.limit) || 10;
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
+    const queryStart = process.hrtime.bigint();
     const resources = await Resource.find({ status: "approved", createdAt: { $gte: sevenDaysAgo } })
       .sort({ createdAt: -1 })
       .limit(limit);
+    const queryMs = Number(process.hrtime.bigint() - queryStart) / 1e6;
+
+    res.set("Server-Timing", `authdb;dur=${(req._authMs || 0).toFixed(1)}, query;dur=${queryMs.toFixed(1)}`);
 
     return res.status(200).json({ success: true, resources: resources.map(shapeResource) });
+    
   } catch (err) {
     return res.status(500).json({ success: false, message: "Could not fetch recent resources", error: err.message });
   }

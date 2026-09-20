@@ -14,8 +14,11 @@ async function protect(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id);
 
+    const authStart = process.hrtime.bigint();
+    req.user = await User.findById(decoded.id);
+    req._authMs = Number(process.hrtime.bigint() - authStart) / 1e6;
+    
     if (!req.user) {
       return res.status(401).json({ success: false, message: "User no longer exists" });
     }
