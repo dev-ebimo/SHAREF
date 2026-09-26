@@ -12,6 +12,14 @@ app.use(cors({
   credentials: true,
 }));
 
+// Health checks for Render / Cloud load balancers
+app.get("/healthz", (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 app.use(helmet({
   contentSecurityPolicy: false,
   frameguard: false,
