@@ -21,9 +21,18 @@ async function getBalance(req, res) {
 // @route POST /api/wallet/fund/initialize
 async function initializeFunding(req, res) {
   try {
-    const { amount } = req.body;
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ success: false, message: "Enter a valid amount" });
+    const rawAmount = req.body.amount;
+    const amount = Number(rawAmount);
+
+    if (
+      !rawAmount ||
+      isNaN(amount) ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      amount > 1000000 ||
+      Math.floor(amount) !== amount
+    ) {
+      return res.status(400).json({ success: false, message: "Enter a valid positive integer amount (e.g. 500)" });
     }
 
     const reference = `SHAREF-${req.user.id}-${Date.now()}`;
@@ -39,11 +48,16 @@ async function initializeFunding(req, res) {
       description: "Wallet funding via Paystack",
     });
 
+    const hostOrigin = req.protocol + "://" + req.get("host");
+    const callbackUrl = process.env.FRONTEND_URL
+      ? `${process.env.FRONTEND_URL}/payment-callback.html`
+      : `${hostOrigin}/payment-callback.html`;
+
     const data = await initializeTransaction({
       email: req.user.email,
       amountNaira: amount,
       reference,
-      callbackUrl: `${process.env.FRONTEND_URL}/payment-callback.html`,
+      callbackUrl,
     });
 
     return res.status(200).json({
@@ -178,20 +192,25 @@ async function chargeForDownload(req, res) {
     }
 
     const cost = calculateResourceCost(resource.pages);
-    const user = await User.findById(req.user.id);
 
-    if (user.walletBalance < cost) {
+    // Atomically decrement wallet balance ONLY if sufficient balance exists.
+    // This prevents race conditions and double-spending from simultaneous requests.
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user.id, walletBalance: { $gte: cost } },
+      { $inc: { walletBalance: -cost } },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      const currentUser = await User.findById(req.user.id);
       return res.status(402).json({
         success: false,
         insufficientBalance: true,
         message: "Insufficient wallet balance",
         required: cost,
-        currentBalance: user.walletBalance,
+        currentBalance: currentUser ? currentUser.walletBalance : 0,
       });
     }
-
-    user.walletBalance -= cost;
-    await user.save();
 
     await Transaction.create({
       user: req.user.id,
@@ -210,7 +229,7 @@ async function chargeForDownload(req, res) {
       success: true,
       alreadyOwned: false,
       fileUrl: buildDownloadStreamUrl(req, resourceId, req.user.id),
-      newBalance: user.walletBalance,
+      newBalance: updatedUser.walletBalance,
       message: "Payment successful, download starting",
     });
   } catch (err) {

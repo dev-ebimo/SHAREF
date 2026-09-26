@@ -50,6 +50,19 @@ document.addEventListener("DOMContentLoaded", function () {
     });
     var trigger = document.getElementById("accountMenuTrigger");
     if (trigger) trigger.setAttribute("aria-label", "Account menu for " + fullName);
+
+    var dropdown = document.querySelector(".account-dropdown");
+    if (dropdown && !dropdown.querySelector(".student-switch-item")) {
+      var divider = dropdown.querySelector(".account-dropdown-divider");
+      if (divider) {
+        var link = document.createElement("a");
+        link.href = "dashboard.html";
+        link.className = "account-dropdown-item student-switch-item";
+        link.setAttribute("role", "menuitem");
+        link.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;margin-right:8px;"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg><span>View Student Platform</span>';
+        divider.parentNode.insertBefore(link, divider.nextSibling);
+      }
+    }
   })();
 
   // Every admin page ships its notification bell with a hardcoded,

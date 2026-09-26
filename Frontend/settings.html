@@ -1,6 +1,8 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script src="theme.js"></script>
+    <script src="page-loader.js"></script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Settings | Sharef</title>
@@ -12,7 +14,9 @@
     />
     <link rel="stylesheet" href="dashboard.css" />
     <link rel="stylesheet" href="settings.css" />
-  </head>
+      <link rel="stylesheet" href="page-loader.css">
+    <link rel="stylesheet" href="theme.css">
+</head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
 
@@ -338,7 +342,7 @@
             </div>
 
             <div class="settings-save-row">
-              <span class="save-confirm hidden" id="accountSaveConfirm">Saved ✓</span>
+              <span class="save-confirm hidden" id="accountSaveConfirm">Saved <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-left:3px;"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
               <button type="button" class="settings-btn-primary" id="saveAccountBtn">Save Changes</button>
             </div>
           </section>
@@ -350,17 +354,14 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <h3>Appearance</h3>
-                <p>Sharef currently ships with Dark mode only.</p>
+                <p>Select your preferred visual theme across Sharef.</p>
               </div>
               <div class="settings-row-control">
                 <div class="segmented-control" role="radiogroup" aria-label="Appearance">
-                  <button type="button" class="segment-btn" disabled>
-                    System <span class="soon-badge">Soon</span>
+                  <button type="button" class="segment-btn" id="themeLightBtn">
+                    Light
                   </button>
-                  <button type="button" class="segment-btn" disabled>
-                    Light <span class="soon-badge">Soon</span>
-                  </button>
-                  <button type="button" class="segment-btn is-active" aria-pressed="true">
+                  <button type="button" class="segment-btn is-active" id="themeDarkBtn" aria-pressed="true">
                     Dark
                   </button>
                 </div>
@@ -382,7 +383,7 @@
             </div>
 
             <div class="settings-save-row">
-              <span class="save-confirm hidden" id="preferencesSaveConfirm">Saved ✓</span>
+              <span class="save-confirm hidden" id="preferencesSaveConfirm">Saved <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-left:3px;"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
               <button type="button" class="settings-btn-primary" id="savePreferencesBtn">Save Changes</button>
             </div>
           </section>

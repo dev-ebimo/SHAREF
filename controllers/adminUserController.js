@@ -2,6 +2,7 @@ const User = require("../models/User");
 const Resource = require("../models/Resource");
 const Transaction = require("../models/Transaction");
 const DeletedAccountLog = require("../models/DeletedAccountLog");
+const escapeRegex = require("../utils/escapeRegex");
 
 const ACTIVE_WINDOW_DAYS = 7;
 
@@ -35,11 +36,12 @@ async function getUsers(req, res) {
     const activeSince = new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 
     const matchStage = { role: "student" };
-    if (search) {
+    if (search && search.trim()) {
+      const safe = escapeRegex(search.trim());
       matchStage.$or = [
-        { fullName: { $regex: search, $options: "i" } },
-        { email: { $regex: search, $options: "i" } },
-        { matricNumber: { $regex: search, $options: "i" } },
+        { fullName: { $regex: safe, $options: "i" } },
+        { email: { $regex: safe, $options: "i" } },
+        { matricNumber: { $regex: safe, $options: "i" } },
       ];
     }
     if (department) matchStage.department = department;

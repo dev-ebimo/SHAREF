@@ -1,9 +1,11 @@
 const rateLimit = require("express-rate-limit");
 
 // Login: brute-force protection against password guessing
+// Only failed attempts count toward throttling
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per IP per window
+  max: 60, // 60 attempts per IP per window
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many login attempts. Please try again in 15 minutes." },
@@ -13,7 +15,7 @@ const loginLimiter = rateLimit({
 // so the limiter resets roughly in sync with the code itself expiring
 const otpLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 5,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "Too many attempts. Please try again in 10 minutes." },

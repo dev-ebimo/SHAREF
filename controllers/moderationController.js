@@ -46,7 +46,7 @@ async function getModerationQueue(req, res) {
         level: `${r.level} Level`,
         semester: r.semester,
         session: r.session,
-        uploader: r.uploader.fullName,
+        uploader: r.uploader?.fullName || "Anonymous",
         size: formatFileSize(r.fileSizeBytes),
         uploadDate: timeAgo(r.createdAt),
         isAged: ageDays >= AGED_THRESHOLD_DAYS,
@@ -95,10 +95,10 @@ async function approveResource(req, res) {
     
     const uploader = await User.findById(resource.uploader);
     if (uploader) {
-      if (uploader.preferences.notifications.uploadStatus.inApp) {
+      if (uploader.preferences?.notifications?.uploadStatus?.inApp) {
         await Notification.create({ resource: resource._id, recipient: uploader._id, type: "resource_approved" });
       }
-      if (uploader.preferences.notifications.uploadStatus.email) {
+      if (uploader.preferences?.notifications?.uploadStatus?.email) {
         sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "approved").catch((err) => {
           console.error(`Failed to send status email to ${uploader.email}:`, err.message);
         });
@@ -132,10 +132,10 @@ async function rejectResource(req, res) {
     
     const uploader = await User.findById(resource.uploader);
     if (uploader) {
-      if (uploader.preferences.notifications.uploadStatus.inApp) {
+      if (uploader.preferences?.notifications?.uploadStatus?.inApp) {
         await Notification.create({ resource: resource._id, recipient: uploader._id, type: "resource_rejected" });
       }
-      if (uploader.preferences.notifications.uploadStatus.email) {
+      if (uploader.preferences?.notifications?.uploadStatus?.email) {
         sendResourceStatusEmail(uploader.email, uploader.fullName, resource.title, "rejected", reason).catch((err) => {
           console.error(`Failed to send status email to ${uploader.email}:`, err.message);
         });

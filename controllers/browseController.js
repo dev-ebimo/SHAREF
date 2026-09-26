@@ -1,6 +1,7 @@
 const Resource = require("../models/Resource");
 const DownloadLog = require("../models/DownloadLog");
 const { buildPdfHalfPagePreviewUrl } = require("../utils/cloudinaryPreview");
+const escapeRegex = require("../utils/escapeRegex");
 
 function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -35,9 +36,16 @@ async function getRecentFeed(req, res) {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const queryStart = process.hrtime.bigint();
-    const resources = await Resource.find({ status: "approved", createdAt: { $gte: sevenDaysAgo } })
+    let resources = await Resource.find({ status: "approved", createdAt: { $gte: sevenDaysAgo } })
       .sort({ createdAt: -1 })
       .limit(limit);
+
+    // If no uploads occurred within the last 7 days, gracefully fall back to latest approved
+    if (resources.length === 0) {
+      resources = await Resource.find({ status: "approved" })
+        .sort({ createdAt: -1 })
+        .limit(limit);
+    }
     const queryMs = Number(process.hrtime.bigint() - queryStart) / 1e6;
 
     res.set("Server-Timing", `authdb;dur=${(req._authMs || 0).toFixed(1)}, query;dur=${queryMs.toFixed(1)}`);
@@ -84,7 +92,10 @@ async function getTrending(req, res) {
     ]);
 
     if (trendingIds.length === 0) {
-      return res.status(200).json({ success: true, resources: [] });
+      const topResources = await Resource.find({ status: "approved" })
+        .sort({ downloads: -1, createdAt: -1 })
+        .limit(limit);
+      return res.status(200).json({ success: true, resources: topResources.map(shapeResource) });
     }
 
     const idToCount = {};
@@ -142,10 +153,11 @@ async function searchPastQuestions(req, res) {
 
     const query = { status: "approved", type: "Past Question" };
 
-    if (search) {
+    if (search && search.trim()) {
+      const safeSearch = escapeRegex(search.trim());
       query.$or = [
-        { course: { $regex: search, $options: "i" } },
-        { title: { $regex: search, $options: "i" } },
+        { course: { $regex: safeSearch, $options: "i" } },
+        { title: { $regex: safeSearch, $options: "i" } },
       ];
     }
     if (session !== "all") query.session = session;

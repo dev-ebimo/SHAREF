@@ -2,6 +2,7 @@ const fs = require("fs");
 const Resource = require("../models/Resource");
 const timeAgo = require("../utils/timeAgo");
 const { buildDownloadStreamUrl } = require("../utils/downloadToken");
+const escapeRegex = require("../utils/escapeRegex");
 
 const REJECTION_REASONS = [
   "duplicate", "wrong_course", "wrong_dept", "poor_quality",
@@ -71,10 +72,11 @@ async function getApprovedResources(req, res) {
     } = req.query;
 
     const query = { status: "approved" };
-    if (search) {
+    if (search && search.trim()) {
+      const safe = escapeRegex(search.trim());
       query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { course: { $regex: search, $options: "i" } },
+        { title: { $regex: safe, $options: "i" } },
+        { course: { $regex: safe, $options: "i" } },
       ];
     }
     if (department) query.department = department;
@@ -122,10 +124,11 @@ async function getRejectedResources(req, res) {
     } = req.query;
 
     const query = { status: "rejected" };
-    if (search) {
+    if (search && search.trim()) {
+      const safe = escapeRegex(search.trim());
       query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { course: { $regex: search, $options: "i" } },
+        { title: { $regex: safe, $options: "i" } },
+        { course: { $regex: safe, $options: "i" } },
       ];
     }
     if (department) query.department = department;

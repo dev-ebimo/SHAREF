@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="theme.js"></script>
+    <script src="page-loader.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SHAREF - Student Knowledge Network</title>
@@ -18,19 +20,23 @@
          only applies until someone logs out on their own. -->
     <script src="auth-guard.js"></script>
     <script>redirectIfLoggedIn();</script>
+    <link rel="stylesheet" href="page-loader.css">
+    <link rel="stylesheet" href="theme.css">
 </head>
 <body>
     <!-- Ambient Background Lighting Glows -->
     <div class="bg bg1" aria-hidden="true"></div>
     <div class="bg bg2" aria-hidden="true"></div>
 
-    <header class="container">
-        <a class="logo" href="login.html"><span>S</span>haref</a>
-        <nav aria-label="Main Navigation">
-            <a href="login.html">Home</a>
-            <a href="login.html">Resources</a>
-            <a href="signup.html" class="nav-btn">Join Now</a>
-        </nav>
+    <header class="landing-header">
+        <div class="container header-container">
+            <a class="logo" href="index.html"><span>S</span>haref</a>
+            <nav aria-label="Main Navigation">
+                <a href="index.html">Home</a>
+                <a href="login.html">Sign In</a>
+                <a href="signup.html" class="nav-btn">Join Now</a>
+            </nav>
+        </div>
     </header>
 
     <main class="container hero" id="hero-zone">
@@ -95,17 +101,23 @@
 
     <section class="container features" aria-label="Platform Features">
         <article class="feature-card">
-            <div class="icon-holder"><span class="icon-book"></span></div>
+            <div class="icon-holder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;stroke:var(--purple-soft, #c084fc);"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+            </div>
             <h3>Organised Learning</h3>
             <p>Find notes, assignments, and past questions instantly in one searchable university library.</p>
         </article>
         <article class="feature-card">
-            <div class="icon-holder"><span class="icon-bolt"></span></div>
+            <div class="icon-holder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;stroke:var(--purple-soft, #c084fc);"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            </div>
             <h3>Student Driven</h3>
             <p>Content is directly contributed by top peers who have already passed the exact same courses.</p>
         </article>
         <article class="feature-card">
-            <div class="icon-holder"><span class="icon-grow"></span></div>
+            <div class="icon-holder">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;stroke:var(--purple-soft, #c084fc);"><path d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="m16 6-4-4-4 4"></path><path d="M16 18a4 4 0 0 0-8 0"></path></svg>
+            </div>
             <h3>Built to Grow</h3>
             <p>Every single upload expands the database, compounding the collective value for everyone.</p>
         </article>

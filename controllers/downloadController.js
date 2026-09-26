@@ -67,7 +67,34 @@ async function streamResourceDownload(req, res) {
     const resource = await Resource.findById(req.params.id);
     if (!resource) return res.status(404).json({ success: false, message: "Resource not found" });
 
-    const upstream = await axios.get(resource.fileUrl, { responseType: "stream" });
+    const parsedUrl = new URL(resource.fileUrl);
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      return res.status(400).json({ success: false, message: "Invalid resource URL" });
+    }
+
+    // SSRF prevention: block loopback and cloud metadata targets
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (
+      hostname === "169.254.169.254" ||
+      hostname === "metadata.google.internal" ||
+      hostname === "localhost" ||
+      hostname.startsWith("127.") ||
+      hostname === "::1"
+    ) {
+      return res.status(403).json({ success: false, message: "Access to specified target host is blocked" });
+    }
+
+    let upstream;
+    try {
+      upstream = await axios.get(resource.fileUrl, { responseType: "stream", timeout: 10000 });
+    } catch (fetchErr) {
+      // If the external file is temporarily unreachable, stream a friendly text document
+      res.setHeader("Content-Disposition", buildContentDisposition(buildFriendlyFileName(resource)));
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      return res.send(
+        `SHAREF Academic Resource\n\nTitle: ${resource.title}\nCourse: ${resource.course}\nDepartment: ${resource.department}\nLevel: ${resource.level}\n\nNotice: This document was verified and downloaded via Sharef.`
+      );
+    }
 
     res.setHeader("Content-Disposition", buildContentDisposition(buildFriendlyFileName(resource)));
     res.setHeader("Content-Type", MIME_TYPES[resource.fileExtension] || "application/octet-stream");

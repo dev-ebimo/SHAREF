@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="theme.js"></script>
+    <script src="page-loader.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login to Your Account | Sharef</title>
@@ -111,6 +113,8 @@
             color: var(--text-muted);
         }
     </style>
+    <link rel="stylesheet" href="page-loader.css">
+    <link rel="stylesheet" href="theme.css">
 </head>
 <body>
     <!-- Slow-Breathing Atmospheric Glob Vectors -->
@@ -215,6 +219,14 @@
 
                     <!-- Submit Action Button -->
                     <button type="submit" class="btn-submit">Sign In</button>
+
+                    <div class="demo-access-panel" style="margin-top: 1.5rem; padding: 1rem; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.15); border-radius: 8px;">
+                        <p style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; text-align: center;">One-Click Fast Demo Login</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <button type="button" id="btn-demo-student" style="padding: 0.6rem 0.75rem; font-size: 0.8rem; font-weight: 600; background: rgba(139, 92, 246, 0.15); border: 1px solid rgba(139, 92, 246, 0.35); border-radius: 6px; color: #c4b5fd; cursor: pointer; transition: all 0.2s ease;"><svg style="width:15px;height:15px;margin-right:6px;display:inline-block;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>Student Demo</button>
+                            <button type="button" id="btn-demo-admin" style="padding: 0.6rem 0.75rem; font-size: 0.8rem; font-weight: 600; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.35); border-radius: 6px; color: #93c5fd; cursor: pointer; transition: all 0.2s ease;"><svg style="width:15px;height:15px;margin-right:6px;display:inline-block;vertical-align:middle;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>Admin Demo</button>
+                        </div>
+                    </div>
 
                     <p class="footer-action-p">New to Sharef? <a href="signup.html" class="link-btn">Create academic profile</a></p>
                 </form>

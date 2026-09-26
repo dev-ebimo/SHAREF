@@ -146,6 +146,41 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   });
 
+  // ==========================================================================
+  // 2b. THEME PREFERENCES CONTROL
+  // ==========================================================================
+  var themeLightBtn = document.getElementById("themeLightBtn");
+  var themeDarkBtn = document.getElementById("themeDarkBtn");
+
+  function updateThemeButtons(current) {
+    if (themeLightBtn && themeDarkBtn) {
+      var isLight = current === "light";
+      themeLightBtn.classList.toggle("is-active", isLight);
+      themeLightBtn.setAttribute("aria-pressed", isLight ? "true" : "false");
+      themeDarkBtn.classList.toggle("is-active", !isLight);
+      themeDarkBtn.setAttribute("aria-pressed", !isLight ? "true" : "false");
+    }
+  }
+
+  if (themeLightBtn && themeDarkBtn) {
+    var initialTheme = (window.SharefTheme && window.SharefTheme.getTheme()) || "dark";
+    updateThemeButtons(initialTheme);
+
+    themeLightBtn.addEventListener("click", function () {
+      if (window.SharefTheme) window.SharefTheme.setTheme("light");
+      updateThemeButtons("light");
+    });
+
+    themeDarkBtn.addEventListener("click", function () {
+      if (window.SharefTheme) window.SharefTheme.setTheme("dark");
+      updateThemeButtons("dark");
+    });
+
+    window.addEventListener("themechange", function (e) {
+      if (e.detail && e.detail.theme) updateThemeButtons(e.detail.theme);
+    });
+  }
+
   wireSaveButton("savePreferencesBtn", "preferencesSaveConfirm", function () {
     var notifications = {};
     document.querySelectorAll(".switch[data-pref-category]").forEach(function (btn) {

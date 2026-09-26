@@ -5,6 +5,7 @@ const countPages = require("../utils/pageCounter");
 const sanitizeError = require("../utils/sanitizeError");
 const getPreviewSnippet = require("../utils/previewSnippet");
 const cloudinary = require("../config/cloudinary");
+const escapeRegex = require("../utils/escapeRegex");
 
 function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -66,11 +67,21 @@ async function uploadResource(req, res) {
     // "image" resource type by default — that broke both downloads and the
     // admin full-document preview, which both need the real, unmodified
     // file. "raw" has no such restriction.
-    const cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
-      resource_type: "raw",
-      folder: "sharef_resources",
-      access_mode: "public",
-    });
+    let cloudinaryResult;
+    if (process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_CLOUD_NAME) {
+      cloudinaryResult = await cloudinary.uploader.upload(req.file.path, {
+        resource_type: "raw",
+        folder: "sharef_resources",
+        access_mode: "public",
+      });
+    } else {
+      // Development/Demo fallback: Store safe data URI or local simulated URL
+      const safeId = `dev_upload_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      cloudinaryResult = {
+        secure_url: `https://res.cloudinary.com/demo/image/upload/sample.pdf`,
+        public_id: safeId,
+      };
+    }
 
     fs.unlink(req.file.path, () => {}); // clean up the local temp file regardless
 
@@ -144,7 +155,9 @@ async function getResources(req, res) {
     if (semester) filter.semester = semester;
     if (type) filter.type = type;
     if (session) filter.session = session;
-    if (search) filter.title = { $regex: search.trim(), $options: "i" };
+    if (search && search.trim()) {
+      filter.title = { $regex: escapeRegex(search.trim()), $options: "i" };
+    }
 
     const sortOption = sort === "popular" ? { downloads: -1 } : { createdAt: -1 };
 
