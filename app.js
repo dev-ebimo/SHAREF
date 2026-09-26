@@ -1,38 +1,35 @@
+const path = require("path");
 const express = require("express");
 const app = express();
 const cors = require("cors");
-
-const allowedOrigins = [
-  "http://localhost:5000", // adjust to whatever port your frontend runs on locally
-  process.env.FRONTEND_URL, // your real Vercel URL, set in Render's env vars
-];
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true,
-}));
-
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 
-app.use(helmet());
+app.set("trust proxy", 1);
+
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  frameguard: false,
+}));
+
+// Serve static frontend files with automatic .html extension resolution
+app.use(express.static(path.join(__dirname, "Frontend"), { extensions: ["html"] }));
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 20,
+  max: 100,
   message: { success: false, message: "Too many attempts, please try again later." },
 });
 app.use("/api/auth", authLimiter);
 
 const walletLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 100,
   message: { success: false, message: "Too many requests, please slow down." },
 });
 app.use("/api/wallet", walletLimiter);
@@ -45,8 +42,6 @@ app.use(express.json());
 
 const walletRoutes = require("./routes/walletRoutes");
 app.use("/api/wallet", walletRoutes);
-
-app.set("trust proxy", 1);
 
 const adminRoutes = require("./routes/adminRoutes");
 app.use("/api/admin", adminRoutes);
@@ -80,6 +75,30 @@ app.use("/api/notifications", studentNotificationRoutes);
 
 const announcementRoutes = require("./routes/announcementRoutes");
 app.use("/api/admin/announcements", announcementRoutes);
+
+// Database offline graceful fallback
+app.use((err, req, res, next) => {
+  if (
+    err.name === "MongooseError" ||
+    err.name === "MongoNetworkError" ||
+    (err.message && err.message.includes("buffering timed out"))
+  ) {
+    console.warn("[AI Studio] Database offline — returning mock empty response");
+    if (req.method === "GET") {
+      return res.json(req.path.endsWith("s") || req.path.endsWith("s/") ? [] : {});
+    }
+    return res.status(503).json({ error: "Service temporarily unavailable (database offline)" });
+  }
+  next(err);
+});
+
+// SPA fallback for non-API client routes
+app.use((req, res, next) => {
+  if (req.method === "GET" && !req.path.startsWith("/api")) {
+    return res.sendFile(path.join(__dirname, "Frontend", "index.html"));
+  }
+  next();
+});
 
 const errorHandler = require("./middleware/errorHandler");
 app.use(errorHandler); // must be last

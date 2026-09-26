@@ -1,13 +1,19 @@
 const sgMail = require("@sendgrid/mail");
 
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
 
 const FROM = {
-  email: process.env.SENDGRID_FROM_EMAIL,
+  email: process.env.SENDGRID_FROM_EMAIL || "noreply@sharef.example.com",
   name: process.env.SENDGRID_FROM_NAME || "Sharef",
 };
 
 async function sendVerificationEmail(toEmail, fullName, otp) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log(`[Email Mock] Verification email to ${toEmail} (${fullName}) with OTP: ${otp}`);
+    return;
+  }
   await sgMail.send({
     to: toEmail,
     from: FROM,
@@ -24,6 +30,10 @@ async function sendVerificationEmail(toEmail, fullName, otp) {
 }
 
 async function sendPasswordResetEmail(toEmail, fullName, otp) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log(`[Email Mock] Password reset email to ${toEmail} (${fullName}) with OTP: ${otp}`);
+    return;
+  }
   await sgMail.send({
     to: toEmail,
     from: FROM,
@@ -40,6 +50,10 @@ async function sendPasswordResetEmail(toEmail, fullName, otp) {
 }
 
 async function sendResourceStatusEmail(toEmail, fullName, resourceTitle, status, reason) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log(`[Email Mock] Resource status email to ${toEmail}: ${resourceTitle} is ${status}`);
+    return;
+  }
   const isApproved = status === "approved";
   await sgMail.send({
     to: toEmail,
@@ -59,6 +73,10 @@ async function sendResourceStatusEmail(toEmail, fullName, resourceTitle, status,
 }
 
 async function sendAnnouncementEmail(toEmail, fullName, title, message) {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log(`[Email Mock] Announcement email to ${toEmail}: ${title}`);
+    return;
+  }
   await sgMail.send({
     to: toEmail,
     from: FROM,

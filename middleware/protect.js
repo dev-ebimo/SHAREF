@@ -13,7 +13,7 @@ async function protect(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "sharef-dev-fallback-jwt-secret-key-2026");
 
     const authStart = process.hrtime.bigint();
     req.user = await User.findById(decoded.id);

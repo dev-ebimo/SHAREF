@@ -2,7 +2,11 @@
 // forcing Google/Cloudflare DNS here fixes that. Safe to remove if you
 // ever migrate off Atlas or confirm your network resolves SRV records fine.
 const dns = require('node:dns');
-dns.setServers(['8.8.8.8', '1.1.1.1']);
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch {
+  // In sandboxed or restricted container environments, setServers might be restricted
+}
 require("dotenv").config();
 const connectDB = require("./config/db");
 const app = require("./app");
@@ -17,5 +21,6 @@ process.on("uncaughtException", (err) => {
 
 connectDB();
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+const HOST = "0.0.0.0";
+app.listen(PORT, HOST, () => console.log(`Server running on http://${HOST}:${PORT}`));
