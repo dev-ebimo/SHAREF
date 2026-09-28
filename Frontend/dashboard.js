@@ -57,21 +57,6 @@ document.addEventListener("DOMContentLoaded", function () {
       var timeGreeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
       greetingEl.textContent = timeGreeting + ", " + firstName + ".";
     }
-
-    if (currentUser.role === "admin") {
-      var dropdown = document.getElementById("accountMenuPanel") || document.querySelector(".account-dropdown");
-      if (dropdown && !dropdown.querySelector(".admin-panel-switch-item")) {
-        var firstDivider = dropdown.querySelector(".account-dropdown-divider");
-        if (firstDivider) {
-          var adminLink = document.createElement("a");
-          adminLink.href = "admin-moderation.html";
-          adminLink.className = "account-dropdown-item admin-panel-switch-item";
-          adminLink.setAttribute("role", "menuitem");
-          adminLink.innerHTML = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="width:16px;height:16px;color:#a855f7;flex-shrink:0;margin-right:8px;"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>Admin Panel</span>';
-          firstDivider.parentNode.insertBefore(adminLink, firstDivider.nextSibling);
-        }
-      }
-    }
   })();
 
   // Every page ships its notification bell with a hardcoded, always-visible

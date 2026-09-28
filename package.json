@@ -1,37 +1,24 @@
 {
-  "dependencies": {
-    "@sendgrid/mail": "^8.1.6",
-    "adm-zip": "^0.6.0",
-    "axios": "^1.18.1",
-    "bcryptjs": "^3.0.3",
-    "cloudinary": "^2.10.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "express-rate-limit": "^8.6.0",
-    "express-validator": "^7.3.2",
-    "helmet": "^8.3.0",
-    "jsonwebtoken": "^9.0.3",
-    "mammoth": "^1.12.0",
-    "mongodb-memory-server": "^11.3.0",
-    "mongoose": "^9.7.4",
-    "multer": "^2.2.0",
-    "pdf-parse": "^2.4.5"
-  },
-  "name": "student-resource-website",
+  "name": "sharef-api",
   "version": "1.0.0",
-  "description": "",
-  "main": "app.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "node server.js",
-    "build": "echo 'Build complete'",
-    "start": "node server.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute sharef-db --local --file=./src/db/schema.sql",
+    "db:migrate:remote": "wrangler d1 execute sharef-db --remote --file=./src/db/schema.sql"
   },
-  "engines": {
-    "node": ">=22.3.0"
+  "dependencies": {
+    "@hono/zod-validator": "^0.9.1",
+    "adm-zip": "^0.6.1",
+    "bcryptjs": "^3.0.3",
+    "hono": "^4.6.14",
+    "mammoth": "^1.12.3",
+    "unpdf": "^1.8.1",
+    "zod": "^4.6.5"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs"
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
 }

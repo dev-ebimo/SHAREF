@@ -1,0 +1,14 @@
+{
+  "name": "sharef-migrate",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "One-time MongoDB -> D1 data migration. Deliberately kept separate from the Worker's own package.json — the mongodb driver is a heavy, Node-specific dependency with no business being bundled into a Workers deployment.",
+  "scripts": {
+    "export": "node export.js",
+    "test": "node --experimental-sqlite test/transform.test.js && node --experimental-sqlite test/end-to-end.test.js"
+  },
+  "dependencies": {
+    "mongodb": "^6.10.0"
+  }
+}

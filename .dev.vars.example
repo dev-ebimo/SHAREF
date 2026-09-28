@@ -1,0 +1,11 @@
+# Copy to `.dev.vars` (which is gitignored) for local `wrangler dev`.
+# Use Paystack TEST keys locally — never live keys.
+JWT_SECRET=
+PAYSTACK_SECRET_KEY=
+SENDGRID_API_KEY=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+# Optional: set to "development" to include raw error messages in API error
+# responses (they're hidden by default). Never set this in production.
+NODE_ENV=

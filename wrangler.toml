@@ -1,0 +1,25 @@
+name = "sharef-api"
+main = "src/index.js"
+compatibility_date = "2026-09-21"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"                        # accessed in code as env.DB
+database_name = "sharef-db"
+database_id = "34e84feb-6269-437d-9467-717ef98c8392"   # `wrangler d1 create sharef-db` fills this in
+
+[vars]
+FRONTEND_URL = "https://sharef-resource.vercel.app"   # update to your real Vercel URL
+
+# Not secret (a sender address isn't sensitive), so these live here rather
+# than in `wrangler secret`. Copy both values from your Render service's
+# Environment tab. SENDGRID_FROM_EMAIL MUST be a sender identity you've
+# already verified in SendGrid, or SendGrid rejects every email — and since
+# email sends are deliberately fire-and-forget (a slow provider shouldn't
+# block signup), that failure is only logged, never shown to the user.
+SENDGRID_FROM_EMAIL = "ebimotimi.dev@gmail.com"
+SENDGRID_FROM_NAME = "Sharef"
+
+# Secrets (JWT_SECRET, PAYSTACK_SECRET_KEY, SENDGRID_API_KEY, CLOUDINARY_*)
+# are NOT put here — set them with `wrangler secret put <NAME>`, same idea
+# as Render's environment variables tab, but per-secret via the CLI.

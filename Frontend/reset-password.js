@@ -131,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         localStorage.removeItem("pendingResetEmail");
-        submitBtn.innerHTML = 'Password Reset <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:inline-block;vertical-align:middle;margin-left:4px;"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+        submitBtn.textContent = "Password Reset ✓";
         setTimeout(() => {
           window.location.href = "login.html";
         }, 1200);

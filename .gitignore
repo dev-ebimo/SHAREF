@@ -1,3 +1,11 @@
-node_modulus/
-uploads/
-.env
+node_modules/
+.wrangler/
+
+# Local-only secrets for `wrangler dev` — never commit
+.dev.vars
+
+# The generated migration file contains every user's email, bcrypt password
+# hash, and financial history. It must never reach a git remote — especially
+# one that auto-deploys.
+scripts/migrate/migration-data*.sql
+scripts/migrate/node_modules/

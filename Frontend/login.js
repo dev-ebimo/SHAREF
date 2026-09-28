@@ -5,26 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const errorBox = document.getElementById("login-error");
   const submitBtn = form.querySelector(".btn-submit");
 
-  const emailInput = document.getElementById("email");
-  const demoStudentBtn = document.getElementById("btn-demo-student");
-  const demoAdminBtn = document.getElementById("btn-demo-admin");
-
-  if (demoStudentBtn) {
-    demoStudentBtn.addEventListener("click", () => {
-      emailInput.value = "student@sharef.edu";
-      passwordInput.value = "StudentPass123!";
-      form.dispatchEvent(new Event("submit", { cancelable: true }));
-    });
-  }
-
-  if (demoAdminBtn) {
-    demoAdminBtn.addEventListener("click", () => {
-      emailInput.value = "admin@sharef.edu";
-      passwordInput.value = "AdminPass123!";
-      form.dispatchEvent(new Event("submit", { cancelable: true }));
-    });
-  }
-
   // Password visibility toggle
   toggleBtn.addEventListener("click", () => {
     const isPassword = passwordInput.type === "password";

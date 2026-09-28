@@ -396,7 +396,6 @@ button {
   align-items: center;
   gap: 0.9rem;
   margin-left: auto;
-  flex-shrink: 0;
 }
 
 .icon-btn-badge {
