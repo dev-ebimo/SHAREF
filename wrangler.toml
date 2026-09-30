@@ -23,3 +23,16 @@ SENDGRID_FROM_NAME = "Sharef"
 # Secrets (JWT_SECRET, PAYSTACK_SECRET_KEY, SENDGRID_API_KEY, CLOUDINARY_*)
 # are NOT put here — set them with `wrangler secret put <NAME>`, same idea
 # as Render's environment variables tab, but per-secret via the CLI.
+
+# ...
+[observability.logs]
+enabled = true
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
+
+[observability.traces]
+enabled = false
+head_sampling_rate = 1
+persist = true
+# ...
