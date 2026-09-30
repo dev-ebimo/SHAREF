@@ -7,5 +7,5 @@ node_modules/
 # The generated migration file contains every user's email, bcrypt password
 # hash, and financial history. It must never reach a git remote — especially
 # one that auto-deploys.
-scripts/migrate/migration-data*.sql
+scripts/migrate/migration-data.sql
 scripts/migrate/node_modules/

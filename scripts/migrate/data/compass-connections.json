@@ -1,0 +1,27 @@
+{
+  "type": "Compass Connections",
+  "version": {
+    "$numberInt": "1"
+  },
+  "connections": [
+    {
+      "id": "782c145a-c811-4a22-8a1a-2f007e224221",
+      "lastUsed": {
+        "$date": {
+          "$numberLong": "1790739459360"
+        }
+      },
+      "favorite": {
+        "name": "Sharef_Collection",
+        "color": "color1"
+      },
+      "savedConnectionType": "recent",
+      "connectionOptions": {
+        "connectionString": "mongodb+srv://ebimotimishadrack_db_user:U1uxfbduDxmoR4Nr@cluster0.afuyxj7.mongodb.net/",
+        "oidc": {
+          "serializedState": "eyJvaWRjUGx1Z2luU3RhdGVWZXJzaW9uIjoxLCJzdGF0ZSI6W119"
+        }
+      }
+    }
+  ]
+}
