@@ -9,4 +9,4 @@
 // workers.dev subdomain is shown in the Cloudflare dashboard (Workers &
 // Pages → your account) or printed after your first `wrangler deploy`. If
 // you later attach a custom domain/route to the Worker, use that instead.
-const API_BASE = "https://sharef-api.YOUR-SUBDOMAIN.workers.dev/api";
+const API_BASE = "https://sharef-api.sharef-backend.workers.dev/api";
