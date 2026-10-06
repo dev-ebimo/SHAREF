@@ -85,8 +85,8 @@ moment** — do it last, after everything above is verified.
 - [ ] Log in with an existing migrated account (proves password hashes carried over)
 - [ ] Fund the wallet with a small real amount → balance updates
 - [ ] Download a resource → correct amount deducted, file downloads with a sensible filename
-- [ ] Upload a small PDF → appears for admin review
-- [ ] As admin: preview it, approve it → uploader gets a notification
+- [ ] Upload a small PDF → appears for admin review (this exercises the direct-to-Cloudinary permit/complete flow)
+- [ ] As admin: open the review → page count is detected and prefilled; approve it → uploader gets a notification
 - [ ] Open the approved resource's preview as a student
 - [ ] Admin pages: users list, transactions summary, announcements
 
@@ -104,6 +104,6 @@ thoroughly *before* pushing the frontend change.
 - Announcement emails: the Workers free plan allows ~50 subrequests per
   request, so emailing more than roughly 50 students in one announcement
   will fail partway through. Fine at small scale; needs a queue later.
-- Upload and preview parsing are CPU-bound work on a plan with a 10ms CPU cap
-  per request. Preview generation was already made lazy for this reason.
-  Watch for `Error 1102` in Cloudflare's logs after real uploads.
+- The Worker does no file parsing: uploads go browser → Cloudinary, and page counting /
+  preview extraction run in the reviewing admin's browser. Watch the Workers dashboard
+  (Metrics → CPU time) after real traffic to confirm requests stay under the 10 ms cap.

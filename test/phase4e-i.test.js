@@ -94,23 +94,8 @@ async function deleteAuthed(path, token, env, ctx = withExecutionCtx().ctx) {
   return app.fetch(new Request(`http://localhost${path}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }), env, ctx);
 }
 
-function buildRealPdfBytes(text) {
-  const objects = {};
-  objects[1] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
-  objects[2] = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
-  objects[3] = "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 300 144] /Contents 5 0 R >>\nendobj\n";
-  objects[4] = "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
-  const streamContent = `BT /F1 24 Tf 100 100 Td (${text}) Tj ET`;
-  objects[5] = `5 0 obj\n<< /Length ${streamContent.length} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
-  let pdf = "%PDF-1.4\n";
-  const offsets = [0];
-  for (let i = 1; i <= 5; i++) { offsets[i] = pdf.length; pdf += objects[i]; }
-  const xrefStart = pdf.length;
-  pdf += "xref\n0 6\n0000000000 65535 f \n";
-  for (let i = 1; i <= 5; i++) pdf += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
-  pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-  return Buffer.from(pdf, "latin1");
-}
+// What the admin's browser submits when approving (page count + preview snippet).
+const REVIEW = { pages: 7, snippet: "Intro to algorithms and data structures" };
 
 const realFetch = globalThis.fetch;
 let sentEmails = [];
@@ -128,13 +113,6 @@ function installMocks() {
       const publicId = body.get ? body.get("public_id") : null;
       cloudinaryDestroyCalls.push(publicId);
       return new Response(JSON.stringify({ result: "ok" }), { status: 200 });
-    }
-    if (typeof url === "string" && url.includes("res.cloudinary.com")) {
-      // A real, valid PDF (same construction validated directly against
-      // unpdf back in phase 4c) — admin full-text extraction genuinely
-      // parses PDF structure, so fake/plain-text bytes here would fail
-      // for the right reasons and prove nothing.
-      return new Response(buildRealPdfBytes("Real extracted text for admin review"), { status: 200 });
     }
     return realFetch(url, opts);
   };
@@ -172,7 +150,7 @@ async function run() {
     check("queue: only pending resources listed", body.queue.length === 2);
     check("queue: aged flag correctly set", body.queue.find((q) => q.id === "r2").isAged === true);
     check("queue: non-aged flag correctly false", body.queue.find((q) => q.id === "r1").isAged === false);
-    check("queue: previewType passed through (including 'pending' state)", body.queue.find((q) => q.id === "r1").previewType === "pending");
+    check("queue: internal preview state is no longer exposed", body.queue.find((q) => q.id === "r1").previewType === undefined);
     check("queue: uploader name joined in", body.queue[0].uploader === "User u1");
     check("queue: stats.pending correct", body.stats.pending === 2);
     check("queue: stats.approved correct", body.stats.approved === 1);
@@ -210,7 +188,7 @@ async function run() {
     const token = await tokenFor(env, "admin1", "admin");
     installMocks();
     const { ctx, drain } = withExecutionCtx();
-    const res = await postAuthed("/api/admin/moderation/r1/approve", null, token, env, ctx);
+    const res = await postAuthed("/api/admin/moderation/r1/approve", REVIEW, token, env, ctx);
     await drain();
     const body = await res.json();
     check("approve: 200 status", res.status === 200, JSON.stringify(body));
@@ -219,6 +197,8 @@ async function run() {
     check("approve: status flipped to approved", row.status === "approved");
     check("approve: reviewed_by set", row.reviewed_by === "admin1");
     check("approve: reviewed_at set", !!row.reviewed_at);
+    check("approve: reviewer-confirmed page count stored", row.pages === 7, String(row.pages));
+    check("approve: preview snippet stored and preview_type resolved to 'text'", row.preview_type === "text" && row.preview_snippet === REVIEW.snippet);
 
     const notif = DB._raw.prepare("SELECT * FROM notifications WHERE recipient_id = 'uploader1'").get();
     check("approve: uploader in-app notification created", !!notif && notif.type === "resource_approved");
@@ -241,7 +221,7 @@ async function run() {
     installMocks();
 
     const { ctx, drain } = withExecutionCtx();
-    await postAuthed("/api/admin/moderation/r1/approve", null, token, env, ctx);
+    await postAuthed("/api/admin/moderation/r1/approve", REVIEW, token, env, ctx);
     await drain();
     const notif = DB._raw.prepare("SELECT * FROM notifications WHERE recipient_id = 'uploader1'").get();
     check("approve: no in-app notification when preference is off", notif === undefined);
@@ -258,9 +238,9 @@ async function run() {
     installMocks();
 
     const { ctx, drain } = withExecutionCtx();
-    const res1 = await postAuthed("/api/admin/moderation/r1/approve", null, token, env, ctx);
+    const res1 = await postAuthed("/api/admin/moderation/r1/approve", REVIEW, token, env, ctx);
     check("approve: first approval succeeds", res1.status === 200);
-    const res2 = await postAuthed("/api/admin/moderation/r1/approve", null, token, env, ctx);
+    const res2 = await postAuthed("/api/admin/moderation/r1/approve", REVIEW, token, env, ctx);
     check("approve: second approval on already-approved -> 409", res2.status === 409);
     await drain();
     check("approve: uploader notified only once despite double-approve attempt", sentEmails.length === 1);
@@ -270,7 +250,7 @@ async function run() {
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "admin1", role: "admin" });
     const token = await tokenFor(env, "admin1", "admin");
-    const res = await postAuthed("/api/admin/moderation/does-not-exist/approve", null, token, env);
+    const res = await postAuthed("/api/admin/moderation/does-not-exist/approve", REVIEW, token, env);
     check("approve: nonexistent resource -> 404", res.status === 404);
   }
 
@@ -298,6 +278,40 @@ async function run() {
     restoreFetch();
   }
   {
+    // approval REQUIRES a sane page count; nothing changes if it's missing/invalid
+    const { env, DB } = freshEnv();
+    seedUser(DB, { id: "admin1", role: "admin" });
+    seedResource(DB, { id: "r1", status: "pending" });
+    const token = await tokenFor(env, "admin1", "admin");
+    const bad = [null, {}, { pages: 0 }, { pages: -3 }, { pages: 1001 }, { pages: 2.5 }, { pages: "7" }, { pages: NaN }, { pages: { $gt: 0 } }, { snippet: "no pages" }];
+    let allRejected = true;
+    for (const b of bad) {
+      const r = await postAuthed("/api/admin/moderation/r1/approve", b, token, env);
+      if (r.status !== 400) { allRejected = false; console.log("   not rejected:", JSON.stringify(b), r.status); }
+    }
+    check("approve: missing / invalid page counts all rejected with 400", allRejected);
+    check("approve: ...and the resource is still pending", DB._raw.prepare("SELECT status FROM resources WHERE id='r1'").get().status === "pending");
+    const msg = await (await postAuthed("/api/admin/moderation/r1/approve", { pages: 0 }, token, env)).json();
+    check("approve: 400 explains what to enter", /page count/i.test(msg.message), JSON.stringify(msg));
+    const edge = await postAuthed("/api/admin/moderation/r1/approve", { pages: 1000 }, token, env);
+    check("approve: 1000 pages (upper bound) accepted", edge.status === 200);
+  }
+  {
+    // no snippet (scanned PDF, ZIP, image...) -> approved with preview 'none'; snippet is sanitised and capped
+    const { env, DB } = freshEnv();
+    seedUser(DB, { id: "admin1", role: "admin" });
+    seedResource(DB, { id: "r1", status: "pending" });
+    seedResource(DB, { id: "r2", status: "pending" });
+    const token = await tokenFor(env, "admin1", "admin");
+    await postAuthed("/api/admin/moderation/r1/approve", { pages: 1 }, token, env);
+    const r1 = DB._raw.prepare("SELECT preview_type, preview_snippet, preview_message FROM resources WHERE id='r1'").get();
+    check("approve: no snippet -> preview_type 'none' with a message", r1.preview_type === "none" && r1.preview_snippet === "" && r1.preview_message.length > 0);
+    await postAuthed("/api/admin/moderation/r2/approve", { pages: 2, snippet: "line1\u0000\u0007\n\n  line2 " + "x".repeat(1500) }, token, env);
+    const r2 = DB._raw.prepare("SELECT preview_snippet FROM resources WHERE id='r2'").get();
+    check("approve: control characters stripped and whitespace collapsed", r2.preview_snippet.startsWith("line1 line2 x"));
+    check("approve: snippet capped at ~1000 chars", r2.preview_snippet.length <= 1001, String(r2.preview_snippet.length));
+  }
+  {
     // reason is optional (quick-reject flow)
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "admin1", role: "admin" });
@@ -314,48 +328,31 @@ async function run() {
   }
 
   // =========================================================================
-  // getResourcePreviewForAdmin
+  // getResourcePreviewForAdmin — the Worker no longer reads or parses the file;
+  // it only hands the admin's browser a short-lived link to analyse itself.
   // =========================================================================
   {
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "admin1", role: "admin" });
-    seedResource(DB, { id: "r-pending", previewType: "pending" });
-    seedResource(DB, { id: "r-none", previewType: "none" });
-    seedResource(DB, { id: "r-image", previewType: "image" });
+    seedResource(DB, { id: "r-pending", previewType: "pending", fileName: "week3.docx" });
+    DB._raw.prepare("UPDATE resources SET file_extension = 'docx' WHERE id = 'r-pending'").run();
     const token = await tokenFor(env, "admin1", "admin");
-    installMocks();
 
-    const resPending = await getAuthed("/api/admin/moderation/r-pending/preview", token, env);
-    const bodyPending = await resPending.json();
-    check("admin preview: 'pending' state triggers real extraction attempt", resPending.status === 200 && bodyPending.previewType === "text", JSON.stringify(bodyPending));
-    check("admin preview: full text returned (not truncated)", bodyPending.fullText.includes("Real extracted text"));
-    check("admin preview: fileUrl issued for download", bodyPending.fileUrl.includes("/stream?token="));
+    let fetchCalls = 0;
+    globalThis.fetch = async (url, opts) => { fetchCalls++; return realFetch(url, opts); };
 
-    const resNone = await getAuthed("/api/admin/moderation/r-none/preview", token, env);
-    const bodyNone = await resNone.json();
-    check("admin preview: 'none' type returns none without attempting extraction", bodyNone.previewType === "none");
-
-    const resImage = await getAuthed("/api/admin/moderation/r-image/preview", token, env);
-    const bodyImage = await resImage.json();
-    check("admin preview: legacy 'image' type returns image with download prompt", bodyImage.previewType === "image" && bodyImage.message.includes("Download the file"));
-
-    restoreFetch();
-  }
-  {
-    // extraction failure degrades gracefully, not a 500
-    const { env, DB } = freshEnv();
-    seedUser(DB, { id: "admin1", role: "admin" });
-    seedResource(DB, { id: "r1", previewType: "text", fileUrl: "https://res.cloudinary.com/broken-file.pdf" });
-    const token = await tokenFor(env, "admin1", "admin");
-    globalThis.fetch = async (url, opts) => {
-      if (typeof url === "string" && url.includes("res.cloudinary.com")) {
-        return new Response(null, { status: 404 }); // simulate a broken/missing file
-      }
-      return realFetch(url, opts);
-    };
-    const res = await getAuthed("/api/admin/moderation/r1/preview", token, env);
+    const res = await getAuthed("/api/admin/moderation/r-pending/preview", token, env);
     const body = await res.json();
-    check("admin preview: extraction failure -> graceful 200 with previewType none", res.status === 200 && body.previewType === "none", JSON.stringify(body));
+    check("admin preview: 200 with a signed stream link", res.status === 200 && body.success && body.fileUrl.includes("/stream?token="), JSON.stringify(body));
+    check("admin preview: tells the browser the file name + type to analyse", body.fileName === "week3.docx" && body.fileExtension === "docx");
+    check("admin preview: Worker did NOT fetch or parse the file", fetchCalls === 0);
+    check("admin preview: no server-extracted text in the response", body.fullText === undefined && body.previewType === undefined);
+
+    const missing = await getAuthed("/api/admin/moderation/nope/preview", token, env);
+    check("admin preview: unknown resource -> 404", missing.status === 404);
+    const noAuth = await app.fetch(new Request("http://localhost/api/admin/moderation/r-pending/preview"), env);
+    check("admin preview: requires auth", noAuth.status === 401);
+
     restoreFetch();
   }
 

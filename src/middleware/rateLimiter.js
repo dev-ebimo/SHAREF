@@ -13,6 +13,11 @@
 const buckets = new Map(); // key -> { count, resetAt }
 const MAX_BUCKETS = 5000;
 
+// Test helper.
+export function _resetRateLimiters() {
+  buckets.clear();
+}
+
 // Without this the Map only ever grows in a long-lived isolate (memory leak).
 function pruneBuckets(now) {
   if (buckets.size < MAX_BUCKETS) return;
@@ -71,4 +76,12 @@ export const registerLimiter = rateLimiter({
   windowMs: 60 * 60 * 1000,
   max: 15,
   message: { success: false, message: "Too many sign-up attempts from this network. Please try again later." },
+});
+
+// Upload permits: each one reserves a slot of Cloudinary storage, so cap per user.
+export const uploadPermitLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: { success: false, message: "Too many uploads started. Please try again in a while." },
+  keyFn: (c) => c.get("user")?.id || c.req.header("CF-Connecting-IP") || "unknown",
 });

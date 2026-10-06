@@ -89,7 +89,7 @@ CREATE TABLE resources (
 
   file_size_bytes            INTEGER NOT NULL,
   file_extension              TEXT NOT NULL,
-  pages                      INTEGER NOT NULL DEFAULT 1,
+  pages                      INTEGER NOT NULL DEFAULT 1,   -- placeholder (1) while pending; the REAL count is set by the admin at approval
 
   status                     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
   rejection_reason           TEXT NOT NULL DEFAULT '',
@@ -103,6 +103,30 @@ CREATE TABLE resources (
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+-- ----------------------------------------------------------------------------
+-- upload_intents — permits for direct browser -> Cloudinary uploads
+-- ----------------------------------------------------------------------------
+-- The Worker never touches file bytes (10 ms CPU limit on the free plan). It
+-- issues a signed permit for ONE server-chosen public_id and remembers the
+-- validated metadata here; POST /resources/upload/complete later verifies the
+-- file really exists, then turns the intent into a `resources` row whose id
+-- equals the intent id (so completing twice can never create two resources).
+-- Rows that are never completed expire and are purged (with their Cloudinary
+-- file) by jobs/purgeStaleUploads.js.
+CREATE TABLE upload_intents (
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  public_id        TEXT NOT NULL UNIQUE,
+  file_name        TEXT NOT NULL,
+  file_extension   TEXT NOT NULL,
+  declared_size    INTEGER NOT NULL,
+  metadata         TEXT NOT NULL,                     -- JSON: validated title/type/department/...
+  created_at       TEXT NOT NULL,
+  expires_at       TEXT NOT NULL
+);
+CREATE INDEX idx_upload_intents_user    ON upload_intents (user_id, expires_at);
+CREATE INDEX idx_upload_intents_expires ON upload_intents (expires_at);
 
 -- Every one of these matches an existing Mongoose compound index 1:1.
 CREATE INDEX idx_resources_status_created   ON resources (status, created_at DESC);

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
-import { getMyUploads, getResources, getResourceById, uploadResource } from "../controllers/resourceController.js";
+import { getMyUploads, getResources, getResourceById } from "../controllers/resourceController.js";
+import { requestUploadPermit, completeUpload } from "../controllers/uploadController.js";
 import {
   getRecentFeed,
   getTrending,
@@ -9,10 +10,13 @@ import {
 } from "../controllers/browseController.js";
 import { streamResourceDownload } from "../controllers/downloadController.js";
 import { protect } from "../middleware/protect.js";
+import { uploadPermitLimiter } from "../middleware/rateLimiter.js";
 
 const resourceRoutes = new Hono();
 
-resourceRoutes.post("/upload", protect, uploadResource);
+// Direct-to-Cloudinary upload: permit -> (browser uploads to Cloudinary) -> complete.
+resourceRoutes.post("/upload/permit", protect, uploadPermitLimiter, requestUploadPermit);
+resourceRoutes.post("/upload/complete", protect, completeUpload);
 
 resourceRoutes.get("/recent", protect, getRecentFeed);
 resourceRoutes.get("/trending", protect, getTrending);

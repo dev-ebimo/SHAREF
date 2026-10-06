@@ -215,64 +215,29 @@ async function run() {
   }
 
   // =========================================================================
-  // getResourcePreview — lazy "pending" compute-and-cache flow
+  // getResourcePreview — never fetches or parses a file (CPU budget).
+  // The snippet is stored at approval time by the reviewing admin's browser.
   // =========================================================================
   {
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "u1" });
-    // preview_type defaults to 'pending' per the schema — matches what a
-    // real upload now inserts (see resourceController.js's uploadResource).
-    seedResource(DB, { id: "r-pending-preview", previewType: "pending" });
-    DB._raw.prepare("UPDATE resources SET file_name = 'notes.pdf', file_url = 'https://res.cloudinary.com/sharef-cloud/raw/upload/notes.pdf' WHERE id = 'r-pending-preview'").run();
-
-    // Real hand-built single-page PDF with real extractable text, same one
-    // validated directly against unpdf earlier in this project.
-    function buildRealPdfBytes() {
-      const objects = {};
-      objects[1] = "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n";
-      objects[2] = "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n";
-      objects[3] = "3 0 obj\n<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 300 144] /Contents 5 0 R >>\nendobj\n";
-      objects[4] = "4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n";
-      const streamContent = "BT /F1 24 Tf 100 100 Td (Lazy Preview Works) Tj ET";
-      objects[5] = `5 0 obj\n<< /Length ${streamContent.length} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
-      let pdf = "%PDF-1.4\n";
-      const offsets = [0];
-      for (let i = 1; i <= 5; i++) { offsets[i] = pdf.length; pdf += objects[i]; }
-      const xrefStart = pdf.length;
-      pdf += "xref\n0 6\n0000000000 65535 f \n";
-      for (let i = 1; i <= 5; i++) pdf += String(offsets[i]).padStart(10, "0") + " 00000 n \n";
-      pdf += `trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
-      return Buffer.from(pdf, "latin1");
-    }
-
-    const realFetch = globalThis.fetch;
-    let fetchCallCount = 0;
-    globalThis.fetch = async (url, opts) => {
-      if (typeof url === "string" && url.includes("res.cloudinary.com")) {
-        fetchCallCount++;
-        return new Response(buildRealPdfBytes(), { status: 200 });
-      }
-      return realFetch(url, opts);
-    };
-
+    seedResource(DB, { id: "r-legacy-pending", previewType: "pending" }); // legacy row that was never settled
+    seedResource(DB, { id: "r-image", previewType: "image" });
+    DB._raw.prepare("UPDATE resources SET preview_image_public_id = 'legacy/pub' WHERE id = 'r-image'").run();
     const token = await tokenFor(env, "u1");
 
-    // First view: should fetch from Cloudinary, actually run unpdf, and cache the result
-    const res1 = await getAuthed("/api/resources/r-pending-preview/preview", token, env);
+    const realFetch = globalThis.fetch;
+    let fetchCalls = 0;
+    globalThis.fetch = async (url, opts) => { fetchCalls++; return realFetch(url, opts); };
+
+    const res1 = await getAuthed("/api/resources/r-legacy-pending/preview", token, env);
     const body1 = await res1.json();
-    check("preview (lazy): first view -> 200 with real extracted text", res1.status === 200 && body1.previewType === "text", JSON.stringify(body1));
-    check("preview (lazy): snippet contains real extracted text", body1.snippet.includes("Lazy"), body1.snippet);
-    check("preview (lazy): Cloudinary was fetched exactly once", fetchCallCount === 1);
+    check("preview: legacy 'pending' row answers 'none' instead of parsing a file", res1.status === 200 && body1.previewType === "none", JSON.stringify(body1));
+    check("preview: no network fetch / file parsing happened", fetchCalls === 0);
 
-    const row = DB._raw.prepare("SELECT preview_type, preview_snippet FROM resources WHERE id = 'r-pending-preview'").get();
-    check("preview (lazy): D1 row updated to 'text'", row.preview_type === "text");
-    check("preview (lazy): D1 row cached the snippet", row.preview_snippet.includes("Lazy"));
-
-    // Second view: should use the cached row, NOT fetch Cloudinary again
-    const res2 = await getAuthed("/api/resources/r-pending-preview/preview", token, env);
+    const res2 = await getAuthed("/api/resources/r-image/preview", token, env);
     const body2 = await res2.json();
-    check("preview (lazy): second view -> 200 from cache", res2.status === 200 && body2.snippet.includes("Lazy"));
-    check("preview (lazy): Cloudinary NOT fetched again (still 1 call total)", fetchCallCount === 1);
+    check("preview: legacy image preview still builds its Cloudinary URL", body2.previewType === "image" && body2.imageUrl.includes("legacy/pub"), JSON.stringify(body2));
 
     globalThis.fetch = realFetch;
   }

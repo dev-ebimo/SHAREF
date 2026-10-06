@@ -182,113 +182,181 @@ document.addEventListener('DOMContentLoaded', () => {
         realUploadProcess();
     });
 
-    function realUploadProcess() {
+    function resetProgressUi() {
+        document.getElementById('progressBar').style.width = '0%';
+        document.getElementById('progressText').textContent = '0%';
+        document.getElementById('progressDetail').textContent = '';
+    }
+
+    function showUploadError(message) {
+        resetProgressUi();
+        switchState(stateProgress, stateForm);
+        uploadError.textContent = message;
+        uploadError.style.display = 'block';
+    }
+
+    function messageFrom(data, fallback) {
+        if (data && data.errors) return data.errors.map((e) => e.message).join(' ');
+        return (data && data.message) || fallback;
+    }
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    // Sends the file STRAIGHT to Cloudinary using the signed permit our API
+    // issued. The file never passes through our server (it runs on a tiny CPU
+    // budget). Uses XMLHttpRequest because fetch() can't report upload progress.
+    function sendToCloudinary(upload, file) {
         const progressBar = document.getElementById('progressBar');
         const progressText = document.getElementById('progressText');
         const progressDetail = document.getElementById('progressDetail');
 
-        const formData = new FormData();
-        formData.append('file', currentFile);
-        formData.append('title', resourceTitle.value.trim());
-        formData.append('type', document.getElementById('resourceType').value);
-        formData.append('department', document.getElementById('department').value.trim());
-        formData.append('course', document.getElementById('course').value.trim());
-        formData.append('level', document.getElementById('level').value);
-        formData.append('semester', document.getElementById('semester').value);
-        formData.append('session', document.getElementById('academicSession').value);
-        formData.append('description', description.value.trim());
+        return new Promise((resolve) => {
+            const formData = new FormData();
+            Object.keys(upload.fields).forEach((key) => formData.append(key, upload.fields[key]));
+            formData.append('file', file); // Cloudinary expects the file last
 
-        progressBar.style.width = '0%';
-        progressText.textContent = '0%';
+            const xhr = new XMLHttpRequest();
+            let lastLoaded = 0;
+            let lastTickAt = Date.now();
+            // Exponential moving average of bytes/sec — smooths out the jumpy,
+            // unreliable instantaneous reading you get between individual
+            // progress ticks (especially the first couple), so the ETA doesn't
+            // flicker between very different numbers every few hundred ms.
+            let smoothedBytesPerSecond = null;
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (!e.lengthComputable) return;
+
+                const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
+                progressBar.style.width = `${percent}%`;
+                progressText.textContent = `${percent}%`;
+
+                const now = Date.now();
+                const intervalSeconds = (now - lastTickAt) / 1000;
+                const intervalBytes = e.loaded - lastLoaded;
+                if (intervalSeconds > 0 && intervalBytes > 0) {
+                    const instantBytesPerSecond = intervalBytes / intervalSeconds;
+                    smoothedBytesPerSecond = smoothedBytesPerSecond === null
+                        ? instantBytesPerSecond
+                        : smoothedBytesPerSecond * 0.7 + instantBytesPerSecond * 0.3;
+                }
+                lastLoaded = e.loaded;
+                lastTickAt = now;
+
+                if (e.loaded >= e.total) {
+                    progressDetail.textContent = `${formatBytes(e.total)} uploaded · Finishing up…`;
+                    return;
+                }
+
+                const remainingBytes = e.total - e.loaded;
+                const etaLabel = smoothedBytesPerSecond
+                    ? formatEta(remainingBytes / smoothedBytesPerSecond)
+                    : 'Calculating time remaining…';
+                progressDetail.textContent = `${formatBytes(e.loaded)} of ${formatBytes(e.total)} · ${etaLabel}`;
+            });
+
+            xhr.addEventListener('load', () => {
+                let data = null;
+                try { data = JSON.parse(xhr.responseText); } catch (err) { data = null; }
+                if (xhr.status >= 200 && xhr.status < 300 && data && data.public_id) {
+                    resolve({ ok: true });
+                } else {
+                    resolve({ ok: false, message: (data && data.error && data.error.message) || 'The file could not be uploaded. Please try again.' });
+                }
+            });
+            xhr.addEventListener('error', () => {
+                resolve({ ok: false, message: 'Network error — could not reach the upload service. Please try again.' });
+            });
+
+            xhr.open('POST', upload.url);
+            xhr.send(formData);
+        });
+    }
+
+    // Three steps: (1) ask our API for a signed permit, (2) upload the file
+    // directly to Cloudinary, (3) tell our API it's done so it can verify the
+    // file and queue it for review.
+    async function realUploadProcess() {
+        const progressDetail = document.getElementById('progressDetail');
+        resetProgressUi();
         progressDetail.textContent = `Preparing to upload ${formatBytes(currentFile.size)}…`;
 
-        // fetch() can't report upload byte progress, so real percentage +
-        // ETA needs XMLHttpRequest's upload.progress event instead.
-        const xhr = new XMLHttpRequest();
-        let lastLoaded = 0;
-        let lastTickAt = Date.now();
-        // Exponential moving average of bytes/sec — smooths out the jumpy,
-        // unreliable instantaneous reading you get between individual
-        // progress ticks (especially the first couple), so the ETA doesn't
-        // flicker between very different numbers every few hundred ms.
-        let smoothedBytesPerSecond = null;
+        const metadata = {
+            title: resourceTitle.value.trim(),
+            type: document.getElementById('resourceType').value,
+            department: document.getElementById('department').value.trim(),
+            course: document.getElementById('course').value.trim(),
+            level: document.getElementById('level').value,
+            semester: document.getElementById('semester').value,
+            session: document.getElementById('academicSession').value,
+            description: description.value.trim(),
+            fileName: currentFile.name,
+            fileSize: currentFile.size,
+        };
 
-        xhr.upload.addEventListener('progress', (e) => {
-            if (!e.lengthComputable) return;
-
-            const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
-            progressBar.style.width = `${percent}%`;
-            progressText.textContent = `${percent}%`;
-
-            const now = Date.now();
-            const intervalSeconds = (now - lastTickAt) / 1000;
-            const intervalBytes = e.loaded - lastLoaded;
-            if (intervalSeconds > 0 && intervalBytes > 0) {
-                const instantBytesPerSecond = intervalBytes / intervalSeconds;
-                smoothedBytesPerSecond = smoothedBytesPerSecond === null
-                    ? instantBytesPerSecond
-                    : smoothedBytesPerSecond * 0.7 + instantBytesPerSecond * 0.3;
-            }
-            lastLoaded = e.loaded;
-            lastTickAt = now;
-
-            if (e.loaded >= e.total) {
-                progressDetail.textContent = `${formatBytes(e.total)} uploaded · Finishing up…`;
+        // 1) permit
+        let permit;
+        try {
+            const res = await authFetch(`${API_BASE}/resources/upload/permit`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(metadata),
+            });
+            permit = await res.json().catch(() => null);
+            if (!res.ok || !permit || !permit.success) {
+                showUploadError(messageFrom(permit, 'Could not start the upload. Please try again.'));
                 return;
             }
+        } catch (err) {
+            if (err && err.message === 'Session expired') return; // authFetch already logged the user out
+            showUploadError('Network error — could not reach the server. Please try again.');
+            return;
+        }
 
-            const remainingBytes = e.total - e.loaded;
-            const etaLabel = smoothedBytesPerSecond
-                ? formatEta(remainingBytes / smoothedBytesPerSecond)
-                : 'Calculating time remaining…';
-            progressDetail.textContent = `${formatBytes(e.loaded)} of ${formatBytes(e.total)} · ${etaLabel}`;
-        });
+        // 2) the file itself, straight to Cloudinary
+        const sent = await sendToCloudinary(permit.upload, currentFile);
+        if (!sent.ok) {
+            showUploadError(sent.message);
+            return;
+        }
 
-        xhr.addEventListener('load', () => {
-            let data = null;
-            try {
-                data = JSON.parse(xhr.responseText);
-            } catch (err) {
-                data = null;
+        // 3) finish. A brief 409 just means Cloudinary hadn't finished
+        // registering the file yet, so retry a few times.
+        progressDetail.textContent = 'Finishing up…';
+        let data = null;
+        let ok = false;
+        try {
+            for (let attempt = 0; attempt < 4; attempt++) {
+                const res = await authFetch(`${API_BASE}/resources/upload/complete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ intentId: permit.intentId }),
+                });
+                data = await res.json().catch(() => null);
+                ok = res.ok && data && data.success;
+                if (res.status === 409 && attempt < 3) {
+                    await sleep(1000);
+                    continue;
+                }
+                break;
             }
+        } catch (err) {
+            if (err && err.message === 'Session expired') return;
+            showUploadError('Network error — your file uploaded but we could not finish. Please try again.');
+            return;
+        }
 
-            if (xhr.status === 401) {
-                logout();
-                return;
-            }
+        if (!ok) {
+            showUploadError(messageFrom(data, 'Upload failed. Please try again.'));
+            return;
+        }
 
-            if (xhr.status < 200 || xhr.status >= 300 || !data || !data.success) {
-                progressBar.style.width = '0%';
-                progressText.textContent = '0%';
-                progressDetail.textContent = '';
-                switchState(stateProgress, stateForm);
-                uploadError.textContent = (data && data.errors)
-                    ? data.errors.map((e) => e.message).join(' ')
-                    : (data && data.message) || 'Upload failed. Please try again.';
-                uploadError.style.display = 'block';
-                return;
-            }
-
-            progressBar.style.width = '100%';
-            progressText.textContent = '100%';
-            progressDetail.textContent = 'Upload complete';
-            setTimeout(() => {
-                switchState(stateProgress, stateSuccess);
-            }, 400);
-        });
-
-        xhr.addEventListener('error', () => {
-            progressBar.style.width = '0%';
-            progressText.textContent = '0%';
-            progressDetail.textContent = '';
-            switchState(stateProgress, stateForm);
-            uploadError.textContent = 'Network error — could not reach the server. Please try again.';
-            uploadError.style.display = 'block';
-        });
-
-        xhr.open('POST', `${API_BASE}/resources/upload`);
-        xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`); // no Content-Type — the browser sets the multipart boundary automatically
-        xhr.send(formData);
+        document.getElementById('progressBar').style.width = '100%';
+        document.getElementById('progressText').textContent = '100%';
+        progressDetail.textContent = 'Upload complete';
+        setTimeout(() => {
+            switchState(stateProgress, stateSuccess);
+        }, 400);
     }
 
     function formatEta(seconds) {

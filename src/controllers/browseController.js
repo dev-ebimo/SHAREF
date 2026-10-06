@@ -1,7 +1,6 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { shapeResource } from "../utils/resourceShape.js";
 import { buildPdfHalfPagePreviewUrl } from "../utils/cloudinaryPreview.js";
-import getPreviewSnippet from "../utils/previewSnippet.js";
 
 // @route GET /api/resources/recent
 // Powers the "Recently Added" feed on the dashboard — only resources
@@ -157,57 +156,25 @@ export async function searchPastQuestions(c) {
 
 // @route GET /api/resources/:id/preview
 // Student-facing preview — only ever shows a fraction of page 1, never the
-// full document. DOCX/PPTX get the pre-extracted half-page text snippet.
-// New PDF uploads no longer get a preview image generated at all (they're
-// treated the same as ZIP — previewType "none") — the "image" branch below
-// only still fires for PDFs that were uploaded before that change and
-// already have a previewImagePublicId stored.
-// Computes the preview snippet on the FIRST request for a resource whose
-// preview is still "pending" (deferred from upload — see the comment in
-// resourceController.js's uploadResource for why), then caches the result
-// in D1 so every subsequent view is a plain column read, not a re-parse.
+// full document. The snippet is extracted in the reviewing admin's browser at
+// approval time and stored on the row (see approveResourceById), so this is
+// a plain column read: no file is fetched or parsed here.
 //
-// A harmless race is possible if two students open the same brand-new
-// resource's preview at almost the same moment — both would compute and
-// UPDATE independently. Same end result either way (idempotent), and not
-// worth adding locking for at this scale.
-async function computeAndCachePreview(c, resource) {
-  const upstream = await fetch(resource.file_url);
-  if (!upstream.ok) {
-    throw new Error(`Could not fetch file from storage (status ${upstream.status})`);
-  }
-  const fileBuffer = Buffer.from(await upstream.arrayBuffer());
-  const result = await getPreviewSnippet(fileBuffer, resource.file_name);
-
-  const previewType = result.available ? "text" : "none";
-  const previewSnippet = previewType === "text" ? result.snippet : "";
-  const previewMessage = previewType === "none" ? result.message || "Preview not available for this file type." : "";
-
-  await c.env.DB.prepare(
-    "UPDATE resources SET preview_type = ?, preview_snippet = ?, preview_message = ?, updated_at = ? WHERE id = ?"
-  )
-    .bind(previewType, previewSnippet, previewMessage, new Date().toISOString(), resource.id)
-    .run();
-
-  if (previewType === "text") {
-    return c.json({ success: true, previewType: "text", snippet: previewSnippet });
-  }
-  return c.json({ success: true, previewType: "none", message: previewMessage });
-}
-
+// Only a legacy "image" preview (PDFs uploaded long ago, with a stored
+// preview_image_public_id) still builds a Cloudinary image URL.
 export async function getResourcePreview(c) {
   try {
     const id = c.req.param("id");
-    const resource = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
+    const resource = await c.env.DB.prepare(
+      "SELECT status, preview_type, preview_snippet, preview_message, preview_image_public_id FROM resources WHERE id = ?"
+    )
+      .bind(id)
+      .first();
     if (!resource || resource.status !== "approved") {
       return c.json({ success: false, message: "Resource not available" }, 404);
     }
 
-    if (resource.preview_type === "pending") {
-      return await computeAndCachePreview(c, resource);
-    }
-
-    if (resource.preview_type === "image") {
+    if (resource.preview_type === "image" && resource.preview_image_public_id) {
       return c.json({
         success: true,
         previewType: "image",

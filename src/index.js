@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { purgeStaleUploads } from "./jobs/purgeStaleUploads.js";
 import authRoutes from "./routes/authRoutes.js";
 import bookmarkRoutes from "./routes/bookmarkRoutes.js";
 import studentNotificationRoutes from "./routes/studentNotificationRoutes.js";
@@ -73,4 +74,13 @@ app.onError((err, c) => {
   return c.json({ success: false, message: "Internal server error" }, 500);
 });
 
-export default app;
+// Cron Trigger entry point (optional — add `[triggers] crons = ["0 3 * * *"]`
+// to wrangler.toml). Cleans up uploads that were started but never finished.
+async function scheduled(event, env, ctx) {
+  ctx.waitUntil(purgeStaleUploads(env, { limit: 20 }));
+}
+
+export default {
+  fetch: (request, env, ctx) => app.fetch(request, env, ctx),
+  scheduled,
+};

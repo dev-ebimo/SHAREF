@@ -7,7 +7,6 @@ import { createMockD1 } from "./mockD1.js";
 import { hashOtp } from "../src/utils/otp.js";
 import { hashPassword, verifyPassword, configuredIterations } from "../src/utils/password.js";
 import { sendVerificationEmail, sendAnnouncementEmail, sendResourceStatusEmail } from "../src/services/emailService.js";
-import { countPages } from "../src/utils/pageCounter.js";
 import { _clearAuthCache } from "../src/middleware/protect.js";
 
 const schemaSql = fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8");
@@ -299,19 +298,6 @@ async function run() {
     const big = { preferences: { junk: "x".repeat(10000) } };
     const res = await call("PATCH", "/api/users/me/preferences", { body: big, token: await tok(env, "u1"), env });
     check("prefs: oversized preferences payload rejected (400)", res.status === 400, res.status);
-  }
-  {
-    // PDF pricing loophole
-    const pdf = (body) => Buffer.from(body, "latin1");
-    const plain = pdf("%PDF-1.4\n" + "<< /Type /Page >>\n".repeat(3));
-    check("pages: plain PDF counts page objects", (await countPages(plain, "a.pdf")) === 3);
-    const viaCount = pdf("%PDF-1.4\n<< /Type /Pages /Count 40 /Kids [1 0 R] >>\n<< /Type /Page >>");
-    check("pages: root /Count wins over a single visible page object", (await countPages(viaCount, "a.pdf")) === 40);
-    const hidden = Buffer.concat([pdf("%PDF-1.5\n<< /Type /ObjStm /N 500 >>\nstream\n"), Buffer.alloc(3 * 1024 * 1024, 7), pdf("\nendstream")]);
-    const hp = await countPages(hidden, "a.pdf");
-    check("pages: pages hidden in an object stream can't price at 1 page (size floor)", hp >= 15, String(hp));
-    const forged = pdf("%PDF-1.4\n<< /Type /Pages /Count 99999999 >>");
-    check("pages: forged huge /Count is capped", (await countPages(forged, "a.pdf")) === 1000);
   }
   {
     // register limiter: 15 / hour / IP; the 16th gets 429

@@ -195,24 +195,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         previewModal.classList.remove('hidden');
 
-        authFetch(API_BASE + '/admin/moderation/' + id + '/preview')
-            .then(res => res.json())
-            .then(data => {
+        loadReview(id)
+            .then(({ analysis, fileUrl }) => {
                 if (currentReviewId !== id) return; // modal moved on to something else
 
-                if (data.previewType === 'text') {
+                if (analysis.ok && analysis.fullText) {
                     placeholderEl.classList.add('hidden');
                     fullTextEl.classList.remove('hidden');
-                    fullTextEl.textContent = data.fullText;
+                    fullTextEl.textContent = analysis.fullText;
                 } else {
-                    // "image" (PDF) and "none" both land here — inline PDF
-                    // embedding wasn't reliable, so there's no iframe;
+                    // Nothing readable inline (scan, zip, image, or unreadable):
                     // just the message plus a free download to review.
-                    textEl.textContent = data.message || 'Preview not available for this file type.';
+                    textEl.textContent = analysis.message || 'Preview not available for this file type.';
                 }
 
-                if (data.fileUrl) {
-                    downloadBtn.href = data.fileUrl;
+                if (fileUrl) {
+                    downloadBtn.href = fileUrl;
                     downloadBtn.classList.remove('hidden');
                 }
             })
@@ -222,18 +220,80 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     };
 
+    // ------------------------------------------------------------------
+    // Review-time analysis. The server can't parse documents (free-plan CPU
+    // limit), so this browser counts the pages and extracts the preview text
+    // (doc-analyzer.js) and submits them when the admin approves.
+    // ------------------------------------------------------------------
+    const analysisCache = {}; // resource id -> analysis (the signed link is NOT cached: it expires in 2 min)
+
+    function loadReview(id) {
+        return authFetch(API_BASE + '/admin/moderation/' + id + '/preview')
+            .then(res => res.json())
+            .then(data => {
+                if (!data.success) throw new Error(data.message || 'preview failed');
+                if (analysisCache[id]) return { analysis: analysisCache[id], fileUrl: data.fileUrl };
+                return DocAnalyzer.analyze(data.fileUrl, data.fileName).then(analysis => {
+                    analysisCache[id] = analysis;
+                    return { analysis, fileUrl: data.fileUrl };
+                });
+            })
+            .catch(() => ({
+                analysis: { ok: false, pages: null, fullText: '', snippet: '', message: 'Could not load the file for analysis — enter the page count manually.' },
+                fileUrl: null,
+            }));
+    }
+
     window.quickApprove = (id) => {
         requestApprove(id);
     };
 
+    const approvePagesInput = document.getElementById('approvePages');
+    const approvePagesNote = document.getElementById('approvePagesNote');
+    const confirmApproveBtn = document.getElementById('confirmApprove');
+
+    // Opens the Approve modal and fills the page count once analysis finishes.
+    function showApproveModal() {
+        const id = currentReviewId;
+        approveModal.classList.remove('hidden');
+        approvePagesInput.value = '';
+        approvePagesInput.disabled = true;
+        confirmApproveBtn.disabled = true;
+        approvePagesNote.classList.remove('warn');
+        approvePagesNote.textContent = 'Counting pages…';
+
+        loadReview(id).then(({ analysis }) => {
+            if (currentReviewId !== id) return;
+            approvePagesInput.disabled = false;
+            confirmApproveBtn.disabled = false;
+            if (analysis.ok) {
+                approvePagesInput.value = analysis.pages;
+                approvePagesNote.textContent = analysis.message || 'Detected automatically — correct it if it looks wrong. This sets the price students pay.';
+            } else {
+                approvePagesNote.classList.add('warn');
+                approvePagesNote.textContent = analysis.message || 'Enter the page count manually.';
+                approvePagesInput.focus();
+            }
+        });
+    }
+
     function requestApprove(id) {
         currentReviewId = id;
         const skipConfirm = adminPreferences.moderation && adminPreferences.moderation.confirmBeforeApproval === false;
-        if (skipConfirm) {
-            processApprove();
-        } else {
-            approveModal.classList.remove('hidden');
+        if (!skipConfirm) {
+            showApproveModal();
+            return;
         }
+        // No confirmation wanted: analyse, and approve straight away if the
+        // count was read reliably. If it wasn't, fall back to the modal so the
+        // admin can type it in.
+        document.body.style.cursor = 'progress';
+        loadReview(id).then(({ analysis }) => {
+            document.body.style.cursor = '';
+            if (currentReviewId !== id) return;
+            if (analysis.ok) processApprove(analysis.pages, analysis.snippet);
+            else showApproveModal();
+        });
     }
 
     window.quickReject = (id) => {
@@ -253,12 +313,17 @@ document.addEventListener('DOMContentLoaded', () => {
         previewModal.classList.add('hidden');
         approveModal.classList.add('hidden');
         rejectModal.classList.add('hidden');
+        if (currentReviewId) delete analysisCache[currentReviewId];
         currentReviewId = null;
     }
 
-    function processApprove() {
+    function processApprove(pages, snippet) {
         if (!currentReviewId) return;
-        authFetch(API_BASE + '/admin/moderation/' + currentReviewId + '/approve', { method: 'POST' })
+        authFetch(API_BASE + '/admin/moderation/' + currentReviewId + '/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pages: pages, snippet: snippet || '' }),
+        })
             .then(res => res.json())
             .then(data => {
                 if (!data.success) { alert(data.message || 'Could not approve resource.'); return; }
@@ -294,7 +359,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    document.getElementById('confirmApprove').addEventListener('click', processApprove);
+    confirmApproveBtn.addEventListener('click', () => {
+        const pages = Number(approvePagesInput.value);
+        if (!Number.isInteger(pages) || pages < 1 || pages > 1000) {
+            approvePagesNote.classList.add('warn');
+            approvePagesNote.textContent = 'Enter a whole number of pages from 1 to 1000.';
+            approvePagesInput.focus();
+            return;
+        }
+        const cached = analysisCache[currentReviewId];
+        processApprove(pages, cached && cached.ok ? cached.snippet : '');
+    });
 
     document.getElementById('confirmReject').addEventListener('click', () => {
         const selectedReason = document.querySelector('input[name="reason"]:checked');
@@ -327,7 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!previewModal.classList.contains('hidden') && approveModal.classList.contains('hidden') && rejectModal.classList.contains('hidden')) {
             if (e.key.toLowerCase() === 'a') {
                 e.preventDefault();
-                approveModal.classList.remove('hidden');
+                showApproveModal();
             }
             if (e.key.toLowerCase() === 'r') {
                 e.preventDefault();

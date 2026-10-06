@@ -84,10 +84,15 @@ wrangler picks this up automatically — no browser step needed.
 - Student notifications: list mine, toggle read, mark all read
 - Resource download streaming (`/api/resources/:id/stream`)
 - Resource browsing: recent, trending, continue-learning, past-questions, preview
-  (preview generation is lazy — first-view-computes-and-caches, not eager at upload)
+  (the preview snippet is stored at approval time — extracted by the reviewing admin's
+  browser — so a student's preview request is a plain column read)
 - Resource CRUD (read side): list/search with filters+pagination, my-uploads, get-by-id
-- Resource upload: Cloudinary (signed REST upload, no SDK), page counting, PDF/DOCX/PPTX
-  preview extraction (`pdf-parse` swapped for `unpdf`)
+- Resource upload: direct browser → Cloudinary using a short-lived signed permit
+  (`POST /resources/upload/permit`, then `POST /resources/upload/complete`). File bytes never
+  pass through the Worker (10 ms CPU limit on the free plan); `complete` verifies size and
+  file signature with one ranged request. Abandoned uploads expire and are purged
+  (`jobs/purgeStaleUploads.js`). Page counting and preview extraction happen in the admin's
+  browser at review time (`Frontend/doc-analyzer.js`); the server only range-checks them
 - Wallet + Paystack: balance, fund/initialize, fund/verify, webhook (HMAC-SHA512 signature
   check via Web Crypto), charge-for-download — every balance change uses a single atomic
   conditional `UPDATE` rather than a separate read-check-write, closing race windows the
@@ -95,8 +100,9 @@ wrangler picks this up automatically — no browser step needed.
   simultaneous downloads)
 - Admin moderation: queue (with Lagos-timezone "today" stats), approve/reject (atomic
   status guard — closes a double-approve/duplicate-notification bug the original had),
-  admin full-document preview (aware of the new `preview_type: 'pending'` state, which
-  didn't exist in the original app), pending-count badge
+  admin review preview (the Worker hands out a signed link; the admin's browser reads the
+  file, counts pages and extracts the preview — approval requires the confirmed page count),
+  pending-count badge
 - Admin resource management: approved/rejected lists with filters+pagination, resource
   details, remove-from-approved, restore-to-pending (both status-guarded), and
   permanent delete — a genuinely atomic cascade via D1's `batch()` (bookmarks deleted,
@@ -203,6 +209,7 @@ node --experimental-sqlite test/phase4e-iii.test.js
 node --experimental-sqlite test/phase4f.test.js
 node --experimental-sqlite test/phase5a-payments.test.js
 node --experimental-sqlite test/phase5b-security.test.js
+node test/doc-analyzer.test.js
 ```
 
 ## Project layout

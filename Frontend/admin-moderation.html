@@ -513,6 +513,11 @@
       <div class="modal-surface mini-surface">
         <h2>Approve Resource?</h2>
         <p>This will make the resource instantly available to all students.</p>
+        <div class="review-pages-row">
+          <label for="approvePages">Number of pages</label>
+          <input type="number" id="approvePages" min="1" max="1000" step="1" inputmode="numeric" disabled />
+        </div>
+        <p class="review-pages-note" id="approvePagesNote">Counting pages…</p>
         <div class="modal-footer">
           <button class="btn-lg btn-secondary" id="cancelApprove">
             Cancel
@@ -608,6 +613,7 @@
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="admin-shared.js"></script>
+    <script src="doc-analyzer.js"></script>
     <script src="admin-moderation.js"></script>
   </body>
 </html>

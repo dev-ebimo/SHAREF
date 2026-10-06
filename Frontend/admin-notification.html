@@ -231,6 +231,12 @@
                     </svg>
                     Download to Review
                 </a>
+
+                <div class="review-pages-row">
+                    <label for="qrPages">Number of pages</label>
+                    <input type="number" id="qrPages" min="1" max="1000" step="1" inputmode="numeric" disabled />
+                </div>
+                <p class="review-pages-note" id="qrPagesNote">Counting pages…</p>
             </div>
 
             <div class="sticky-action-bar">
@@ -255,6 +261,7 @@
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="admin-shared.js"></script>
+    <script src="doc-analyzer.js"></script>
     <script src="admin-notification.js"></script>
 </body>
 </html>

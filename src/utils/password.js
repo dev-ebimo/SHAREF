@@ -16,7 +16,7 @@ import bcrypt from "bcryptjs";
 // re-hashed to PBKDF2 on that user's next successful login.
 // ---------------------------------------------------------------------------
 const ALGO = "pbkdf2-sha256";
-export const DEFAULT_PBKDF2_ITERATIONS = 10000; // ~5 ms natively; fits the free plan
+const DEFAULT_PBKDF2_ITERATIONS = 10000; // ~5 ms natively; fits the free plan
 const MAX_WORKERS_ITERATIONS = 100000; // hard cap enforced by the Workers runtime
 const SALT_BYTES = 16;
 const KEY_BITS = 256;

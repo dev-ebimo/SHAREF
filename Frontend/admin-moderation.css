@@ -1311,3 +1311,44 @@ button {
     flex: 1;
   }
 }
+
+/* Page-count confirmation inside the Approve modal (the count is detected in
+   the browser by doc-analyzer.js; the admin can correct it before approving). */
+.review-pages-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.1rem 0 0.4rem;
+}
+.review-pages-row label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-lead);
+}
+.review-pages-row input {
+  width: 110px;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hair);
+  background: var(--surface-02);
+  color: var(--text-pure);
+  font: inherit;
+  text-align: right;
+}
+.review-pages-row input:focus {
+  outline: none;
+  border-color: var(--purple);
+}
+.review-pages-row input:disabled {
+  opacity: 0.5;
+}
+.review-pages-note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+  min-height: 1.1em;
+}
+.review-pages-note.warn {
+  color: var(--amber);
+}

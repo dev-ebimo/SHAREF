@@ -187,6 +187,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   /* ---- Quick Review Modal ---- */
   const quickReviewModal = document.getElementById('quickReviewModal');
+  const qrPagesInput = document.getElementById('qrPages');
+  const qrPagesNote = document.getElementById('qrPagesNote');
+  const qrApproveBtn = document.getElementById('qrApprove');
+  let currentAnalysis = null; // result of DocAnalyzer for the open review
 
   window.quickReview = (id) => {
     const item = notifications.find(n => n.id === id);
@@ -222,31 +226,54 @@ document.addEventListener('DOMContentLoaded', () => {
     placeholderEl.classList.remove('hidden');
     textEl.textContent = 'Loading preview…';
 
+    // Approving needs a confirmed page count, so lock it until analysis is done.
+    qrPagesInput.value = '';
+    qrPagesInput.disabled = true;
+    qrApproveBtn.disabled = true;
+    qrPagesNote.classList.remove('warn');
+    qrPagesNote.textContent = 'Counting pages…';
+    currentAnalysis = null;
+
     quickReviewModal.classList.remove('hidden');
 
+    // The Worker can't parse documents (free-plan CPU limit): it only hands
+    // over a signed link. THIS browser downloads the file, counts the pages
+    // and extracts the preview text (doc-analyzer.js).
     authFetch(`${API_BASE}/admin/notifications/${id}/preview`)
       .then(res => res.json())
       .then(data => {
-        if (currentReviewId !== id) return; // modal moved on to something else
-
-        if (data.previewType === 'text') {
-          placeholderEl.classList.add('hidden');
-          fullTextEl.classList.remove('hidden');
-          fullTextEl.textContent = data.fullText;
-        } else {
-          // "image" (PDF) and "none" both land here — no iframe, just the
-          // message plus a free download to review.
-          textEl.textContent = data.message || 'Preview not available for this file type.';
-        }
+        if (!data.success) throw new Error(data.message || 'preview failed');
+        if (currentReviewId !== id) return null; // modal moved on to something else
 
         if (data.fileUrl) {
           downloadBtn.href = data.fileUrl;
           downloadBtn.classList.remove('hidden');
         }
+        return DocAnalyzer.analyze(data.fileUrl, data.fileName);
       })
-      .catch(() => {
-        if (currentReviewId !== id) return;
-        textEl.textContent = 'Preview not available right now.';
+      .catch(() => ({ ok: false, pages: null, fullText: '', snippet: '', message: 'Could not load the file for analysis — enter the page count manually.' }))
+      .then(analysis => {
+        if (!analysis || currentReviewId !== id) return;
+        currentAnalysis = analysis;
+
+        if (analysis.ok && analysis.fullText) {
+          placeholderEl.classList.add('hidden');
+          fullTextEl.classList.remove('hidden');
+          fullTextEl.textContent = analysis.fullText;
+        } else {
+          textEl.textContent = analysis.message || 'Preview not available for this file type.';
+        }
+
+        qrPagesInput.disabled = false;
+        qrApproveBtn.disabled = false;
+        if (analysis.ok) {
+          qrPagesInput.value = analysis.pages;
+          qrPagesNote.textContent = analysis.message || 'Detected automatically — correct it if it looks wrong. This sets the price students pay.';
+        } else {
+          qrPagesNote.classList.add('warn');
+          qrPagesNote.textContent = analysis.message || 'Enter the page count manually.';
+          qrPagesInput.focus();
+        }
       });
   };
 
@@ -257,10 +284,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === quickReviewModal) quickReviewModal.classList.add('hidden');
   });
 
-  document.getElementById('qrApprove').addEventListener('click', () => {
+  qrApproveBtn.addEventListener('click', () => {
     if (!currentReviewId) return;
     const id = currentReviewId;
-    authFetch(`${API_BASE}/admin/notifications/${id}/approve`, { method: 'POST' })
+
+    const pages = Number(qrPagesInput.value);
+    if (!Number.isInteger(pages) || pages < 1 || pages > 1000) {
+      qrPagesNote.classList.add('warn');
+      qrPagesNote.textContent = 'Enter a whole number of pages from 1 to 1000.';
+      qrPagesInput.focus();
+      return;
+    }
+
+    authFetch(`${API_BASE}/admin/notifications/${id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pages: pages, snippet: currentAnalysis && currentAnalysis.ok ? currentAnalysis.snippet : '' }),
+    })
       .then(res => res.json().then(data => ({ status: res.status, data })))
       .then(({ data }) => {
         if (!data.success) {

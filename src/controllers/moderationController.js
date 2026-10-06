@@ -1,5 +1,4 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
-import { getFullText } from "../utils/previewSnippet.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { startOfTodayInLagos } from "../utils/lagosDay.js";
 import { timeAgo } from "../utils/timeAgo.js";
@@ -53,9 +52,6 @@ export async function getModerationQueue(c) {
         size: formatFileSize(r.file_size_bytes),
         uploadDate: timeAgo(r.created_at),
         isAged: ageDays >= AGED_THRESHOLD_DAYS,
-        // Just enough to pick the right UI when Preview is clicked — the
-        // actual content is fetched lazily via getResourcePreviewForAdmin.
-        previewType: r.preview_type,
       };
     });
 
@@ -117,22 +113,50 @@ async function notifyUploaderOfDecision(c, resource, type, reason) {
     .run();
 }
 
+const MAX_PAGES = 1000;
+const MAX_SNIPPET_CHARS = 1000;
+const NO_PREVIEW_MESSAGE = "A text preview isn't available for this file type.";
+
+// The page count and the student-facing preview snippet are worked out in the
+// ADMIN'S BROWSER while they review the file (see Frontend/doc-analyzer.js) —
+// parsing documents inside the Worker would blow the free plan's 10 ms CPU
+// limit. The server only validates and stores what the reviewer confirms.
+// Admins are trusted reviewers; this is bounds-checking, not verification.
+export function parseApprovalReview(body) {
+  const pages = body?.pages;
+  if (typeof pages !== "number" || !Number.isInteger(pages) || pages < 1 || pages > MAX_PAGES) {
+    return { error: `Enter the document's page count (a whole number from 1 to ${MAX_PAGES}).` };
+  }
+  let snippet = typeof body.snippet === "string" ? body.snippet.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim() : "";
+  if (snippet.length > MAX_SNIPPET_CHARS) snippet = snippet.slice(0, MAX_SNIPPET_CHARS).trim() + "…";
+  return { pages, snippet };
+}
+
 // Inner logic, callable either from the route handler below (which reads
-// the id from the URL) or from notificationController.js's quickApprove
-// (which reads it off a notification's resource_id instead) — the two
-// entry points share identical behavior, they just get the id from
-// different places.
-export async function approveResourceById(c, id) {
+// the id from the URL) or from adminNotificationController's quick-approve
+// (which reads it off a notification's resource_id instead) — the two entry
+// points share identical behavior, they just get the id from different places.
+export async function approveResourceById(c, id, review) {
   const user = c.get("user");
+  const hasSnippet = review.snippet.length > 0;
 
   // Atomic, conditional — only actually approves a resource that's still
-  // pending. The original had no such guard, so two admins (or one
-  // double-click) approving the same item at once could fire the
-  // uploader notification/email twice. This closes that.
+  // pending, so two admins (or one double-click) approving the same item at
+  // once can't fire the uploader notification/email twice. The reviewed page
+  // count and preview are written in the same statement.
   const result = await c.env.DB.prepare(
-    "UPDATE resources SET status = 'approved', reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'"
+    `UPDATE resources
+        SET status = 'approved', pages = ?, preview_type = ?, preview_snippet = ?, preview_message = ?,
+            reviewed_by = ?, reviewed_at = ?, updated_at = ?
+      WHERE id = ? AND status = 'pending'`
   )
-    .bind(user.id, nowIso(), nowIso(), id)
+    .bind(
+      review.pages,
+      hasSnippet ? "text" : "none",
+      review.snippet,
+      hasSnippet ? "" : NO_PREVIEW_MESSAGE,
+      user.id, nowIso(), nowIso(), id
+    )
     .run();
 
   if ((result.meta?.changes ?? result.meta?.rows_written ?? 0) === 0) {
@@ -149,7 +173,9 @@ export async function approveResourceById(c, id) {
 // @route POST /api/admin/moderation/:id/approve
 export async function approveResource(c) {
   try {
-    return await approveResourceById(c, c.req.param("id"));
+    const review = parseApprovalReview(await c.req.json().catch(() => null));
+    if (review.error) return c.json({ success: false, message: review.error }, 400);
+    return await approveResourceById(c, c.req.param("id"), review);
   } catch (err) {
     console.error("moderationController error:", err?.message);
     return c.json({ success: false, message: "Could not approve resource", error: sanitizeError(c.env, err) }, 500);
@@ -189,53 +215,27 @@ export async function rejectResource(c) {
   }
 }
 
+// Admin review needs the ENTIRE document, but reading it is the admin's
+// browser's job now (Frontend/doc-analyzer.js: page count, full text, preview
+// snippet) — the Worker only vouches for the file by handing out a short-lived
+// signed stream link.
 export async function getResourcePreviewForAdminById(c, id) {
   const user = c.get("user");
-  const resource = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
+  const resource = await c.env.DB.prepare("SELECT id, file_name, file_extension, file_size_bytes FROM resources WHERE id = ?")
+    .bind(id)
+    .first();
   if (!resource) return c.json({ success: false, message: "Resource not found" }, 404);
 
-  const fileUrl = await buildDownloadStreamUrl(c, id, user.id);
-
-  if (resource.preview_type === "text" || resource.preview_type === "pending") {
-    try {
-      const fileResponse = await fetch(resource.file_url);
-      if (!fileResponse.ok) throw new Error(`Could not fetch file (status ${fileResponse.status})`);
-      const fileBuffer = Buffer.from(await fileResponse.arrayBuffer());
-      const result = await getFullText(fileBuffer, resource.file_name);
-
-      if (result.available) {
-        return c.json({ success: true, previewType: "text", fullText: result.fullText, fileUrl });
-      }
-      return c.json({ success: true, previewType: "none", message: result.message || "Preview could not be generated for this document.", fileUrl });
-    } catch (extractErr) {
-      console.error(`Admin full-text preview failed for resource ${id}:`, extractErr.message);
-      return c.json({ success: true, previewType: "none", message: "Preview could not be generated for this document.", fileUrl });
-    }
-  }
-
-  // Legacy "image" PDFs (uploaded before the preview-image pipeline was
-  // removed) and "none" both land here: no inline content, just the
-  // download link so the admin can review the original file directly.
   return c.json({
     success: true,
-    previewType: resource.preview_type === "image" ? "image" : "none",
-    message: resource.preview_type === "image" ? "Download the file to review it in full." : (resource.preview_message || "Preview not available for this file type."),
-    fileUrl,
+    fileUrl: await buildDownloadStreamUrl(c, id, user.id),
+    fileName: resource.file_name,
+    fileExtension: resource.file_extension,
+    fileSizeBytes: resource.file_size_bytes,
   });
 }
 
 // @route GET /api/admin/moderation/:id/preview
-// Admin review needs the ENTIRE document, unlike the student preview
-// (which only ever shows a fraction of page 1) — extracted fresh on
-// demand every time, never cached, since an admin only opens this once
-// per item during review.
-//
-// previewType 'pending' is treated the same as 'text' here: it means "not
-// yet known whether this extracts", which for a fresh upload an admin is
-// reviewing for the first time is exactly the case worth attempting —
-// this state didn't exist in the original app (see resourceController.js's
-// uploadResource for why it was introduced), so admin preview needs to
-// know about it too, not just the student-facing preview endpoint.
 export async function getResourcePreviewForAdmin(c) {
   try {
     return await getResourcePreviewForAdminById(c, c.req.param("id"));

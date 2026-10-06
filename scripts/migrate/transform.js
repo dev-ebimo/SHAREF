@@ -116,15 +116,15 @@ export function transformResource(doc) {
     cloudinary_public_id: doc.cloudinaryPublicId,
     // Passed through as-is, whatever it already was — "image" for
     // legacy uploads, "raw" for everything after the preview-image
-    // pipeline was removed (see resourceController.js's uploadResource).
+    // pipeline was removed (see uploadController.js's completeUpload).
     cloudinary_resource_type: doc.cloudinaryResourceType || "raw",
     preview_image_public_id: doc.previewImagePublicId || null,
     // Also passed through as-is: an already-approved/rejected resource
     // from before the Workers migration already has a real computed
     // previewType ("image"/"text"/"none") and keeps it. Only genuinely
     // NEW uploads after cutover ever start at "pending" — see
-    // resourceController.js's uploadResource and the CPU-limit fix it
-    // was introduced for.
+    // uploadController.js's completeUpload; the admin's approval settles it
+    // (the preview is extracted in the admin's browser, not the Worker).
     preview_type: doc.previewType || "none",
     preview_snippet: doc.previewSnippet || "",
     preview_message: doc.previewMessage || "",

@@ -235,12 +235,13 @@ async function run() {
 
     const token = await tokenFor(env, "admin1", "admin");
     const { ctx, drain } = withExecutionCtx();
-    const res = await postAuthed("/api/admin/notifications/n1/approve", null, token, env, ctx);
+    const res = await postAuthed("/api/admin/notifications/n1/approve", { pages: 4, snippet: "Quick review snippet" }, token, env, ctx);
     await drain();
     check("quickApprove: 200 status", res.status === 200, JSON.stringify(await res.json()));
 
-    const resourceRow = DB._raw.prepare("SELECT status FROM resources WHERE id = 'r1'").get();
+    const resourceRow = DB._raw.prepare("SELECT status, pages, preview_type, preview_snippet FROM resources WHERE id = 'r1'").get();
     check("quickApprove: correctly approved the notification's underlying resource (r1)", resourceRow.status === "approved");
+    check("quickApprove: page count + preview snippet stored too", resourceRow.pages === 4 && resourceRow.preview_snippet === "Quick review snippet" && resourceRow.preview_type === "text");
   }
   {
     const { env, DB } = freshEnv();
@@ -265,7 +266,7 @@ async function run() {
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "admin1", role: "admin" });
     const token = await tokenFor(env, "admin1", "admin");
-    const res = await postAuthed("/api/admin/notifications/does-not-exist/approve", null, token, env);
+    const res = await postAuthed("/api/admin/notifications/does-not-exist/approve", { pages: 4 }, token, env);
     check("quickApprove: nonexistent notification -> 404", res.status === 404);
   }
   {
@@ -278,7 +279,7 @@ async function run() {
     ).run(timestamp);
     DB._raw.prepare(`INSERT INTO notifications (id, deleted_account_log_id, recipient_id, type, unread, created_at, updated_at) VALUES ('n1', 'log1', NULL, 'account_deleted', 1, ?, ?)`).run(timestamp, timestamp);
     const token = await tokenFor(env, "admin1", "admin");
-    const res = await postAuthed("/api/admin/notifications/n1/approve", null, token, env);
+    const res = await postAuthed("/api/admin/notifications/n1/approve", { pages: 4 }, token, env);
     check("quickApprove: account_deleted notification (no resource) -> 400", res.status === 400);
   }
 

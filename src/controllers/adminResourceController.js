@@ -282,7 +282,7 @@ export async function permanentlyDeleteResource(c) {
     // Must match the resource_type the file was actually uploaded with —
     // destroying with the wrong type silently no-ops on Cloudinary and
     // leaves the file orphaned. Always "raw" for the main file (see
-    // resourceController.js's uploadResource).
+    // uploadController.js).
     await deleteFromCloudinary(c.env, resource.cloudinary_public_id);
     // PDFs also have a second, preview-only "image" asset — clean that up
     // too. Only ever set on legacy data from before the image-preview

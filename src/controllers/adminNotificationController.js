@@ -1,6 +1,6 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { timeAgo } from "../utils/timeAgo.js";
-import { formatFileSize, approveResourceById, rejectResourceById, getResourcePreviewForAdminById } from "./moderationController.js";
+import { formatFileSize, approveResourceById, rejectResourceById, getResourcePreviewForAdminById, parseApprovalReview } from "./moderationController.js";
 
 // @route GET /api/admin/notifications
 // The shared admin feed — recipient_id IS NULL. Two shapes coexist here:
@@ -132,7 +132,9 @@ export async function quickApprove(c) {
   const { resourceId, error } = await resolveNotificationResourceId(c, c.req.param("id"));
   if (error) return error;
   try {
-    return await approveResourceById(c, resourceId);
+    const review = parseApprovalReview(await c.req.json().catch(() => null));
+    if (review.error) return c.json({ success: false, message: review.error }, 400);
+    return await approveResourceById(c, resourceId, review);
   } catch (err) {
     console.error("adminNotificationController error:", err?.message);
     return c.json({ success: false, message: "Could not approve resource", error: sanitizeError(c.env, err) }, 500);
