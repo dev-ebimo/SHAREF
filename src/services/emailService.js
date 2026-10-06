@@ -1,3 +1,5 @@
+import { escapeHtml, singleLine } from "../utils/escapeHtml.js";
+
 // Calls SendGrid's REST API directly instead of using @sendgrid/mail (the
 // SDK wraps Node's http module internally, which doesn't run on Workers).
 // Same requests, same templates — just sent with fetch() instead of an SDK.
@@ -29,9 +31,9 @@ export async function sendVerificationEmail(env, toEmail, fullName, otp) {
     subject: "Verify your Sharef account",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-        <h2>Hi ${fullName},</h2>
+        <h2>Hi ${escapeHtml(fullName)},</h2>
         <p>Your Sharef verification code is:</p>
-        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${escapeHtml(otp)}</p>
         <p>This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
       </div>
     `,
@@ -44,9 +46,9 @@ export async function sendPasswordResetEmail(env, toEmail, fullName, otp) {
     subject: "Reset your Sharef password",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-        <h2>Hi ${fullName},</h2>
+        <h2>Hi ${escapeHtml(fullName)},</h2>
         <p>You requested to reset your Sharef password. Your reset code is:</p>
-        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${otp}</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px;">${escapeHtml(otp)}</p>
         <p>This code expires in 10 minutes. If you didn't request this, you can safely ignore this email — your password will not be changed.</p>
       </div>
     `,
@@ -63,11 +65,11 @@ export async function sendResourceStatusEmail(env, toEmail, fullName, resourceTi
     subject: isApproved ? "Your upload was approved" : "Your upload was not approved",
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-        <h2>Hi ${fullName},</h2>
-        <p>Your resource <strong>"${resourceTitle}"</strong> has been
+        <h2>Hi ${escapeHtml(fullName)},</h2>
+        <p>Your resource <strong>"${escapeHtml(resourceTitle)}"</strong> has been
           ${isApproved ? "<strong style='color:#2dd4bf;'>approved</strong> and is now live on Sharef." : "<strong style='color:#f87171;'>rejected</strong>."}
         </p>
-        ${!isApproved && reason ? `<p>Reason: <strong>${reason}</strong></p>` : ""}
+        ${!isApproved && reason ? `<p>Reason: <strong>${escapeHtml(reason)}</strong></p>` : ""}
         ${!isApproved ? "<p>You're welcome to review the file and re-upload it if the issue can be fixed.</p>" : ""}
       </div>
     `,
@@ -77,12 +79,12 @@ export async function sendResourceStatusEmail(env, toEmail, fullName, resourceTi
 export async function sendAnnouncementEmail(env, toEmail, fullName, title, message) {
   await sendEmail(env, {
     to: toEmail,
-    subject: `Sharef Announcement: ${title}`,
+    subject: `Sharef Announcement: ${singleLine(title)}`,
     html: `
       <div style="font-family: sans-serif; max-width: 480px; margin: auto;">
-        <h2>Hi ${fullName},</h2>
-        <p style="font-weight:700; font-size:1.1rem;">${title}</p>
-        <p style="white-space: pre-wrap;">${message}</p>
+        <h2>Hi ${escapeHtml(fullName)},</h2>
+        <p style="font-weight:700; font-size:1.1rem;">${escapeHtml(title)}</p>
+        <p style="white-space: pre-wrap;">${escapeHtml(message)}</p>
       </div>
     `,
   });

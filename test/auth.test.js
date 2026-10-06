@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import app from "../src/index.js";
+import { hashOtp } from "../src/utils/otp.js";
 import { createMockD1 } from "./mockD1.js";
 
 const schemaSql = fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8");
@@ -99,9 +100,9 @@ async function run() {
 
     const row = DB._raw.prepare("SELECT * FROM users WHERE email = ?").get("ada@example.com");
     check("register: user row created", !!row);
-    check("register: password is hashed, not plaintext", row.password !== "supersecret1" && row.password.startsWith("$2"));
+    check("register: password is hashed, not plaintext", row.password !== "supersecret1" && row.password.startsWith("pbkdf2-sha256$"));
     check("register: is_verified starts false", row.is_verified === 0);
-    check("register: verification_otp is a 6-digit string", /^\d{6}$/.test(row.verification_otp));
+    check("register: verification_otp stored as HMAC, not the 6-digit code", /^[0-9a-f]{64}$/.test(row.verification_otp));
     check("register: preferences default landingPage", JSON.parse(row.preferences).landingPage === "dashboard");
     check("register: verification email was sent", sentEmails.length === 1);
     check("register: email sent to correct address", sentEmails[0]?.personalizations[0].to[0].email === "ada@example.com");
@@ -156,7 +157,7 @@ async function run() {
         `INSERT INTO users (id, full_name, email, password, verification_otp, verification_otp_expires, preferences)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run("u2", "Bob Test", "bob@example.com", "hash", "123456", future, "{}");
+      .run("u2", "Bob Test", "bob@example.com", "hash", await hashOtp(env, "u2", "verify", "123456"), future, "{}");
 
     const res = await postJson("/api/auth/verify-otp", { email: "bob@example.com", otp: "123456" }, env, ctx);
     const body = await res.json();
@@ -180,7 +181,7 @@ async function run() {
         `INSERT INTO users (id, full_name, email, password, verification_otp, verification_otp_expires, preferences)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run("u3", "Carl Test", "carl@example.com", "hash", "654321", future, "{}");
+      .run("u3", "Carl Test", "carl@example.com", "hash", await hashOtp(env, "u3", "verify", "654321"), future, "{}");
 
     const res = await postJson("/api/auth/verify-otp", { email: "carl@example.com", otp: "000000" }, env, ctx);
     const body = await res.json();
@@ -199,12 +200,12 @@ async function run() {
         `INSERT INTO users (id, full_name, email, password, verification_otp, verification_otp_expires, preferences)
          VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
-      .run("u4", "Dana Test", "dana@example.com", "hash", "111111", past, "{}");
+      .run("u4", "Dana Test", "dana@example.com", "hash", await hashOtp(env, "u4", "verify", "111111"), past, "{}");
 
     const res = await postJson("/api/auth/verify-otp", { email: "dana@example.com", otp: "111111" }, env, ctx);
     const body = await res.json();
     check("verify-otp: expired code -> 400", res.status === 400, JSON.stringify(body));
-    check("verify-otp: expired code message", body.message.includes("expired"));
+    check("verify-otp: expired code message generic", body.message.includes("expired"));
   }
 
   // ---------------------------------------------------------------------
@@ -310,7 +311,7 @@ async function run() {
     check("forgot-password: generic message", body.message.includes("If an account exists"));
 
     const row = DB._raw.prepare("SELECT reset_password_otp FROM users WHERE id = 'u9'").get();
-    check("forgot-password: OTP was set", /^\d{6}$/.test(row.reset_password_otp));
+    check("forgot-password: OTP was set (hashed)", /^[0-9a-f]{64}$/.test(row.reset_password_otp));
     check("forgot-password: reset email sent", sentEmails.length === 1);
   }
 
@@ -344,7 +345,7 @@ async function run() {
         `INSERT INTO users (id, full_name, email, password, is_verified, reset_password_otp, reset_password_otp_expires, preferences)
          VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
       )
-      .run("u10", "Jack Test", "jack@example.com", oldHash, "222222", future, "{}");
+      .run("u10", "Jack Test", "jack@example.com", oldHash, await hashOtp(env, "u10", "reset", "222222"), future, "{}");
 
     const res = await postJson(
       "/api/auth/reset-password",

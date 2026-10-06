@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { getBalance, initializeFunding, verifyFunding, paystackWebhook, chargeForDownload } from "../controllers/walletController.js";
 import { protect } from "../middleware/protect.js";
+import { fundLimiter } from "../middleware/rateLimiter.js";
 
 const walletRoutes = new Hono();
 
@@ -10,7 +11,7 @@ const walletRoutes = new Hono();
 walletRoutes.post("/webhook", paystackWebhook);
 
 walletRoutes.get("/balance", protect, getBalance);
-walletRoutes.post("/fund/initialize", protect, initializeFunding);
+walletRoutes.post("/fund/initialize", protect, fundLimiter, initializeFunding);
 walletRoutes.get("/fund/verify/:reference", protect, verifyFunding);
 walletRoutes.post("/charge", protect, chargeForDownload);
 

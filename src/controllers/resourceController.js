@@ -227,7 +227,8 @@ export async function getResources(c) {
       resources: results.map(formatResource),
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch resources", error: err.message }, 500);
+    console.error("resourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch resources", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -267,7 +268,8 @@ export async function getMyUploads(c) {
       resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason })),
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch your uploads", error: err.message }, 500);
+    console.error("resourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch your uploads", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -298,7 +300,8 @@ export async function getResourceById(c) {
 
     return c.json({ success: true, resource: formatResource(resource) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch resource", error: err.message }, 500);
+    console.error("resourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 

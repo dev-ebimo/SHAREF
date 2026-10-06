@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { shapeResource } from "../utils/resourceShape.js";
 import { buildPdfHalfPagePreviewUrl } from "../utils/cloudinaryPreview.js";
 import getPreviewSnippet from "../utils/previewSnippet.js";
@@ -21,7 +22,8 @@ export async function getRecentFeed(c) {
 
     return c.json({ success: true, resources: results.map(shapeResource) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch recent resources", error: err.message }, 500);
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch recent resources", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -69,7 +71,8 @@ export async function getTrending(c) {
     const resources = results.map((r) => ({ ...shapeResource(r), recentDownloads: r.recentDownloads }));
     return c.json({ success: true, resources });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch trending resources", error: err.message }, 500);
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch trending resources", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -100,7 +103,8 @@ export async function getContinueLearning(c) {
 
     return c.json({ success: true, resources: results.map(shapeResource) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch continue learning", error: err.message }, 500);
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch continue learning", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -146,7 +150,8 @@ export async function searchPastQuestions(c) {
 
     return c.json({ success: true, resources: results.map(shapeResource) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch past questions", error: err.message }, 500);
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch past questions", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -220,6 +225,7 @@ export async function getResourcePreview(c) {
       message: resource.preview_message || "Preview not available for this file type.",
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch preview", error: err.message }, 500);
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch preview", error: sanitizeError(c.env, err) }, 500);
   }
 }

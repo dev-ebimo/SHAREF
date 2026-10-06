@@ -35,6 +35,12 @@ CREATE TABLE users (
   reset_password_otp        TEXT,
   reset_password_otp_expires TEXT,
   preferences               TEXT NOT NULL DEFAULT '{}',    -- JSON blob, see below
+  -- Security columns (see migrations/002_security_hardening.sql)
+  verification_otp_attempts   INTEGER NOT NULL DEFAULT 0,
+  reset_password_otp_attempts INTEGER NOT NULL DEFAULT 0,
+  failed_logins               INTEGER NOT NULL DEFAULT 0,
+  lockout_until               TEXT,
+  password_changed_at         TEXT,
   created_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -128,6 +134,15 @@ CREATE TABLE transactions (
 
 CREATE INDEX idx_transactions_user_created     ON transactions (user_id, created_at DESC);
 CREATE INDEX idx_transactions_user_type_status ON transactions (user_id, type, status);
+
+-- A user can hold at most one successful purchase per resource. Makes the
+-- charge flow race-safe: a concurrent duplicate purchase violates this index,
+-- its whole batch (including the balance deduction) rolls back. See
+-- migrations/001_wallet_integrity.sql for applying this to an existing DB.
+CREATE UNIQUE INDEX idx_transactions_one_purchase_per_resource
+  ON transactions (user_id, resource_id)
+  WHERE type = 'purchase' AND status = 'successful'
+    AND user_id IS NOT NULL AND resource_id IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- announcements  (models/Announcement.js)

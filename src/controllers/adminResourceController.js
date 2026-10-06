@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
 
@@ -57,7 +58,8 @@ export async function getFilterOptions(c) {
       rejectionReasons: REJECTION_REASONS,
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch filter options", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch filter options", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -120,7 +122,8 @@ export async function getApprovedResources(c) {
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch approved resources", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch approved resources", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -173,7 +176,8 @@ export async function getRejectedResources(c) {
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch rejected resources", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch rejected resources", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -196,7 +200,8 @@ export async function getResourceDetails(c) {
 
     return c.json({ success: true, resource: await shapeAdminResource(c, resource, { rejectionReason: resource.rejection_reason }) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch resource", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -228,7 +233,8 @@ export async function removeApprovedResource(c) {
 
     return c.json({ success: true, message: "Resource removed and moved to Rejected" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not remove resource", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not remove resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -249,7 +255,8 @@ export async function restoreToPending(c) {
 
     return c.json({ success: true, message: "Resource restored to Pending" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not restore resource", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not restore resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -300,6 +307,7 @@ export async function permanentlyDeleteResource(c) {
 
     return c.json({ success: true, message: "Resource permanently deleted" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not delete resource", error: err.message }, 500);
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not delete resource", error: sanitizeError(c.env, err) }, 500);
   }
 }

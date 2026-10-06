@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { generateId } from "../utils/id.js";
 import { shapeResource } from "../utils/resourceShape.js";
 
@@ -35,7 +36,8 @@ export async function toggleBookmark(c) {
 
     return c.json({ success: true, bookmarked: true, message: "Saved to bookmarks" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not update bookmark", error: err.message }, 500);
+    console.error("bookmarkController error:", err?.message);
+    return c.json({ success: false, message: "Could not update bookmark", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -55,7 +57,8 @@ export async function getBookmarks(c) {
 
     return c.json({ success: true, resources: results.map(shapeResource) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch bookmarks", error: err.message }, 500);
+    console.error("bookmarkController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch bookmarks", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -72,6 +75,7 @@ export async function checkBookmark(c) {
 
     return c.json({ success: true, bookmarked: !!existing });
   } catch (err) {
-    return c.json({ success: false, message: "Could not check bookmark", error: err.message }, 500);
+    console.error("bookmarkController error:", err?.message);
+    return c.json({ success: false, message: "Could not check bookmark", error: sanitizeError(c.env, err) }, 500);
   }
 }

@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 function shape(n) {
   if (n.type === "announcement") {
     return {
@@ -45,7 +46,8 @@ export async function getMyNotifications(c) {
 
     return c.json({ success: true, notifications });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch notifications", error: err.message }, 500);
+    console.error("studentNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch notifications", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -67,7 +69,8 @@ export async function toggleMyNotificationRead(c) {
 
     return c.json({ success: true, unread: !!newUnread });
   } catch (err) {
-    return c.json({ success: false, message: "Could not update notification", error: err.message }, 500);
+    console.error("studentNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not update notification", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -81,6 +84,7 @@ export async function markAllMyNotificationsRead(c) {
 
     return c.json({ success: true, message: "All notifications marked as read" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not mark notifications as read", error: err.message }, 500);
+    console.error("studentNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not mark notifications as read", error: sanitizeError(c.env, err) }, 500);
   }
 }

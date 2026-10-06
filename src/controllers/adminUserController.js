@@ -1,3 +1,5 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
+import { invalidateAuthCache } from "../middleware/protect.js";
 const ACTIVE_WINDOW_DAYS = 7;
 
 function activeSinceIso() {
@@ -32,7 +34,8 @@ export async function getUserFilterOptions(c) {
     ).all();
     return c.json({ success: true, departments: results.map((r) => r.department) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch filter options", error: err.message }, 500);
+    console.error("adminUserController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch filter options", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -105,7 +108,8 @@ export async function getUsers(c) {
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch users", error: err.message }, 500);
+    console.error("adminUserController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch users", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -151,27 +155,37 @@ export async function getUserProfile(c) {
       },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch user profile", error: err.message }, 500);
+    console.error("adminUserController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch user profile", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
 // @route POST /api/admin/users/:id/suspend
 export async function suspendUser(c) {
   try {
-    const { reason } = await c.req.json();
+    const body = await c.req.json().catch(() => ({}));
+    const reason = typeof body.reason === "string" ? body.reason.trim() : "";
     if (!reason) return c.json({ success: false, message: "A suspension reason is required" }, 400);
 
     const id = c.req.param("id");
-    const result = await c.env.DB.prepare("UPDATE users SET account_status = 'suspended', suspension_reason = ?, suspended_at = ?, updated_at = ? WHERE id = ?")
-      .bind(reason, new Date().toISOString(), new Date().toISOString(), id)
+    // Students only: an admin can never suspend an admin (or themselves) —
+    // that would let one compromised/rogue admin lock everyone else out.
+    const result = await c.env.DB.prepare(
+      "UPDATE users SET account_status = 'suspended', suspension_reason = ?, suspended_at = ?, updated_at = ? WHERE id = ? AND role = 'student'"
+    )
+      .bind(reason.slice(0, 500), new Date().toISOString(), new Date().toISOString(), id)
       .run();
 
     if ((result.meta?.changes ?? result.meta?.rows_written ?? 0) === 0) {
+      const target = await c.env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(id).first();
+      if (target) return c.json({ success: false, message: "Admin accounts cannot be suspended" }, 403);
       return c.json({ success: false, message: "User not found" }, 404);
     }
+    invalidateAuthCache(id); // takes effect immediately on this isolate; <=15s elsewhere
     return c.json({ success: true, message: "Account suspended successfully" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not suspend user", error: err.message }, 500);
+    console.error("suspendUser failed:", err?.message);
+    return c.json({ success: false, message: "Could not suspend user", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -179,16 +193,20 @@ export async function suspendUser(c) {
 export async function reactivateUser(c) {
   try {
     const id = c.req.param("id");
-    const result = await c.env.DB.prepare("UPDATE users SET account_status = 'active', suspension_reason = '', suspended_at = NULL, updated_at = ? WHERE id = ?")
+    const result = await c.env.DB.prepare(
+      "UPDATE users SET account_status = 'active', suspension_reason = '', suspended_at = NULL, failed_logins = 0, lockout_until = NULL, updated_at = ? WHERE id = ?"
+    )
       .bind(new Date().toISOString(), id)
       .run();
 
     if ((result.meta?.changes ?? result.meta?.rows_written ?? 0) === 0) {
       return c.json({ success: false, message: "User not found" }, 404);
     }
+    invalidateAuthCache(id);
     return c.json({ success: true, message: "Account reactivated successfully" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not reactivate user", error: err.message }, 500);
+    console.error("reactivateUser failed:", err?.message);
+    return c.json({ success: false, message: "Could not reactivate user", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -220,7 +238,8 @@ export async function getDeletedAccountLogs(c) {
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch deleted account logs", error: err.message }, 500);
+    console.error("adminUserController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch deleted account logs", error: sanitizeError(c.env, err) }, 500);
   }
 }
 

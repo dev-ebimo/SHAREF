@@ -1,5 +1,7 @@
-import bcrypt from "bcryptjs";
-import { generateOTP } from "../utils/otp.js";
+import { generateOTP, hashOtp } from "../utils/otp.js";
+import { hashPassword, verifyPassword } from "../utils/password.js";
+import { generateToken } from "../utils/token.js";
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { generateId } from "../utils/id.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
@@ -38,7 +40,8 @@ export async function getMyProfile(c) {
       },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch profile", error: err.message }, 500);
+    console.error("userSettingsController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch profile", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -59,18 +62,20 @@ export async function updateMyProfile(c) {
 
     let emailChanged = false;
     let otp = null;
+    let otpHash = null;
     if (email && email !== user.email) {
       const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ? AND id != ?").bind(email, userId).first();
       if (existing) return c.json({ success: false, message: "That email is already in use" }, 409);
       emailChanged = true;
       otp = generateOTP();
+      otpHash = await hashOtp(c.env, userId, "verify", otp);
     }
 
     const timestamp = nowIso();
     await c.env.DB.prepare(
       `UPDATE users SET
         full_name = ?, department = ?, level = ?, university = ?, faculty = ?, gender = ?, matric_number = ?,
-        email = ?, is_verified = ?, verification_otp = ?, verification_otp_expires = ?, updated_at = ?
+        email = ?, is_verified = ?, verification_otp = ?, verification_otp_expires = ?, verification_otp_attempts = 0, updated_at = ?
        WHERE id = ?`
     )
       .bind(
@@ -83,7 +88,7 @@ export async function updateMyProfile(c) {
         matricNumber || user.matric_number,
         emailChanged ? email : user.email,
         emailChanged ? 0 : user.is_verified,
-        emailChanged ? otp : user.verification_otp,
+        emailChanged ? otpHash : user.verification_otp,
         emailChanged ? new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString() : user.verification_otp_expires,
         timestamp,
         userId
@@ -106,7 +111,8 @@ export async function updateMyProfile(c) {
       emailChanged,
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not update profile", error: err.message }, 500);
+    console.error("userSettingsController error:", err?.message);
+    return c.json({ success: false, message: "Could not update profile", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -141,6 +147,10 @@ export async function updateMyPreferences(c) {
     const user = c.get("user");
     const body = await c.req.json();
     const incoming = body.preferences || {};
+    // Bound what a user can park in their own row (and make us re-parse on every login/announcement).
+    if (typeof incoming !== "object" || Array.isArray(incoming) || JSON.stringify(incoming).length > 4096) {
+      return c.json({ success: false, message: "Preferences payload is invalid or too large" }, 400);
+    }
 
     if (user.role !== "admin") {
       delete incoming.moderation;
@@ -159,30 +169,39 @@ export async function updateMyPreferences(c) {
 
     return c.json({ success: true, message: "Preferences saved", preferences: filterPreferencesForRole(merged, user.role) });
   } catch (err) {
-    return c.json({ success: false, message: "Could not save preferences", error: err.message }, 500);
+    console.error("userSettingsController error:", err?.message);
+    return c.json({ success: false, message: "Could not save preferences", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
 // @route PATCH /api/users/me/password
 export async function changeMyPassword(c) {
   try {
-    const { currentPassword, newPassword } = await c.req.json();
+    const { currentPassword, newPassword } = c.req.valid("json");
     const userId = c.get("user").id;
 
-    const user = await c.env.DB.prepare("SELECT password FROM users WHERE id = ?").bind(userId).first();
+    const user = await c.env.DB.prepare("SELECT password, role FROM users WHERE id = ?").bind(userId).first();
     if (!user) return c.json({ success: false, message: "User not found" }, 404);
 
-    const isMatch = await bcrypt.compare(currentPassword, user.password);
-    if (!isMatch) return c.json({ success: false, message: "Current password is incorrect" }, 401);
+    const { ok } = await verifyPassword(c.env, currentPassword, user.password);
+    if (!ok) return c.json({ success: false, message: "Current password is incorrect" }, 401);
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await c.env.DB.prepare("UPDATE users SET password = ?, updated_at = ? WHERE id = ?")
-      .bind(hashedPassword, nowIso(), userId)
+    const hashedPassword = await hashPassword(c.env, newPassword);
+    const ts = nowIso();
+    // password_changed_at logs out every OTHER session (including a thief's).
+    await c.env.DB.prepare("UPDATE users SET password = ?, password_changed_at = ?, updated_at = ? WHERE id = ?")
+      .bind(hashedPassword, ts, ts, userId)
       .run();
+    invalidateAuthCache(userId);
 
-    return c.json({ success: true, message: "Password updated successfully" });
+    // Hand THIS session a fresh token so the user who just changed their
+    // password isn't kicked out by the very invalidation that protects them.
+    // (The iat is >= password_changed_at's second, so it is accepted.)
+    const token = await generateToken(c.env, userId, user.role);
+    return c.json({ success: true, message: "Password updated successfully", token });
   } catch (err) {
-    return c.json({ success: false, message: "Could not change password", error: err.message }, 500);
+    console.error("changeMyPassword failed:", err?.message);
+    return c.json({ success: false, message: "Could not change password", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -295,6 +314,7 @@ export async function deleteMyAccount(c) {
 
     return c.json({ success: true, message: "Account and all associated data deleted" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not delete account", error: err.message }, 500);
+    console.error("userSettingsController error:", err?.message);
+    return c.json({ success: false, message: "Could not delete account", error: sanitizeError(c.env, err) }, 500);
   }
 }

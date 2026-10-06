@@ -141,7 +141,7 @@ async function run() {
     const row = DB._raw.prepare("SELECT email, is_verified, verification_otp FROM users WHERE id = 's1'").get();
     check("update profile: email updated", row.email === "new@example.com");
     check("update profile: is_verified reset to false", row.is_verified === 0);
-    check("update profile: new OTP generated", /^\d{6}$/.test(row.verification_otp));
+    check("update profile: new OTP generated (hashed)", /^[0-9a-f]{64}$/.test(row.verification_otp));
     check("update profile: verification email sent to new address", sentEmails.length === 1 && sentEmails[0].personalizations[0].to[0].email === "new@example.com");
 
     restoreFetch();

@@ -201,6 +201,8 @@ node --experimental-sqlite test/phase4e-i.test.js
 node --experimental-sqlite test/phase4e-ii.test.js
 node --experimental-sqlite test/phase4e-iii.test.js
 node --experimental-sqlite test/phase4f.test.js
+node --experimental-sqlite test/phase5a-payments.test.js
+node --experimental-sqlite test/phase5b-security.test.js
 ```
 
 ## Project layout

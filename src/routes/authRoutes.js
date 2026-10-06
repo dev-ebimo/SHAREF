@@ -7,11 +7,11 @@ import {
   validateResetPassword,
   validateLogin,
 } from "../validators/authValidators.js";
-import { loginLimiter, otpLimiter } from "../middleware/rateLimiter.js";
+import { loginLimiter, otpLimiter, registerLimiter } from "../middleware/rateLimiter.js";
 
 const authRoutes = new Hono();
 
-authRoutes.post("/register", validateRegister, register);
+authRoutes.post("/register", registerLimiter, validateRegister, register);
 authRoutes.post("/verify-otp", otpLimiter, validateOtp, verifyOTP);
 authRoutes.post("/resend-otp", otpLimiter, validateForgotPassword, resendOTP);
 authRoutes.post("/forgot-password", otpLimiter, validateForgotPassword, forgotPassword);

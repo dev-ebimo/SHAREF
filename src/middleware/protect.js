@@ -1,16 +1,15 @@
 import { verify } from "hono/jwt";
 
-// Same idea as the Render app's middleware/protect.js + utils/authCache.js:
-// decode the JWT, then confirm the user still exists / read their current
-// role with a short-TTL cache instead of hitting D1 on every request.
+// Decode the JWT, then confirm against the database that the account still
+// exists, isn't suspended, and hasn't changed its password since the token
+// was issued. Results are cached briefly per Worker isolate to spare D1.
 //
-// Honest caveat (same one as rateLimiter.js): this Map lives in one Worker
-// isolate. It cuts D1 reads under normal traffic, but isn't a strict
-// cross-isolate guarantee. If a deleted/suspended account needs to be
-// locked out faster than this cache's TTL, that's enforced by the
-// account_status check below, not by this cache expiring.
-const TTL_MS = 60 * 1000;
-const cache = new Map(); // userId -> { role, expiresAt }
+// Honest bound on staleness: the cache is per-isolate. A suspension takes
+// effect IMMEDIATELY in the isolate that handled the admin's click
+// (invalidateAuthCache), and within TTL_MS (15 s) everywhere else.
+const TTL_MS = 15 * 1000;
+const cache = new Map(); // userId -> { role, status, pwChangedSec, expiresAt }
+const MAX_CACHE_ENTRIES = 2000;
 
 function cacheGet(userId) {
   const entry = cache.get(userId);
@@ -22,12 +21,25 @@ function cacheGet(userId) {
   return entry;
 }
 
-function cacheSet(userId, role) {
-  cache.set(userId, { role, expiresAt: Date.now() + TTL_MS });
+function cacheSet(userId, value) {
+  if (cache.size >= MAX_CACHE_ENTRIES) cache.clear(); // simple bound; entries are cheap to rebuild
+  cache.set(userId, { ...value, expiresAt: Date.now() + TTL_MS });
 }
 
 export function invalidateAuthCache(userId) {
   cache.delete(userId);
+}
+
+// Test helper.
+export function _clearAuthCache() {
+  cache.clear();
+}
+
+function reject(c, message, extra = {}) {
+  // 401 (not 403) on purpose: the frontend's authFetch logs the user out and
+  // redirects to login on any 401, which is exactly right for a suspended
+  // or password-changed session.
+  return c.json({ success: false, message, ...extra }, 401);
 }
 
 export async function protect(c, next) {
@@ -42,20 +54,35 @@ export async function protect(c, next) {
   try {
     decoded = await verify(token, c.env.JWT_SECRET, "HS256");
   } catch (err) {
-    return c.json({ success: false, message: "Not authorized, invalid or expired token" }, 401);
+    return reject(c, "Not authorized, invalid or expired token");
+  }
+  if (typeof decoded.id !== "string" || !decoded.id) {
+    // e.g. a download token (no `id`) presented as a session token
+    return reject(c, "Not authorized, invalid or expired token");
   }
 
-  let cached = cacheGet(decoded.id);
-  if (!cached) {
-    const user = await c.env.DB.prepare("SELECT role FROM users WHERE id = ?").bind(decoded.id).first();
-    if (!user) {
-      return c.json({ success: false, message: "User no longer exists" }, 401);
-    }
-    cacheSet(decoded.id, user.role);
-    cached = { role: user.role };
+  let info = cacheGet(decoded.id);
+  if (!info) {
+    const user = await c.env.DB.prepare("SELECT role, account_status, password_changed_at FROM users WHERE id = ?")
+      .bind(decoded.id)
+      .first();
+    if (!user) return reject(c, "User no longer exists");
+    info = {
+      role: user.role,
+      status: user.account_status,
+      pwChangedSec: user.password_changed_at ? Math.floor(Date.parse(user.password_changed_at) / 1000) : 0,
+    };
+    cacheSet(decoded.id, info);
   }
 
-  c.set("user", { id: decoded.id, role: cached.role });
+  if (info.status === "suspended") {
+    return reject(c, "Your account has been suspended. Contact support if you believe this is a mistake.", { suspended: true });
+  }
+  if (info.pwChangedSec && (decoded.iat ?? 0) < info.pwChangedSec) {
+    return reject(c, "Your password was changed. Please log in again.");
+  }
+
+  c.set("user", { id: decoded.id, role: info.role });
   await next();
 }
 

@@ -30,5 +30,5 @@ export async function initializeTransaction(env, { email, amountNaira, reference
 }
 
 export async function verifyTransaction(env, reference) {
-  return paystackRequest(env, `/transaction/verify/${reference}`);
+  return paystackRequest(env, `/transaction/verify/${encodeURIComponent(reference)}`);
 }

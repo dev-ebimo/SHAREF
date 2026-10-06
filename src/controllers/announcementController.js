@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { generateId } from "../utils/id.js";
 import { sendAnnouncementEmail } from "../services/emailService.js";
 
@@ -114,7 +115,8 @@ export async function createAnnouncement(c) {
       201
     );
   } catch (err) {
-    return c.json({ success: false, message: "Could not send announcement", error: err.message }, 500);
+    console.error("announcementController error:", err?.message);
+    return c.json({ success: false, message: "Could not send announcement", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -140,6 +142,7 @@ export async function getAnnouncements(c) {
 
     return c.json({ success: true, announcements });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch announcements", error: err.message }, 500);
+    console.error("announcementController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch announcements", error: sanitizeError(c.env, err) }, 500);
   }
 }

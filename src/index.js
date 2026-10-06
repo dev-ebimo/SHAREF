@@ -21,10 +21,11 @@ const app = new Hono();
 app.use("*", async (c, next) => {
   const corsMiddleware = cors({
     origin: (origin) => {
-      const allowed = [
-        "http://localhost:5000",
-        c.env.FRONTEND_URL,
-      ];
+      // localhost is only allowed when running `wrangler dev` (NODE_ENV=development
+      // in .dev.vars) — never in production, where it would let any program
+      // on a visitor's own machine call the API with their credentials.
+      const allowed = [c.env.FRONTEND_URL];
+      if (c.env.NODE_ENV === "development") allowed.push("http://localhost:5000");
       return !origin || allowed.includes(origin) ? origin : null;
     },
     credentials: true,
@@ -33,17 +34,22 @@ app.use("*", async (c, next) => {
   return corsMiddleware(c, next);
 });
 
+// --- Security headers ---------------------------------------------------
+app.use("*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Content-Type-Options", "nosniff");
+  c.res.headers.set("Referrer-Policy", "no-referrer");
+  if (!c.res.headers.has("Cache-Control")) c.res.headers.set("Cache-Control", "no-store");
+});
+
 // --- Health check -------------------------------------------------------
 // Proves the D1 binding actually works end to end, not just that the app
 // boots. Hits the real `users` table via env.DB, the same binding every
 // future route will use.
 app.get("/api/health", async (c) => {
-  const result = await c.env.DB.prepare("SELECT COUNT(*) AS count FROM users").first();
-  return c.json({
-    success: true,
-    message: "Sharef API (Workers) is up",
-    usersInDb: result.count,
-  });
+  // Still proves the D1 binding works, but no longer publishes the user count.
+  await c.env.DB.prepare("SELECT 1 AS ok").first();
+  return c.json({ success: true, message: "Sharef API (Workers) is up" });
 });
 
 // --- Route groups --------------------------------------------------------

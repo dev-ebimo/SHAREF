@@ -1,12 +1,13 @@
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
+import { normalizeEmail } from "../utils/normalizeEmail.js";
 
 // Every field optional (this is a partial-update endpoint), but if a field
 // IS sent, it has to actually be non-empty/valid — matches the original's
 // `.optional().trim().notEmpty()` combination exactly.
 export const updateProfileSchema = z.object({
   fullName: z.string().trim().min(1, "Full name cannot be empty").optional(),
-  email: z.string().trim().email("Please enter a valid email address").transform((v) => v.toLowerCase()).optional(),
+  email: z.string().trim().email("Please enter a valid email address").transform(normalizeEmail).optional(),
   department: z.string().trim().min(1, "Department cannot be empty").optional(),
   level: z.enum(["100", "200", "300", "400", "500", "600"], { message: "Please select a valid level" }).optional(),
   university: z.string().trim().min(1, "University cannot be empty").optional(),

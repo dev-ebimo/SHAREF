@@ -2,6 +2,8 @@ import AdmZip from "adm-zip";
 import mammoth from "mammoth";
 
 const WORDS_PER_PAGE = 500;
+const PDF_BYTES_PER_PAGE_FLOOR = 200 * 1024;
+const MAX_PDF_PAGES = 1000;
 
 // Counts PDF pages directly from the raw file bytes, with no external
 // library involved: every actual page in a PDF is represented by its own
@@ -21,7 +23,29 @@ const WORDS_PER_PAGE = 500;
 function countPdfPageObjects(fileBuffer) {
   const raw = fileBuffer.toString("latin1");
   const matches = raw.match(/\/Type\s*\/Page(?!s)\b/g);
-  return matches ? matches.length : 0;
+  let pages = matches ? matches.length : 0;
+
+  // The page-tree root declares its total in `/Count N` — take the larger of
+  // the two signals, so stripping/hiding individual page objects doesn't
+  // lower the number.
+  const countRe = /\/Type\s*\/Pages\b[^>]{0,300}?\/Count\s+(\d+)|\/Count\s+(\d+)[^>]{0,300}?\/Type\s*\/Pages\b/g;
+  let m;
+  while ((m = countRe.exec(raw)) !== null) {
+    pages = Math.max(pages, Number(m[1] || m[2]) || 0);
+  }
+
+  // PDF 1.5+ can pack page objects inside compressed object streams
+  // (/ObjStm), where the regexes above can't see them — which used to price a
+  // 60-page document at the 1-page minimum (and lets an uploader hide pages
+  // on purpose). Inflating those streams is too CPU-heavy for the Workers
+  // free plan (10 ms), so use a conservative size-based FLOOR instead: no
+  // more than ~200 KB per page is assumed. It can only raise the count.
+  if (/\/Type\s*\/ObjStm/.test(raw)) {
+    pages = Math.max(pages, Math.ceil(fileBuffer.length / PDF_BYTES_PER_PAGE_FLOOR));
+  }
+
+  // Sanity ceiling: a forged /Count must not produce an absurd price.
+  return Math.min(MAX_PDF_PAGES, pages);
 }
 
 function extname(fileName) {

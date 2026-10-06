@@ -85,7 +85,7 @@ function installPaystackMock({ verifyStatus = "success" } = {}) {
     if (typeof url === "string" && url.includes("api.paystack.co/transaction/verify/")) {
       paystackCalls.push({ url, opts });
       const reference = url.split("/").pop();
-      return new Response(JSON.stringify({ status: true, data: { status: verifyStatus, reference, amount: 50000 } }), { status: 200 });
+      return new Response(JSON.stringify({ status: true, data: { status: verifyStatus, reference, amount: 50000, currency: "NGN" } }), { status: 200 });
     }
     return realFetch(url, opts);
   };
@@ -121,7 +121,7 @@ async function run() {
     const body = await res.json();
     check("initialize: 200 status", res.status === 200, JSON.stringify(body));
     check("initialize: authorizationUrl returned", body.authorizationUrl === "https://paystack.test/checkout/abc");
-    check("initialize: reference returned", typeof body.reference === "string" && body.reference.startsWith("SHAREF-u1-"));
+    check("initialize: reference returned", typeof body.reference === "string" && body.reference.startsWith("SHAREF-") && !body.reference.includes("u1"));
 
     const row = DB._raw.prepare("SELECT * FROM transactions WHERE reference = ?").get(body.reference);
     check("initialize: pending transaction logged before Paystack call", !!row && row.status === "pending" && row.amount === 500);
@@ -210,7 +210,7 @@ async function run() {
       .prepare(`INSERT INTO transactions (id, user_id, type, amount, status, reference, created_at, updated_at) VALUES (?, ?, 'deposit', 500, 'pending', ?, ?, ?)`)
       .run("tx3", "u1", "SHAREF-u1-333", timestamp, timestamp);
 
-    const payload = JSON.stringify({ event: "charge.success", data: { reference: "SHAREF-u1-333", amount: 50000 } }); // 50000 kobo = 500 naira
+    const payload = JSON.stringify({ event: "charge.success", data: { status: "success", currency: "NGN", reference: "SHAREF-u1-333", amount: 50000 } }); // 50000 kobo = 500 naira
     const signature = crypto.createHmac("sha512", env.PAYSTACK_SECRET_KEY).update(payload).digest("hex");
 
     const res = await app.fetch(
@@ -231,7 +231,7 @@ async function run() {
       .prepare(`INSERT INTO transactions (id, user_id, type, amount, status, reference, created_at, updated_at) VALUES (?, ?, 'deposit', 500, 'pending', ?, ?, ?)`)
       .run("tx4", "u1", "SHAREF-u1-444", timestamp, timestamp);
 
-    const payload = JSON.stringify({ event: "charge.success", data: { reference: "SHAREF-u1-444", amount: 50000 } });
+    const payload = JSON.stringify({ event: "charge.success", data: { status: "success", currency: "NGN", reference: "SHAREF-u1-444", amount: 50000 } });
     const res = await app.fetch(
       new Request("http://localhost/api/wallet/webhook", { method: "POST", headers: { "x-paystack-signature": "totally-fake-signature" }, body: payload }),
       env
@@ -256,7 +256,7 @@ async function run() {
     restoreFetch();
 
     // webhook arrives afterward for the same reference
-    const payload = JSON.stringify({ event: "charge.success", data: { reference: "SHAREF-u1-555", amount: 50000 } });
+    const payload = JSON.stringify({ event: "charge.success", data: { status: "success", currency: "NGN", reference: "SHAREF-u1-555", amount: 50000 } });
     const signature = crypto.createHmac("sha512", env.PAYSTACK_SECRET_KEY).update(payload).digest("hex");
     await app.fetch(
       new Request("http://localhost/api/wallet/webhook", { method: "POST", headers: { "x-paystack-signature": signature }, body: payload }),

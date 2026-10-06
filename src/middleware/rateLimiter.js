@@ -11,12 +11,23 @@
 // reaches this code).
 
 const buckets = new Map(); // key -> { count, resetAt }
+const MAX_BUCKETS = 5000;
 
-export function rateLimiter({ windowMs, max, message }) {
+// Without this the Map only ever grows in a long-lived isolate (memory leak).
+function pruneBuckets(now) {
+  if (buckets.size < MAX_BUCKETS) return;
+  for (const [k, b] of buckets) if (now > b.resetAt) buckets.delete(k);
+  if (buckets.size >= MAX_BUCKETS) buckets.clear();
+}
+
+export function rateLimiter({ windowMs, max, message, keyFn }) {
   return async (c, next) => {
-    const ip = c.req.header("CF-Connecting-IP") || "unknown";
-    const key = `${c.req.path}:${ip}`;
+    // keyFn lets authenticated routes limit per user id (campus NATs put many
+    // students behind one IP, so per-IP limits would punish innocent users).
+    const who = keyFn ? keyFn(c) : c.req.header("CF-Connecting-IP") || "unknown";
+    const key = `${c.req.path}:${who}`;
     const now = Date.now();
+    pruneBuckets(now);
 
     let bucket = buckets.get(key);
     if (!bucket || now > bucket.resetAt) {
@@ -44,4 +55,20 @@ export const otpLimiter = rateLimiter({
   windowMs: 10 * 60 * 1000,
   max: 5,
   message: { success: false, message: "Too many attempts. Please try again in 10 minutes." },
+});
+
+// Wallet funding: each call inserts a pending transaction row and hits
+// Paystack, so cap it per user.
+export const fundLimiter = rateLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  message: { success: false, message: "Too many payment attempts. Please try again in a few minutes." },
+  keyFn: (c) => c.get("user")?.id || c.req.header("CF-Connecting-IP") || "unknown",
+});
+
+// Account creation: each call hashes a password and sends an email.
+export const registerLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 15,
+  message: { success: false, message: "Too many sign-up attempts from this network. Please try again later." },
 });

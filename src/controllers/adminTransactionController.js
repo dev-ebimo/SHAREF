@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { EFFECTIVE_STATUS_CASE, activeSinceIso } from "./adminUserController.js";
 
 // @route GET /api/admin/transactions/summary
@@ -41,7 +42,8 @@ export async function getTransactionSummary(c) {
 
     return c.json({ success: true, summary, totalDepositVolume, totalSpentVolume });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch summary", error: err.message }, 500);
+    console.error("adminTransactionController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch summary", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -96,6 +98,7 @@ export async function getTransactions(c) {
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch transactions", error: err.message }, 500);
+    console.error("adminTransactionController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch transactions", error: sanitizeError(c.env, err) }, 500);
   }
 }

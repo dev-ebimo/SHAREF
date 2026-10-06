@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { timeAgo } from "../utils/timeAgo.js";
 import { formatFileSize, approveResourceById, rejectResourceById, getResourcePreviewForAdminById } from "./moderationController.js";
 
@@ -68,7 +69,8 @@ export async function getNotifications(c) {
 
     return c.json({ success: true, notifications: feed });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch notifications", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch notifications", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -86,7 +88,8 @@ export async function toggleRead(c) {
 
     return c.json({ success: true, unread: !!newUnread });
   } catch (err) {
-    return c.json({ success: false, message: "Could not update notification", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not update notification", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -98,7 +101,8 @@ export async function markAllRead(c) {
       .run();
     return c.json({ success: true, message: "All notifications marked as read" });
   } catch (err) {
-    return c.json({ success: false, message: "Could not mark notifications as read", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not mark notifications as read", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -117,7 +121,8 @@ export async function quickPreview(c) {
   try {
     return await getResourcePreviewForAdminById(c, resourceId);
   } catch (err) {
-    return c.json({ success: false, message: "Could not load preview", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not load preview", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -129,7 +134,8 @@ export async function quickApprove(c) {
   try {
     return await approveResourceById(c, resourceId);
   } catch (err) {
-    return c.json({ success: false, message: "Could not approve resource", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not approve resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -141,6 +147,7 @@ export async function quickReject(c) {
     const body = await c.req.json().catch(() => ({}));
     return await rejectResourceById(c, resourceId, body.reason || "");
   } catch (err) {
-    return c.json({ success: false, message: "Could not reject resource", error: err.message }, 500);
+    console.error("adminNotificationController error:", err?.message);
+    return c.json({ success: false, message: "Could not reject resource", error: sanitizeError(c.env, err) }, 500);
   }
 }

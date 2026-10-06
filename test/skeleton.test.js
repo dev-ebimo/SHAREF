@@ -19,7 +19,7 @@ async function run() {
   const body = await res.json();
   console.log("GET /api/health ->", res.status, body);
   if (res.status !== 200) throw new Error("FAIL: expected 200");
-  if (body.usersInDb !== 1) throw new Error(`FAIL: expected usersInDb=1, got ${body.usersInDb}`);
+  if (body.usersInDb !== undefined) throw new Error("FAIL: health endpoint must not expose user count");
 
   // 2. CORS: allowed origin gets reflected back
   const res2 = await app.fetch(

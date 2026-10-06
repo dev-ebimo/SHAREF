@@ -354,6 +354,10 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
           }
 
+          // Server rotates the session token on password change (older sessions are
+          // revoked) — keep this tab signed in with the fresh one.
+          if (data.token) localStorage.setItem("token", data.token);
+
           closePasswordModal();
           showToast(data.message || "Password updated successfully.");
         })

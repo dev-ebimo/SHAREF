@@ -1,3 +1,4 @@
+import { sanitizeError } from "../utils/sanitizeError.js";
 import { getFullText } from "../utils/previewSnippet.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { startOfTodayInLagos } from "../utils/lagosDay.js";
@@ -75,7 +76,8 @@ export async function getModerationQueue(c) {
       pagination: { total: pending, page, limit, pages: Math.max(1, Math.ceil(pending / limit)) },
     });
   } catch (err) {
-    return c.json({ success: false, message: "Could not fetch queue", error: err.message }, 500);
+    console.error("moderationController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch queue", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -149,7 +151,8 @@ export async function approveResource(c) {
   try {
     return await approveResourceById(c, c.req.param("id"));
   } catch (err) {
-    return c.json({ success: false, message: "Could not approve resource", error: err.message }, 500);
+    console.error("moderationController error:", err?.message);
+    return c.json({ success: false, message: "Could not approve resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -181,7 +184,8 @@ export async function rejectResource(c) {
     const body = await c.req.json().catch(() => ({}));
     return await rejectResourceById(c, c.req.param("id"), body.reason || "");
   } catch (err) {
-    return c.json({ success: false, message: "Could not reject resource", error: err.message }, 500);
+    console.error("moderationController error:", err?.message);
+    return c.json({ success: false, message: "Could not reject resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -236,7 +240,8 @@ export async function getResourcePreviewForAdmin(c) {
   try {
     return await getResourcePreviewForAdminById(c, c.req.param("id"));
   } catch (err) {
-    return c.json({ success: false, message: "Could not load preview", error: err.message }, 500);
+    console.error("moderationController error:", err?.message);
+    return c.json({ success: false, message: "Could not load preview", error: sanitizeError(c.env, err) }, 500);
   }
 }
 
@@ -255,7 +260,8 @@ export async function getPendingCount(c) {
     ]);
     return c.json({ success: true, pending: pendingRow.n, approved: approvedRow.n, rejected: rejectedRow.n, agedCount: agedRow.n });
   } catch (err) {
-    return c.json({ success: false, message: "Could not load pending count", error: err.message }, 500);
+    console.error("moderationController error:", err?.message);
+    return c.json({ success: false, message: "Could not load pending count", error: sanitizeError(c.env, err) }, 500);
   }
 }
 

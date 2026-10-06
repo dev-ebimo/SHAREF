@@ -43,8 +43,13 @@ export function createMockD1(schemaSql) {
         const results = [];
         for (const stmt of statements) {
           const prepared = raw.prepare(stmt._sql);
+          if (/^\s*SELECT/i.test(stmt._sql)) {
+            // Real D1 returns the rows of a SELECT inside batch() as `results`.
+            results.push({ success: true, results: prepared.all(...stmt._args), meta: { changes: 0 } });
+            continue;
+          }
           const info = prepared.run(...stmt._args);
-          results.push({ success: true, meta: { changes: info.changes, last_row_id: info.lastInsertRowid } });
+          results.push({ success: true, results: [], meta: { changes: info.changes, last_row_id: info.lastInsertRowid } });
         }
         raw.exec("COMMIT");
         return results;

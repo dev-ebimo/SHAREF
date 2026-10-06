@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
+import { normalizeEmail } from "../utils/normalizeEmail.js";
 
 // express-validator's `.optional({ checkFalsy: true })` treats an empty
 // string as "not provided" — this reproduces that for matricNumber,
@@ -15,7 +16,7 @@ const emailField = z
   .trim()
   .min(1, "Email is required")
   .email("Please enter a valid email address")
-  .transform((v) => v.toLowerCase()); // rough equivalent of normalizeEmail()
+  .transform(normalizeEmail);
 
 const otpField = z
   .string()
