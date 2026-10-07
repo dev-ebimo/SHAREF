@@ -266,60 +266,6 @@
   padding: 0 1.25rem 1.15rem;
   max-height: 220px;
 }
-
-/* --- Support Form --- */
-.support-form {
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  border-radius: 14px;
-  padding: 1.75rem;
-}
-.form-group {
-  margin-bottom: 1.15rem;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.4rem;
-  color: var(--text-muted);
-  font-size: 0.82rem;
-  font-weight: 500;
-}
-.support-form input,
-.support-form select,
-.support-form textarea {
-  width: 100%;
-  background: var(--surface-02);
-  border: 1px solid var(--border-hair);
-  padding: 0.75rem 1rem;
-  color: var(--text-pure);
-  border-radius: 8px;
-  outline: none;
-  font-family: inherit;
-  font-size: 0.88rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-}
-.support-form select {
-  color-scheme: dark;
-  cursor: pointer;
-}
-.support-form select option {
-  background: #0f0e17;
-  color: var(--text-pure);
-}
-.support-form textarea {
-  resize: vertical;
-}
-.support-form input::placeholder,
-.support-form textarea::placeholder {
-  color: var(--text-faint);
-}
-.support-form input:focus,
-.support-form select:focus,
-.support-form textarea:focus {
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
-}
 .w-100 {
   width: 100%;
 }

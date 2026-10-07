@@ -595,34 +595,6 @@ button {
   gap: 0.85rem;
   margin-bottom: 2.25rem;
 }
-.stat-badge-link {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.82rem;
-  color: var(--text-lead);
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  padding: 0.5rem 0.95rem;
-  border-radius: 20px;
-  transition: all 0.2s ease;
-}
-.stat-badge-link:hover {
-  background: rgba(168, 85, 247, 0.07);
-  border-color: var(--border-hover);
-  color: var(--text-pure);
-  transform: translateY(-1px);
-}
-.stat-badge-link strong {
-  color: var(--purple-soft);
-  font-weight: 700;
-}
-.stat-badge-link svg {
-  width: 15px;
-  height: 15px;
-  flex-shrink: 0;
-  color: var(--purple-soft);
-}
 
 .dashboard-section {
   margin-bottom: 2.5rem;
@@ -878,10 +850,6 @@ button {
 .type-tag.pdf-type {
   background: rgba(239, 68, 68, 0.1);
   color: var(--red);
-}
-.type-tag.exam-type {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
 }
 .card-body-zone h3 {
   font-size: 0.9rem;
@@ -1458,13 +1426,6 @@ button {
   color: var(--text-pure);
   text-align: center;
   margin-bottom: 0.5rem;
-}
-.wallet-modal-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  text-align: center;
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
 }
 
 .wallet-balance-row {

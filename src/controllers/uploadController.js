@@ -176,7 +176,7 @@ export async function completeUpload(c) {
             (id, title, type, department, course, level, semester, session, description, uploader_id,
              file_name, file_url, cloudinary_public_id, cloudinary_resource_type, file_size_bytes, file_extension,
              pages, preview_type, preview_snippet, preview_message, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'pending', '', '', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?)`
         ).bind(
           intent.id, meta.title, meta.type, meta.department, meta.course, meta.level, meta.semester, meta.session,
           meta.description || "", user.id, intent.file_name, buildRawFileUrl(c.env, intent.public_id), intent.public_id,
