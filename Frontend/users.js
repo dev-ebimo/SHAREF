@@ -394,7 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
     txnEmptyState.style.display = "none";
 
     transactions.forEach((t) => {
-      const isDebit = t.type === "withdrawal" || t.type === "purchase";
+      const isDebit = t.type === "withdrawal" || t.type === "purchase" || t.type === "reward_reversal";
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>
@@ -407,7 +407,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
         </td>
         <td><span class="status-badge ${t.category}">${capitalize(t.category)}</span></td>
-        <td>${capitalize(t.type)}</td>
+        <td>${capitalize(String(t.type).replace("_", " "))}</td>
         <td class="amount-cell${isDebit ? " is-debit" : ""}">${isDebit ? "-" : "+"}${formatNaira(t.amount)}</td>
         <td>${new Date(t.date).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}</td>
         <td><span class="status-badge ${t.status}">${capitalize(t.status)}</span></td>

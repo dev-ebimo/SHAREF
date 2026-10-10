@@ -5,6 +5,10 @@ import authRoutes from "./routes/authRoutes.js";
 import bookmarkRoutes from "./routes/bookmarkRoutes.js";
 import studentNotificationRoutes from "./routes/studentNotificationRoutes.js";
 import resourceRoutes from "./routes/resourceRoutes.js";
+import downloadsRoutes from "./routes/downloadsRoutes.js";
+import incentiveRoutes from "./routes/incentiveRoutes.js";
+import adminIncentiveRoutes from "./routes/adminIncentiveRoutes.js";
+import { runScheduledJobs } from "./jobs/incentiveJobs.js";
 import walletRoutes from "./routes/walletRoutes.js";
 import moderationRoutes from "./routes/moderationRoutes.js";
 import adminResourceRoutes from "./routes/adminResourceRoutes.js";
@@ -58,12 +62,15 @@ app.route("/api/auth", authRoutes);
 app.route("/api/bookmarks", bookmarkRoutes);
 app.route("/api/notifications", studentNotificationRoutes);
 app.route("/api/resources", resourceRoutes);
+app.route("/api/downloads", downloadsRoutes);
+app.route("/api/incentives", incentiveRoutes);
 app.route("/api/wallet", walletRoutes);
 app.route("/api/admin/moderation", moderationRoutes);
 app.route("/api/admin/resources", adminResourceRoutes);
 app.route("/api/admin/announcements", announcementRoutes);
 app.route("/api/admin/notifications", adminNotificationRoutes);
 app.route("/api/admin/users", adminUserRoutes);
+app.route("/api/admin/incentives", adminIncentiveRoutes);
 app.route("/api/admin", adminTransactionRoutes);
 app.route("/api/users", userSettingsRoutes);
 
@@ -74,10 +81,9 @@ app.onError((err, c) => {
   return c.json({ success: false, message: "Internal server error" }, 500);
 });
 
-// Cron Trigger entry point (optional — add `[triggers] crons = ["0 3 * * *"]`
-// to wrangler.toml). Cleans up uploads that were started but never finished.
+// Cron Trigger entry point; the schedule logic lives in jobs/incentiveJobs.js (see wrangler.toml for the crons).
 async function scheduled(event, env, ctx) {
-  ctx.waitUntil(purgeStaleUploads(env, { limit: 20 }));
+  runScheduledJobs(event, env, ctx, { purgeStaleUploads });
 }
 
 export default {

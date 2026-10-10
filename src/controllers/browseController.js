@@ -26,6 +26,52 @@ export async function getRecentFeed(c) {
   }
 }
 
+// @route GET /api/resources/recommended?limit=4
+// Powers the dashboard's "For your level" row: approved resources matching the
+// student's own department AND level, excluding anything they already own,
+// ranked by downloads in the last 30 days and then by recency. A student with
+// no department/level yet gets an empty list (the dashboard shows a
+// "complete your profile" prompt instead).
+export async function getRecommended(c) {
+  try {
+    const limit = Math.min(Math.max(parseInt(c.req.query("limit"), 10) || 4, 1), 12);
+    const user = c.get("user");
+
+    const me = await c.env.DB.prepare("SELECT department, level FROM users WHERE id = ?").bind(user.id).first();
+    if (!me?.department || !me?.level) {
+      return c.json({ success: true, resources: [] });
+    }
+
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { results } = await c.env.DB.prepare(
+      `SELECT r.*, COALESCE(dl.recent_downloads, 0) AS recentDownloads
+         FROM resources r
+         LEFT JOIN (
+           SELECT resource_id, COUNT(*) AS recent_downloads
+             FROM download_logs
+            WHERE created_at >= ?
+            GROUP BY resource_id
+         ) dl ON dl.resource_id = r.id
+        WHERE r.status = 'approved' AND r.department = ? AND r.level = ?
+          AND NOT EXISTS (
+            SELECT 1 FROM transactions t
+             WHERE t.user_id = ? AND t.resource_id = r.id
+               AND t.type = 'purchase' AND t.status = 'successful'
+          )
+        ORDER BY recentDownloads DESC, r.created_at DESC
+        LIMIT ?`
+    )
+      .bind(since, me.department, me.level, user.id, limit)
+      .all();
+
+    const resources = results.map((r) => ({ ...shapeResource(r), recentDownloads: r.recentDownloads }));
+    return c.json({ success: true, resources });
+  } catch (err) {
+    console.error("browseController error:", err?.message);
+    return c.json({ success: false, message: "Could not fetch recommended resources", error: sanitizeError(c.env, err) }, 500);
+  }
+}
+
 // @route GET /api/resources/trending
 // Powers the Trending resource cards — most downloaded in the last 3 days,
 // scoped to the logged-in student's own department. A student with no
@@ -72,38 +118,6 @@ export async function getTrending(c) {
   } catch (err) {
     console.error("browseController error:", err?.message);
     return c.json({ success: false, message: "Could not fetch trending resources", error: sanitizeError(c.env, err) }, 500);
-  }
-}
-
-// @route GET /api/resources/continue-learning
-// Most recently downloaded resources for the logged-in user.
-export async function getContinueLearning(c) {
-  try {
-    const limit = Number(c.req.query("limit")) || 5;
-    const user = c.get("user");
-
-    // GROUP BY handles the "one row per resource, most recent download"
-    // dedup natively, and LIMIT means only `limit` rows are ever fetched —
-    // the original fetched the user's ENTIRE download history and deduped
-    // in JS, flagged in the earlier performance audit as a query that
-    // would only get slower as one user's history grows. This version
-    // doesn't have that problem.
-    const { results } = await c.env.DB.prepare(
-      `SELECT r.*, MAX(dl.created_at) AS last_downloaded_at
-       FROM download_logs dl
-       JOIN resources r ON r.id = dl.resource_id
-       WHERE dl.user_id = ? AND r.status = 'approved'
-       GROUP BY r.id
-       ORDER BY last_downloaded_at DESC
-       LIMIT ?`
-    )
-      .bind(user.id, limit)
-      .all();
-
-    return c.json({ success: true, resources: results.map(shapeResource) });
-  } catch (err) {
-    console.error("browseController error:", err?.message);
-    return c.json({ success: false, message: "Could not fetch continue learning", error: sanitizeError(c.env, err) }, 500);
   }
 }
 

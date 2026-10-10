@@ -63,14 +63,14 @@
             <span>Lecture Notes</span>
           </a>
 
-          <div class="menu-section-label">Community</div>
-          <a href="community.html" class="menu-link">
-            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <span>Study Groups</span>
+          <div class="menu-section-label">Activity</div>
+          <a href="downloads.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            <span>Downloads</span>
+          </a>
+          <a href="earn.html" class="menu-link rewards-nav-link" style="display: none">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
+            <span>Earn Rewards</span>
           </a>
 
           <div class="menu-section-label">Personal</div>
@@ -78,7 +78,7 @@
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
             </svg>
-            <span>Bookmarks</span>
+            <span>Wishlist</span>
           </a>
           <a href="my-uploads.html" class="menu-link">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -256,7 +256,7 @@
                   <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
                   </svg>
-                  <span>Bookmarks</span>
+                  <span>Wishlist</span>
                 </a>
                 <a href="settings.html" class="account-dropdown-item" role="menuitem">
                   <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -292,17 +292,24 @@
         <!-- MAIN CONTENT -->
         <main class="main-workspace" id="main-content">
           <header class="workspace-header">
-            <h1>Saved Bookmarks</h1>
-            <p class="contextual-insight">Quick access to your pinned study materials and past questions.</p>
+            <h1>Wishlist</h1>
+            <p class="contextual-insight">Resources you want to get. Fund your wallet once and pick them up when you are ready.</p>
           </header>
 
-          <!-- Search & Filter Controls Within Bookmarks -->
+          <div class="wl-summary hidden" id="wlSummary" aria-live="polite">
+            <div class="wl-sum-item"><span>On your wishlist</span><strong id="wlCount">0</strong></div>
+            <div class="wl-sum-item"><span>Total to get</span><strong id="wlTotal">₦0</strong></div>
+            <div class="wl-sum-item"><span>Wallet balance</span><strong id="wlBalance">…</strong></div>
+            <div class="wl-sum-cta">
+              <span id="wlAfford"></span>
+              <button type="button" class="btn-primary-sm" id="wlFundBtn">Add funds</button>
+            </div>
+          </div>
+
           <div class="controls-bar">
             <div class="controls-search">
-              <svg class="icon-search" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
-                <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input type="text" id="bookmarkSearch" placeholder="Search saved resources..." aria-label="Search bookmarks" autocomplete="off" />
+              <svg class="icon-search" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input type="text" id="bookmarkSearch" placeholder="Search your wishlist..." aria-label="Search wishlist" autocomplete="off" />
             </div>
             <select id="typeFilter" aria-label="Filter by type">
               <option value="all">All Types</option>
@@ -313,23 +320,23 @@
               <option value="Revision Sheet">Revision Sheets</option>
               <option value="Other">Other</option>
             </select>
+            <select id="sortSelect" aria-label="Sort wishlist">
+              <option value="recent">Recently added</option>
+              <option value="low">Price: low to high</option>
+              <option value="high">Price: high to low</option>
+              <option value="course">Course code</option>
+            </select>
           </div>
 
-          <!-- Bookmarks Grid -->
-          <div class="bookmarks-grid" id="bookmarksGrid">
-            <!-- Cards dynamically rendered via JavaScript -->
-          </div>
+          <div class="wl-grid" id="bookmarksGrid"></div>
 
-          <!-- Empty State Layout -->
           <div class="empty-state hidden" id="emptyState">
             <div class="empty-icon" aria-hidden="true">
-              <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-                <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
-              </svg>
+              <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" /></svg>
             </div>
-            <h3>No bookmarks saved yet</h3>
-            <p>Pin important study materials while browsing to keep them handy here.</p>
-            <a href="resources.html" class="btn-primary-sm">Browse Materials</a>
+            <h3 id="emptyTitle">Your wishlist is empty</h3>
+            <p id="emptyText">Tap the heart on any resource to save it here for later.</p>
+            <a href="resources.html" class="btn-primary-sm" id="emptyCta">Browse Resources</a>
           </div>
         </main>
       </div>
@@ -338,6 +345,7 @@
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
+    <script src="incentives.js"></script>
     <script src="bookmarks.js"></script>
   </body>
 </html>

@@ -202,6 +202,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+    // Rewards: arriving from a "Wanted" request (?bounty=ID). Purely
+    // informational — the server re-checks that the bounty is open and that
+    // the course matches. The id travels in the upload *permit* request.
+    var activeBounty = null;
+    (function loadBounty() {
+        var id = new URLSearchParams(location.search).get('bounty');
+        var banner = document.getElementById('bountyBanner');
+        if (!id || !banner || !window.SharefRewards) return;
+        window.SharefRewards.getJson('/incentives/requests').then(function (d) {
+            var q = (d.requests || []).filter(function (r) { return String(r.id) === String(id); })[0];
+            if (!q) return;
+            activeBounty = q;
+            banner.innerHTML = 'You are uploading <strong>' + escapeHtml(q.course) + ' ' + escapeHtml(q.type) + '</strong>. Earn ' + window.SharefRewards.naira(q.reward) + ' if a moderator approves it.';
+            banner.classList.remove('hidden');
+            var course = document.getElementById('course');
+            if (course && !course.value) course.value = q.course;
+        }).catch(function () {});
+    })();
+
     // Sends the file STRAIGHT to Cloudinary using the signed permit our API
     // issued. The file never passes through our server (it runs on a tiny CPU
     // budget). Uses XMLHttpRequest because fetch() can't report upload progress.
@@ -293,6 +312,7 @@ document.addEventListener('DOMContentLoaded', () => {
             fileName: currentFile.name,
             fileSize: currentFile.size,
         };
+        if (activeBounty) metadata.bountyId = activeBounty.id;
 
         // 1) permit
         let permit;

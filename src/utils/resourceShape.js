@@ -24,3 +24,8 @@ export function shapeResource(r) {
     date: r.created_at,
   };
 }
+
+// The DB stores level as "300"; screens that show it standalone want "300 Level".
+export function levelLabel(level) {
+  return level ? `${level} Level` : "";
+}

@@ -28,8 +28,12 @@ function errText(err) {
 export async function getBalance(c) {
   try {
     const user = c.get("user");
-    const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
-    return c.json({ success: true, balance: row?.wallet_balance ?? 0 });
+    const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance, reward_pending FROM users WHERE id = ?").bind(user.id).first();
+    const funded = row?.wallet_balance ?? 0;
+    const reward = row?.reward_balance ?? 0;
+    // `balance` is everything the student can draw on (cash + earned rewards; a negative reward
+    // balance after a reversal is netted off). The parts are exposed too for screens that want them.
+    return c.json({ success: true, balance: funded + reward, fundedBalance: funded, rewardBalance: reward, rewardPending: row?.reward_pending ?? 0 });
   } catch (err) {
     console.error("getBalance failed:", errText(err));
     return c.json({ success: false, message: "Could not fetch balance", error: sanitizeError(c.env, err) }, 500);
@@ -260,7 +264,7 @@ export async function paystackWebhook(c) {
   }
 }
 
-async function recordDownloadOnly(c, resourceId, userId) {
+export async function recordDownloadOnly(c, resourceId, userId) {
   const ts = nowIso();
   await c.env.DB.batch([
     c.env.DB.prepare("UPDATE resources SET downloads = downloads + 1, updated_at = ? WHERE id = ?").bind(ts, resourceId),
@@ -306,36 +310,50 @@ export async function chargeForDownload(c) {
 
     const cost = calculateResourceCost(resource.pages);
     const ts = nowIso();
+    const txId = generateId();
 
-    // ONE atomic batch (single SQL transaction): deduct, record the purchase,
-    // bump the counter, log the download, read back the balance.
-    //  - Insufficient funds: the deduction would drive wallet_balance below
-    //    zero, which violates the schema's CHECK (wallet_balance >= 0). That
-    //    aborts and rolls back the ENTIRE batch — nothing is recorded.
-    //  - Concurrent duplicate purchase (double-click / two tabs): violates
-    //    the unique index on successful purchases, rolling back this batch's
-    //    deduction too — so nobody is ever charged twice.
-    //  - Any other failure: everything rolls back; the user keeps their money
-    //    and gets no download, instead of the old "paid but nothing happened".
+    // ONE atomic batch (single SQL transaction), exactly as before, now with two pots of money:
+    // earned rewards are spent FIRST (all of it if it covers the price, no cap), then the funded wallet.
+    //  - The split is decided in SQL from the balances at the moment of the write, so two downloads
+    //    started at once can't both spend the same reward.
+    //  - A NEGATIVE reward balance (a reward reversed after it was spent) is a debt: it is settled
+    //    from the funded wallet before anything else, so it blocks downloads until the student tops up.
+    //  - Frozen students can't spend rewards (only their funded wallet).
+    //  - Insufficient money: the deduction would drive wallet_balance below zero, violating the
+    //    schema's CHECK (wallet_balance >= 0). That aborts and rolls back the ENTIRE batch, nothing recorded.
+    //  - Concurrent duplicate purchase: violates the unique index on successful purchases and rolls the
+    //    whole batch back, so nobody is ever charged twice.
     let results;
     try {
       results = await c.env.DB.batch([
-        c.env.DB.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE id = ?").bind(cost, ts, user.id),
         c.env.DB.prepare(
-          `INSERT INTO transactions (id, user_id, type, amount, status, resource_id, description, created_at, updated_at)
-           VALUES (?, ?, 'purchase', ?, 'successful', ?, ?, ?, ?)`
-        ).bind(generateId(), user.id, cost, resourceId, `${resource.course} — ${resource.title}`, ts, ts),
+          `INSERT INTO transactions (id, user_id, type, amount, status, resource_id, description, from_rewards, created_at, updated_at)
+           SELECT ?, id, 'purchase', ?, 'successful', ?, ?,
+                  CASE WHEN rewards_frozen = 0 AND reward_balance > 0 THEN MIN(reward_balance, ?) ELSE 0 END, ?, ?
+             FROM users WHERE id = ?`
+        ).bind(txId, cost, resourceId, `${resource.course} — ${resource.title}`, cost, ts, ts, user.id),
+        c.env.DB.prepare(
+          `UPDATE users
+              SET wallet_balance = wallet_balance - (? - (SELECT from_rewards FROM transactions WHERE id = ?)) - MAX(-reward_balance, 0),
+                  reward_balance = reward_balance - (SELECT from_rewards FROM transactions WHERE id = ?) + MAX(-reward_balance, 0),
+                  updated_at = ?
+            WHERE id = ?`
+        ).bind(cost, txId, txId, ts, user.id),
         c.env.DB.prepare("UPDATE resources SET downloads = downloads + 1, updated_at = ? WHERE id = ?").bind(ts, resourceId),
         c.env.DB.prepare("INSERT INTO download_logs (id, user_id, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
           .bind(generateId(), user.id, resourceId, ts, ts),
-        c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id),
+        c.env.DB.prepare("SELECT wallet_balance, reward_balance FROM users WHERE id = ?").bind(user.id),
+        c.env.DB.prepare("SELECT from_rewards FROM transactions WHERE id = ?").bind(txId),
       ]);
     } catch (batchErr) {
       const msg = errText(batchErr);
       if (/CHECK constraint failed/i.test(msg)) {
-        const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
+        const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance, rewards_frozen FROM users WHERE id = ?").bind(user.id).first();
+        // What this student can actually spend on this item: cash plus usable rewards; a reward debt
+        // (negative balance) reduces it, and a frozen student's rewards don't count.
+        const rewardPart = row?.rewards_frozen ? Math.min(row?.reward_balance ?? 0, 0) : row?.reward_balance ?? 0;
         return c.json(
-          { success: false, insufficientBalance: true, message: "Insufficient wallet balance", required: cost, currentBalance: row?.wallet_balance ?? 0 },
+          { success: false, insufficientBalance: true, message: "Insufficient wallet balance", required: cost, currentBalance: Math.max(0, (row?.wallet_balance ?? 0) + rewardPart) },
           402
         );
       }
@@ -346,10 +364,12 @@ export async function chargeForDownload(c) {
       throw batchErr;
     }
 
-    let newBalance = results?.[4]?.results?.[0]?.wallet_balance;
+    const after = results?.[4]?.results?.[0];
+    const rewardsUsed = results?.[5]?.results?.[0]?.from_rewards ?? 0;
+    let newBalance = after ? after.wallet_balance + after.reward_balance : undefined;
     if (newBalance === undefined) {
-      const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
-      newBalance = row?.wallet_balance;
+      const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance FROM users WHERE id = ?").bind(user.id).first();
+      newBalance = (row?.wallet_balance ?? 0) + (row?.reward_balance ?? 0);
     }
 
     return c.json({
@@ -357,6 +377,8 @@ export async function chargeForDownload(c) {
       alreadyOwned: false,
       fileUrl: await buildDownloadStreamUrl(c, resourceId, user.id),
       newBalance,
+      rewardsUsed,
+      fundedUsed: cost - rewardsUsed,
       message: "Payment successful, download starting",
     });
   } catch (err) {

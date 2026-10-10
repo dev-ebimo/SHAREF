@@ -136,4 +136,20 @@ document.addEventListener("DOMContentLoaded", function () {
         console.error("Could not fetch pending review count:", err);
       });
   })();
+
+  // Incentive program: open-flag count on the sidebar's "Incentives" link.
+  // Lightweight endpoint; silently does nothing if the program isn't
+  // deployed yet, so existing admin pages are unaffected.
+  (function updateFlagBadge() {
+    var el = document.getElementById("sidebarFlagCount");
+    if (!el) return;
+    authFetch(API_BASE + "/admin/incentives/flag-count")
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data.success) return;
+        el.textContent = data.flagsOpen;
+        el.style.display = data.flagsOpen > 0 ? "" : "none";
+      })
+      .catch(function () {});
+  })();
 });

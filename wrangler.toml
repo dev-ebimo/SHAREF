@@ -8,6 +8,11 @@ binding = "DB"                        # accessed in code as env.DB
 database_name = "sharef-db"
 database_id = "34e84feb-6269-437d-9467-717ef98c8392"   # `wrangler d1 create sharef-db` fills this in
 
+# Scheduled jobs (see scheduled() in src/index.js). Hourly: rewards past their hold period become
+# spendable. Daily at 02:00 UTC (03:00 Lagos): cleanup of unfinished uploads + reward fraud-signal scan.
+[triggers]
+crons = ["0 * * * *", "0 2 * * *"]
+
 [vars]
 FRONTEND_URL = "https://sharef-resource.vercel.app"   # update to your real Vercel URL
 

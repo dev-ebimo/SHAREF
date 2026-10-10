@@ -5,6 +5,7 @@ import { signUploadPermit, buildRawFileUrl, deleteFromCloudinary } from "../util
 import { inspectRemoteFile, matchesMagic } from "../utils/fileChecks.js";
 import { purgeStaleUploads } from "../jobs/purgeStaleUploads.js";
 import { formatFileSize } from "../utils/resourceShape.js";
+import { resolveBountyForUpload } from "../services/bountyService.js";
 
 // Direct-to-Cloudinary upload, in two cheap Worker calls:
 //   1. POST /api/resources/upload/permit   -> validate metadata, hand back a signed permit
@@ -77,6 +78,10 @@ export async function requestUploadPermit(c) {
       );
     }
 
+    // Optional: the request ("bounty") this upload answers. Silently dropped unless valid.
+    const bountyId = await resolveBountyForUpload(c.env.DB, body.bountyId, parsed.data.course);
+    const metadata = bountyId ? { ...parsed.data, bountyId } : parsed.data;
+
     const id = generateId();
     // The public_id (storage path) is chosen here, never by the client. For raw
     // files the extension is part of it.
@@ -87,7 +92,7 @@ export async function requestUploadPermit(c) {
       `INSERT INTO upload_intents (id, user_id, public_id, file_name, file_extension, declared_size, metadata, created_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, JSON.stringify(parsed.data), nowIso, expiresAt)
+      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, JSON.stringify(metadata), nowIso, expiresAt)
       .run();
 
     const permit = await signUploadPermit(c.env, publicId);
@@ -175,12 +180,12 @@ export async function completeUpload(c) {
           `INSERT INTO resources
             (id, title, type, department, course, level, semester, session, description, uploader_id,
              file_name, file_url, cloudinary_public_id, cloudinary_resource_type, file_size_bytes, file_extension,
-             pages, preview_type, preview_snippet, preview_message, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?)`
+             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?)`
         ).bind(
           intent.id, meta.title, meta.type, meta.department, meta.course, meta.level, meta.semester, meta.session,
           meta.description || "", user.id, intent.file_name, buildRawFileUrl(c.env, intent.public_id), intent.public_id,
-          info.size, intent.file_extension, timestamp, timestamp
+          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null
         ),
         c.env.DB.prepare(
           "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, NULL, 'new_upload', 1, ?, ?)"

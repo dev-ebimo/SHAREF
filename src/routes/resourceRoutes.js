@@ -4,7 +4,7 @@ import { requestUploadPermit, completeUpload } from "../controllers/uploadContro
 import {
   getRecentFeed,
   getTrending,
-  getContinueLearning,
+  getRecommended,
   searchPastQuestions,
   getResourcePreview,
 } from "../controllers/browseController.js";
@@ -20,7 +20,7 @@ resourceRoutes.post("/upload/complete", protect, completeUpload);
 
 resourceRoutes.get("/recent", protect, getRecentFeed);
 resourceRoutes.get("/trending", protect, getTrending);
-resourceRoutes.get("/continue-learning", protect, getContinueLearning);
+resourceRoutes.get("/recommended", protect, getRecommended);
 resourceRoutes.get("/past-questions", protect, searchPastQuestions);
 resourceRoutes.get("/my-uploads", protect, getMyUploads);
 resourceRoutes.get("/:id/preview", protect, getResourcePreview);

@@ -299,7 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
     authFetch(`${API_BASE}/admin/notifications/${id}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pages: pages, snippet: currentAnalysis && currentAnalysis.ok ? currentAnalysis.snippet : '' }),
+      body: JSON.stringify({ pages: pages, snippet: currentAnalysis && currentAnalysis.ok ? currentAnalysis.snippet : '', fileHash: currentAnalysis && currentAnalysis.fileHash ? currentAnalysis.fileHash : undefined }),
     })
       .then(res => res.json().then(data => ({ status: res.status, data })))
       .then(({ data }) => {
@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         notifications = notifications.filter(n => n.id !== id);
         quickReviewModal.classList.add('hidden');
-        alert('Resource approved successfully.');
+        alert(data.reward && data.reward.message ? data.message : 'Resource approved successfully.');
         renderFeed();
       })
       .catch(err => {

@@ -1,0 +1,2361 @@
+--- /dev/null
++++ b/src/db/migrations/005_reward_idempotency_ignores_shadow.sql
+@@ -0,0 +1,12 @@
++-- ============================================================================
++-- Save point 5 — shadow-mode rows must not block a real payment
++-- Run ONCE after 004 (safe to run on a DB where no rewards exist yet):
++--   npx wrangler d1 execute <db> --remote --file=./src/db/migrations/005_reward_idempotency_ignores_shadow.sql
++--
++-- The one-reward-per-(resource, student, tier) rule exists to stop double payment. Shadow rows
++-- never move money, so they must not occupy that slot: otherwise an upload approved during the
++-- shadow week, then restored and re-approved after going live, could never be paid.
++-- ============================================================================
++DROP INDEX IF EXISTS idx_reward_ledger_once;
++CREATE UNIQUE INDEX idx_reward_ledger_once
++  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL AND status != 'shadow';
+--- /dev/null
++++ b/src/jobs/incentiveJobs.js
+@@ -0,0 +1,208 @@
++import { generateId } from "../utils/id.js";
++import { getIncentiveConfig } from "../services/incentiveConfig.js";
++
++// Scheduled work for the reward program. Both jobs are idempotent (safe to run twice, or to overlap)
++// and bounded (a fixed amount of work per run) so a backlog can never time a run out; the next run
++// simply continues.
++
++const DAY = 86400000;
++// Batch sizes are deliberately modest: each cleared reward is 2 statements, and Cloudflare caps how much
++// database work one invocation may do (the cap depends on your Workers plan). 20 rewards = a 40-statement
++// batch; 6 rounds => up to 120 rewards per hourly run (2,880 a day), and a bigger backlog simply
++// continues next hour. Raise these only if your plan's limits allow it.
++export const CLEAR_LIMITS = { batch: 20, rounds: 6 };
++const CLEAR_BATCH = CLEAR_LIMITS.batch;
++const CLEAR_MAX_ROUNDS = CLEAR_LIMITS.rounds;
++
++// ---------------------------------------------------------------------------- clearing (hourly)
++// A reward becomes spendable once its hold period is over: move it from `pending` to `cleared`
++// and from the student's reward_pending to their reward_balance. The balance statements run BEFORE
++// the status flip and only if the row is still 'pending', so a run racing a reversal (or another
++// run) can't move the money twice or move money for a reward that was just taken back.
++export async function clearMaturedRewards(env, { now = new Date() } = {}) {
++  const DB = env.DB;
++  const ts = now.toISOString();
++  let cleared = 0;
++  let failed = 0;
++
++  for (let round = 0; round < CLEAR_MAX_ROUNDS; round++) {
++    const { results: due } = await DB.prepare(
++      `SELECT id, user_id, amount FROM reward_ledger
++        WHERE type = 'reward' AND status = 'pending' AND clears_at <= ? AND user_id IS NOT NULL
++        ORDER BY clears_at LIMIT ?`
++    ).bind(ts, CLEAR_BATCH).all();
++    if (due.length === 0) break;
++
++    const statementsFor = (rows) =>
++      rows.flatMap((r) => [
++        DB.prepare(
++          `UPDATE users SET reward_pending = reward_pending - ?, reward_balance = reward_balance + ?, updated_at = ?
++            WHERE id = ? AND EXISTS (SELECT 1 FROM reward_ledger WHERE id = ? AND status = 'pending')`
++        ).bind(r.amount, r.amount, ts, r.user_id, r.id),
++        DB.prepare("UPDATE reward_ledger SET status = 'cleared' WHERE id = ? AND status = 'pending'").bind(r.id),
++      ]);
++
++    try {
++      await DB.batch(statementsFor(due));
++      cleared += due.length;
++    } catch (err) {
++      // One bad row (e.g. a balance that no longer matches) must not block every other student's
++      // reward forever: fall back to one-by-one so only the broken row is skipped, and log it.
++      console.error("clearMaturedRewards batch failed, retrying row by row:", err?.message);
++      for (const r of due) {
++        try { await DB.batch(statementsFor([r])); cleared++; }
++        catch (e) { failed++; console.error(`clearMaturedRewards: could not clear ${r.id}:`, e?.message); }
++      }
++      if (failed > 0 && cleared === 0) break; // nothing is moving; don't spin
++    }
++    if (due.length < CLEAR_BATCH) break;
++  }
++  return { cleared, failed };
++}
++
++// ---------------------------------------------------------------------------- flag detection (daily)
++// Thresholds are deliberately conservative: a flag costs a moderator's time, and nothing here
++// freezes or reverses anything. A human always decides.
++export const FLAG_RULES = {
++  spamRejections: 3,        // duplicate/spam rejections in 14 days
++  sharedConnectionReferrals: 2, // referred friends who signed up from the inviter's own connection
++  capStreakWeeks: 4,        // consecutive 7-day windows at the weekly cap
++  neverSpentMin: 500,       // earned at least this much...
++  neverSpentAgeDays: 14,    // ...over at least this long, with no download ever bought
++  sameModerator: 5,         // approvals of one student by one moderator in 14 days
++  quietPeriodDays: 14,      // don't re-flag someone whose flag was resolved this recently
++};
++
++export async function detectFlags(env, { now = new Date() } = {}) {
++  const DB = env.DB;
++  const cfg = await getIncentiveConfig(DB);
++  if (cfg.status === "off") return { skipped: true, opened: 0, updated: 0 };
++
++  const ts = now.toISOString();
++  const ago = (days) => new Date(now.getTime() - days * DAY).toISOString();
++  const signals = new Map(); // userId -> string[]
++  const add = (userId, text) => {
++    if (!userId) return;
++    if (!signals.has(userId)) signals.set(userId, []);
++    signals.get(userId).push(text);
++  };
++  const naira = (n) => "₦" + Math.round(n).toLocaleString("en-NG");
++
++  // 1. repeated duplicate/spam rejections
++  const spam = await DB.prepare(
++    `SELECT uploader_id AS user_id, COUNT(*) AS n FROM resources
++      WHERE status = 'rejected' AND reviewed_at >= ?
++        AND (LOWER(rejection_reason) LIKE '%duplicate%' OR LOWER(rejection_reason) LIKE '%spam%')
++      GROUP BY uploader_id HAVING COUNT(*) >= ?`
++  ).bind(ago(14), FLAG_RULES.spamRejections).all();
++  for (const r of spam.results) add(r.user_id, `${r.n} duplicate or spam uploads rejected in the last 14 days`);
++
++  // 2. referral rings: invited friends who signed up from the inviter's own connection
++  const ring = await DB.prepare(
++    `SELECT r.inviter_id AS user_id, COUNT(*) AS n FROM referrals r
++       JOIN users i ON i.id = r.inviter_id JOIN users v ON v.id = r.invitee_id
++      WHERE i.signup_ip_hash IS NOT NULL AND i.signup_ip_hash = v.signup_ip_hash
++      GROUP BY r.inviter_id HAVING COUNT(*) >= ?`
++  ).bind(FLAG_RULES.sharedConnectionReferrals).all();
++  for (const r of ring.results) add(r.user_id, `${r.n} referred friends signed up from the same connection as this student`);
++
++  // 3. at the weekly cap four 7-day windows in a row
++  if (cfg.rules.weeklyCap > 0) {
++    const cap = cfg.rules.weeklyCap;
++    const windowSql = "SUM(CASE WHEN created_at >= ? AND created_at < ? THEN amount ELSE 0 END) >= ?";
++    const windowArgs = [];
++    for (let w = 0; w < FLAG_RULES.capStreakWeeks; w++) {
++      const from = ago((w + 1) * 7);                 // window start: 7, 14, 21, 28 days ago
++      const to = w === 0 ? ago(-1) : ago(w * 7);     // window end: now (a day of slack for clock skew), 7, 14, 21 days ago
++      windowArgs.push(from, to, cap);
++    }
++    const streak = await DB.prepare(
++      `SELECT user_id FROM reward_ledger
++        WHERE type = 'reward' AND status IN ('pending','cleared') AND user_id IS NOT NULL AND created_at >= ?
++        GROUP BY user_id
++       HAVING ${Array(FLAG_RULES.capStreakWeeks).fill(windowSql).join(" AND ")}`
++    ).bind(ago(FLAG_RULES.capStreakWeeks * 7), ...windowArgs).all();
++    for (const r of streak.results) add(r.user_id, `Earned the full weekly cap (${naira(cap)}) ${FLAG_RULES.capStreakWeeks} weeks in a row`);
++  }
++
++  // 4. earns but has never bought a download
++  const hoarders = await DB.prepare(
++    `SELECT l.user_id AS user_id, SUM(l.amount) AS total FROM reward_ledger l
++      WHERE l.type = 'reward' AND l.status IN ('pending','cleared') AND l.user_id IS NOT NULL
++      GROUP BY l.user_id
++     HAVING SUM(l.amount) >= ? AND MIN(l.created_at) <= ?
++        AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.user_id = l.user_id AND t.type = 'purchase' AND t.status = 'successful')`
++  ).bind(FLAG_RULES.neverSpentMin, ago(FLAG_RULES.neverSpentAgeDays)).all();
++  for (const r of hoarders.results) add(r.user_id, `Has earned ${naira(r.total)} in rewards but has never downloaded anything`);
++
++  // 5. one moderator approving the same student over and over
++  const repeat = await DB.prepare(
++    `SELECT user_id, COUNT(*) AS n FROM reward_ledger
++      WHERE type = 'reward' AND status IN ('pending','cleared') AND user_id IS NOT NULL AND approved_by IS NOT NULL
++        AND tier IN ('standard','high','rare','bounty') AND created_at >= ?
++      GROUP BY user_id, approved_by HAVING COUNT(*) >= ?`
++  ).bind(ago(14), FLAG_RULES.sameModerator).all();
++  for (const r of repeat.results) add(r.user_id, `${r.n} of this student's uploads were approved by the same moderator in 14 days`);
++
++  if (signals.size === 0) return { skipped: false, opened: 0, updated: 0 };
++
++  // Don't nag: skip anyone whose flag was resolved recently; keep ONE open flag per student.
++  const ids = [...signals.keys()];
++  const marks = ids.map(() => "?").join(",");
++  const [recent, open, exposure] = await Promise.all([
++    DB.prepare(`SELECT DISTINCT user_id FROM incentive_flags WHERE status != 'open' AND resolved_at >= ? AND user_id IN (${marks})`).bind(ago(FLAG_RULES.quietPeriodDays), ...ids).all(),
++    DB.prepare(`SELECT id, user_id FROM incentive_flags WHERE status = 'open' AND user_id IN (${marks})`).bind(...ids).all(),
++    DB.prepare(`SELECT id, reward_balance, reward_pending FROM users WHERE id IN (${marks})`).bind(...ids).all(),
++  ]);
++  const quiet = new Set(recent.results.map((r) => r.user_id));
++  const openByUser = new Map(open.results.map((r) => [r.user_id, r.id]));
++  const atRisk = new Map(exposure.results.map((u) => [u.id, Math.max(u.reward_balance, 0) + u.reward_pending]));
++
++  const statements = [];
++  let opened = 0, updated = 0;
++  for (const [userId, lines] of signals) {
++    if (quiet.has(userId)) continue;
++    const json = JSON.stringify(lines);
++    const money = atRisk.get(userId) || 0;
++    if (openByUser.has(userId)) {
++      statements.push(DB.prepare("UPDATE incentive_flags SET signals = ?, exposure = ?, updated_at = ? WHERE id = ? AND status = 'open'").bind(json, money, ts, openByUser.get(userId)));
++      updated++;
++    } else {
++      statements.push(
++        DB.prepare("INSERT INTO incentive_flags (id, user_id, signals, exposure, status, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', ?, ?)")
++          .bind(generateId(), userId, json, money, ts, ts)
++      );
++      opened++;
++    }
++  }
++  if (opened > 0) {
++    statements.push(
++      DB.prepare("INSERT INTO incentive_audit (id, admin_id, admin_name, action, detail, created_at) VALUES (?, NULL, 'System', 'flags', ?, ?)")
++        .bind(generateId(), `Daily check opened ${opened} new flag(s) for review.`, ts)
++    );
++  }
++  if (statements.length) await DB.batch(statements);
++  return { skipped: false, opened, updated };
++}
++
++// ---------------------------------------------------------------------------- cron dispatch
++// Two schedules are declared in wrangler.toml:
++//   hourly  "0 * * * *"  -> rewards whose hold period is over become spendable
++//   daily   "0 2 * * *"  -> 03:00 Lagos: clean up unfinished uploads + scan for suspicious reward activity
++// An unknown/absent cron string (e.g. `wrangler dev --test-scheduled`) runs everything.
++export const CRON_HOURLY = "0 * * * *";
++export const CRON_DAILY = "0 2 * * *";
++
++export function runScheduledJobs(event, env, ctx, { purgeStaleUploads }) {
++  const cron = event?.cron;
++  const everything = cron !== CRON_HOURLY && cron !== CRON_DAILY;
++  const guard = (name, promise) => ctx.waitUntil(Promise.resolve(promise).catch((err) => console.error(`scheduled ${name} failed:`, err?.message)));
++  const ran = [];
++  if (everything || cron === CRON_HOURLY) { ran.push("clearMaturedRewards"); guard("clearMaturedRewards", clearMaturedRewards(env)); }
++  if (everything || cron === CRON_DAILY) {
++    ran.push("purgeStaleUploads", "detectFlags");
++    guard("purgeStaleUploads", purgeStaleUploads(env, { limit: 20 }));
++    guard("detectFlags", detectFlags(env));
++  }
++  return ran;
++}
+--- /dev/null
++++ b/src/services/rewardEngine.js
+@@ -0,0 +1,338 @@
++import { generateId } from "../utils/id.js";
++import { startOfMonthInLagos, startOfTodayInLagos } from "../utils/lagosDay.js";
++import { getIncentiveConfig, paidStatuses, courseKey } from "./incentiveConfig.js";
++import { loadUploaderRisk } from "./uploaderRisk.js";
++
++// The payout engine: decides and records the reward for one approved upload.
++//
++// Two layers, on purpose:
++//   1. planAward()    - PURE decision logic (which tier, how much, why blocked). Used for the
++//                       moderator's preview and for the messages they see.
++//   2. awardForApproval() - the writer. Every limit (weekly cap, monthly budget, moderator's
++//                       daily limit, bounty slots, one first-upload bonus) is enforced INSIDE the
++//                       INSERT's own SQL, so two approvals racing each other can't both squeeze
++//                       past a cap that was checked a moment earlier in JavaScript.
++//
++// While the program is 'off' nothing happens at all. In 'shadow' the same maths run but rows are
++// written with status 'shadow' and NO balance, bounty or referral state is touched. In 'paused'
++// approvals go through and nothing new is paid.
++
++const DAY = 86400000;
++const naira = (n) => "₦" + Math.round(Number(n) || 0).toLocaleString("en-NG");
++
++// ---------------------------------------------------------------------------- limits
++// Shared by the preview and the writer's plan. Returns what survives the limits, or why not.
++// Order matters and matches the guide: weekly cap (clamp) -> monthly budget (clamp) -> the
++// moderator's daily limit (all-or-nothing: "if exceeded, pay nothing").
++export function applyLimits(rules, { total, earned7d, paidMonth, adminToday }) {
++  if (!(rules.weeklyCap > 0)) return { amount: 0, reason: "No weekly earning cap is set (set one in Rules)." };
++  if (!(rules.monthlyBudget > 0)) return { amount: 0, reason: "No monthly budget is set (set one in Rules)." };
++  const weekRemaining = rules.weeklyCap - earned7d;
++  if (weekRemaining <= 0) return { amount: 0, reason: "Weekly cap reached for this student." };
++  const monthRemaining = rules.monthlyBudget - paidMonth;
++  if (monthRemaining <= 0) return { amount: 0, reason: "Monthly reward budget reached." };
++  const amount = Math.min(total, weekRemaining, monthRemaining);
++  if (adminToday + amount > rules.adminDailyLimit) {
++    return { amount: 0, reason: `You've reached your daily award limit (${naira(rules.adminDailyLimit)}).` };
++  }
++  return { amount, reason: null };
++}
++
++export function standardAmount(rules, type) {
++  if (type === "Past Question") return rules.rewards.pastQuestion;
++  if (type === "Lecture Note") return rules.rewards.lectureNote;
++  return 0;
++}
++
++// Preview shown next to each item in the moderation queue (default tier, no bonus).
++export function previewAward(cfg, { adminId, uploaderId, frozen, type, hasBounty, bountyReward, earned7d, paidMonth, adminToday }) {
++  if (cfg.status === "off") return null;
++  if (cfg.status === "paused") return { blocked: true, blockReason: "Rewards are paused." };
++  if (adminId === uploaderId) return { blocked: true, blockReason: "No reward is paid for your own upload." };
++  if (frozen) return { blocked: true, blockReason: "Rewards are frozen for this student." };
++  const base = hasBounty ? bountyReward : standardAmount(cfg.rules, type);
++  if (!(base > 0)) return { blocked: true, blockReason: "No reward is set for this type of resource." };
++  const total = Math.min(base, cfg.rules.maxSinglePayout);
++  const r = applyLimits(cfg.rules, { total, earned7d, paidMonth, adminToday });
++  return r.amount > 0 ? { blocked: false, amount: r.amount } : { blocked: true, blockReason: r.reason };
++}
++
++// ---------------------------------------------------------------------------- context
++function windows(now) {
++  return {
++    week: new Date(now.getTime() - 7 * DAY).toISOString(),
++    month: startOfMonthInLagos().toISOString(),
++    day: startOfTodayInLagos().toISOString(),
++  };
++}
++
++export async function sumRewards(DB, { userId = null, approverId = null, since, counted }) {
++  const marks = counted.map(() => "?").join(",");
++  const where = ["type = 'reward'", `status IN (${marks})`, "created_at >= ?"];
++  const args = [...counted, since];
++  if (userId) { where.push("user_id = ?"); args.push(userId); }
++  if (approverId) { where.push("approved_by = ?"); args.push(approverId); }
++  const row = await DB.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM reward_ledger WHERE ${where.join(" AND ")}`).bind(...args).first();
++  return row.n;
++}
++
++async function loadContext(DB, { resource, adminId, cfg, now }) {
++  const counted = paidStatuses(cfg.status);
++  const w = windows(now);
++  const nowMs = now.getTime();
++
++  const [uploader, earned7d, paidMonth, adminToday, approvedBefore, hasFirst, dup, bounty, risk, referral] = await Promise.all([
++    DB.prepare("SELECT rewards_frozen, account_status FROM users WHERE id = ?").bind(resource.uploader_id).first(),
++    sumRewards(DB, { userId: resource.uploader_id, since: w.week, counted }),
++    sumRewards(DB, { since: w.month, counted }),
++    sumRewards(DB, { approverId: adminId, since: w.day, counted }),
++    // "First approved upload" = no OTHER approved upload of theirs came earlier (by approval time, then id as a
++    // tie-break). Counting every other approved upload would let two first uploads approved at the same moment
++    // each see the other and BOTH lose the bonus. Approved uploads with no recorded time count as earlier.
++    DB.prepare(
++      `SELECT COUNT(*) AS n FROM resources
++        WHERE uploader_id = ? AND status = 'approved' AND id != ?
++          AND (? IS NULL OR reviewed_at IS NULL OR reviewed_at < ? OR (reviewed_at = ? AND id < ?))`
++    ).bind(resource.uploader_id, resource.id, resource.reviewed_at ?? null, resource.reviewed_at ?? null, resource.reviewed_at ?? null, resource.id).first(),
++    DB.prepare("SELECT 1 AS x FROM reward_ledger WHERE user_id = ? AND type = 'reward' AND tier = 'first' AND (status != 'shadow' OR ?) LIMIT 1")
++      .bind(resource.uploader_id, cfg.status === "shadow" ? 1 : 0).first(),
++    resource.file_hash
++      ? DB.prepare("SELECT 1 AS x FROM resources WHERE file_hash = ? AND status = 'approved' AND id != ? LIMIT 1").bind(resource.file_hash, resource.id).first()
++      : Promise.resolve(null),
++    resource.bounty_id
++      ? DB.prepare("SELECT id, reward, course_key FROM bounties WHERE id = ? AND status = 'open' AND paid < max_payouts AND expires_at >= ?")
++          .bind(resource.bounty_id, resource.created_at).first()
++      : Promise.resolve(null),
++    loadUploaderRisk(DB, resource.uploader_id, nowMs),
++    DB.prepare(
++      `SELECT r.id, r.inviter_id, i.rewards_frozen AS inviter_frozen, i.account_status AS inviter_status, i.signup_ip_hash AS inviter_ip, v.signup_ip_hash AS invitee_ip
++         FROM referrals r JOIN users i ON i.id = r.inviter_id JOIN users v ON v.id = r.invitee_id
++        WHERE r.invitee_id = ? AND r.status = 'verified'`
++    ).bind(resource.uploader_id).first(),
++  ]);
++
++  // An upload only counts toward a request for the SAME course, and it's judged on when it was
++  // uploaded, so a slow moderator can't make a student miss the deadline.
++  const validBounty = bounty && bounty.course_key === courseKey(resource.course) ? bounty : null;
++
++  return {
++    uploader, earned7d, paidMonth, adminToday, riskLevel: risk.level, referral,
++    approvedBefore: approvedBefore.n, hasFirstRow: !!hasFirst, duplicate: !!dup, bounty: validBounty,
++  };
++}
++
++// ---------------------------------------------------------------------------- plan
++export function planAward({ cfg, resource, adminId, review, ctx }) {
++  const rules = cfg.rules;
++  const stop = (reason, silent = false) => ({ stop: { reason, silent } });
++
++  if (adminId === resource.uploader_id) return stop("Moderators aren't paid for uploads they approve themselves.");
++  if (!ctx.uploader || ctx.uploader.account_status !== "active") return stop("The student's account isn't active.");
++  if (ctx.uploader.rewards_frozen) return stop("Rewards are frozen for this student.");
++
++  let tier = review.rewardTier;
++  if (tier === "none") return stop("No reward was chosen for this upload.", true);
++  if (!tier) {
++    // Quick-approve (no reward choice made): pay the sensible default, but never to a risky account.
++    if (ctx.riskLevel === "high") return stop("This student is high-risk, so no reward is applied automatically. Use the full review dialog to decide.");
++    tier = ctx.bounty ? "bounty" : "standard";
++  }
++  if (tier === "bounty" && !ctx.bounty) tier = "standard"; // the request closed or filled in the meantime
++
++  let base;
++  if (tier === "bounty") base = ctx.bounty.reward;
++  else if (tier === "high") base = rules.rewards.high;
++  else if (tier === "rare") base = rules.rewards.rare;
++  else base = standardAmount(rules, resource.type);
++  if (!(base > 0)) return stop("No reward is set for this type of resource.");
++
++  if (ctx.duplicate) return stop("This file was already approved before, so it earns nothing.");
++
++  const wantsBonus = rules.rewards.firstApproval > 0 && ctx.approvedBefore === 0 && !ctx.hasFirstRow;
++  const total = Math.min(base + (wantsBonus ? rules.rewards.firstApproval : 0), rules.maxSinglePayout);
++  if (!(total > 0)) return stop("The largest single payout is ₦0, so nothing can be paid.");
++
++  const limited = applyLimits(rules, { total, earned7d: ctx.earned7d, paidMonth: ctx.paidMonth, adminToday: ctx.adminToday });
++  if (limited.amount <= 0) return stop(limited.reason);
++
++  const main = Math.min(base, total);
++  const bonus = wantsBonus ? total - main : 0;
++  const rows = [{ kind: "main", tier, amount: main, bountyId: tier === "bounty" ? ctx.bounty.id : null }];
++  if (bonus > 0) rows.push({ kind: "first", tier: "first", amount: bonus, bountyId: null });
++  return { tier, rows };
++}
++
++// ---------------------------------------------------------------------------- writer
++// One conditional INSERT. Everything that can change under our feet is re-checked in SQL.
++function rewardInsert(DB, o) {
++  const { cfg, counted, since, row } = o;
++  const marks = counted.map(() => "?").join(",");
++  let sql = `
++    INSERT INTO reward_ledger
++      (id, user_id, type, amount, status, tier, label, resource_id, bounty_id, referral_id, approved_by, note, clears_at, created_at)
++    SELECT ?, ?, 'reward', x.amt, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
++      FROM (
++        SELECT CASE WHEN a.admin_sum + m.cl <= ? THEN m.cl ELSE 0 END AS amt
++          FROM (SELECT MAX(0, MIN(?,
++                  ? - (SELECT COALESCE(SUM(amount), 0) FROM reward_ledger WHERE user_id = ? AND type = 'reward' AND status IN (${marks}) AND created_at >= ?),
++                  ? - (SELECT COALESCE(SUM(amount), 0) FROM reward_ledger WHERE type = 'reward' AND status IN (${marks}) AND created_at >= ?)
++                )) AS cl) m,
++               (SELECT COALESCE(SUM(amount), 0) AS admin_sum FROM reward_ledger WHERE approved_by = ? AND type = 'reward' AND status IN (${marks}) AND created_at >= ?) a
++      ) x
++     WHERE x.amt > 0
++       AND EXISTS (SELECT 1 FROM users WHERE id = ? AND rewards_frozen = 0 AND account_status = 'active')`;
++  const args = [
++    row.id, row.userId, row.status, row.tier, row.label, row.resourceId, row.bountyId ?? null, row.referralId ?? null, row.approver, row.note, row.clearsAt, o.ts,
++    cfg.rules.adminDailyLimit, row.amount,
++    cfg.rules.weeklyCap, row.userId, ...counted, since.week,
++    cfg.rules.monthlyBudget, ...counted, since.month,
++    row.approver, ...counted, since.day,
++    row.userId,
++  ];
++  if (row.tier === "first") {
++    sql += " AND NOT EXISTS (SELECT 1 FROM reward_ledger WHERE user_id = ? AND type = 'reward' AND tier = 'first' AND (status != 'shadow' OR ?))";
++    args.push(row.userId, cfg.status === "shadow" ? 1 : 0);
++  }
++  if (row.tier === "bounty") {
++    sql += " AND EXISTS (SELECT 1 FROM bounties WHERE id = ? AND status = 'open' AND paid < max_payouts)";
++    args.push(row.bountyId);
++  }
++  if (row.tier === "referral") {
++    sql += " AND EXISTS (SELECT 1 FROM referrals WHERE id = ? AND status = 'verified')";
++    args.push(row.referralId);
++  }
++  return DB.prepare(sql).bind(...args);
++}
++
++// Money statements that follow a (conditional) insert: they only act if that row really exists.
++function settleStatements(DB, { live, rowId, userId, holdsPending, ts }) {
++  if (!live) return [];
++  const column = holdsPending ? "reward_pending" : "reward_balance";
++  return [
++    DB.prepare(
++      `UPDATE users SET ${column} = ${column} + (SELECT amount FROM reward_ledger WHERE id = ?), updated_at = ?
++        WHERE id = ? AND EXISTS (SELECT 1 FROM reward_ledger WHERE id = ?)`
++    ).bind(rowId, ts, userId, rowId),
++  ];
++}
++
++export async function awardForApproval(DB, { resource, admin, review, ts }) {
++  const cfg = await getIncentiveConfig(DB);
++  if (cfg.status === "off") return null;
++  if (cfg.status === "paused") return { status: "paused", amount: 0, message: "Rewards are paused, so no reward was paid." };
++
++  const now = new Date(ts);
++  const live = cfg.status === "live";
++  const counted = paidStatuses(cfg.status);
++  const since = windows(now);
++  const ctx = await loadContext(DB, { resource, adminId: admin.id, cfg, now });
++  const plan = planAward({ cfg, resource, adminId: admin.id, review, ctx });
++  if (plan.stop) {
++    return { status: plan.stop.silent ? "skipped" : "blocked", amount: 0, message: plan.stop.silent ? "" : `No reward paid: ${plan.stop.reason}` };
++  }
++
++  const holdMs = cfg.rules.holdDays * DAY;
++  const holdsPending = live && cfg.rules.holdDays > 0;
++  const status = !live ? "shadow" : holdsPending ? "pending" : "cleared";
++  const clearsAt = new Date(now.getTime() + holdMs).toISOString();
++  const note = String(review.rewardNote || "").slice(0, 300);
++  const label = `${resource.course} ${resource.type} approved`;
++
++  const statements = [];
++  const ids = [];
++  for (const r of plan.rows) {
++    const id = generateId();
++    ids.push(id);
++    const row = {
++      id, userId: resource.uploader_id, tier: r.tier, amount: r.amount, status, approver: admin.id, note, clearsAt,
++      label: r.kind === "first" ? "First approved upload bonus" : label, resourceId: resource.id, bountyId: r.bountyId,
++    };
++    statements.push(rewardInsert(DB, { cfg, counted, since, ts, row }));
++    statements.push(...settleStatements(DB, { live, rowId: id, userId: row.userId, holdsPending, ts }));
++    if (live && r.tier === "bounty") {
++      statements.push(
++        DB.prepare(
++          `UPDATE bounties SET paid = paid + 1, status = CASE WHEN paid + 1 >= max_payouts THEN 'fulfilled' ELSE status END, updated_at = ?
++            WHERE id = ? AND EXISTS (SELECT 1 FROM reward_ledger WHERE id = ?)`
++        ).bind(ts, r.bountyId, id)
++      );
++    }
++  }
++
++  // Referral: the invitee's first rewardable approval pays the inviter (once, ever).
++  let referralNote = "";
++  const ref = ctx.referral;
++  if (ref) {
++    const ringBlocked = ref.inviter_ip && ref.invitee_ip && ref.inviter_ip === ref.invitee_ip;
++    const payable = ref.inviter_status === "active" && !ref.inviter_frozen && !ringBlocked && cfg.rules.rewards.referralFirstApproval > 0;
++    if (payable) {
++      const id = generateId();
++      ids.push(id);
++      const amount = Math.min(cfg.rules.rewards.referralFirstApproval, cfg.rules.maxSinglePayout);
++      const row = {
++        id, userId: ref.inviter_id, tier: "referral", amount, status, approver: admin.id, note: "", clearsAt,
++        label: "Referral: a friend's first upload was approved", resourceId: resource.id, referralId: ref.id,
++      };
++      statements.push(rewardInsert(DB, { cfg, counted, since, ts, row }));
++      statements.push(...settleStatements(DB, { live, rowId: id, userId: ref.inviter_id, holdsPending, ts }));
++      if (live) {
++        statements.push(
++          DB.prepare(
++            `UPDATE referrals SET status = 'contributed', earned = earned + COALESCE((SELECT amount FROM reward_ledger WHERE id = ?), 0), updated_at = ?
++              WHERE id = ? AND status = 'verified'`
++          ).bind(id, ts, ref.id)
++        );
++      }
++    } else if (live) {
++      // Not payable (frozen inviter, same connection, no amount set): close it so it can't be retried later.
++      statements.push(DB.prepare("UPDATE referrals SET status = 'contributed', updated_at = ? WHERE id = ? AND status = 'verified'").bind(ts, ref.id));
++      if (ringBlocked) referralNote = " The referral bonus was withheld (the friend signed up from the inviter's own connection).";
++    }
++  }
++
++  try {
++    await DB.batch(statements);
++  } catch (err) {
++    // The unique index (resource, student, tier) is the idempotency backstop: this upload was
++    // already rewarded once (e.g. removed and re-approved). The whole batch rolled back; nothing moved.
++    if (/UNIQUE constraint failed/i.test(String(err?.message))) {
++      return { status: "blocked", amount: 0, message: "No reward paid: this upload was already rewarded once." };
++    }
++    throw err;
++  }
++
++  const marks = ids.map(() => "?").join(",");
++  const { results: written } = await DB.prepare(`SELECT id, amount, user_id, tier FROM reward_ledger WHERE id IN (${marks})`).bind(...ids).all();
++  const mine = written.filter((w) => w.user_id === resource.uploader_id);
++  const amount = mine.reduce((s, w) => s + w.amount, 0);
++  const inviterPaid = written.filter((w) => w.tier === "referral").reduce((s, w) => s + w.amount, 0);
++
++  if (live) await pauseIfBudgetReached(DB, cfg, ts);
++
++  if (amount <= 0) {
++    // Everything was clamped away by a limit that changed between our check and the write.
++    return { status: "blocked", amount: 0, message: "No reward paid: a limit was reached at the moment of approval." };
++  }
++  const when = !live ? "" : holdsPending ? ` It becomes spendable in ${cfg.rules.holdDays} day${cfg.rules.holdDays === 1 ? "" : "s"}.` : "";
++  const bonusTxt = inviterPaid > 0 ? ` Referral bonus ${naira(inviterPaid)} to the inviter.` : "";
++  const message = live
++    ? `Reward of ${naira(amount)} recorded for the student.${when}${bonusTxt}${referralNote}`
++    : `Shadow mode: a ${naira(amount)} reward was recorded for review but NOT paid.`;
++  return { status: live ? "paid" : "shadow", amount, message };
++}
++
++// Auto-pause: once the month's real spend reaches the budget, switch to 'paused' (once) and say so
++// in the audit log. The audit row is only written if THIS call performed the switch.
++async function pauseIfBudgetReached(DB, cfg, ts) {
++  if (!(cfg.rules.monthlyBudget > 0)) return;
++  const paid = await sumRewards(DB, { since: startOfMonthInLagos().toISOString(), counted: ["pending", "cleared"] });
++  if (paid < cfg.rules.monthlyBudget) return;
++  await DB.batch([
++    DB.prepare("UPDATE incentive_config SET status = 'paused', updated_by = NULL, updated_at = ? WHERE id = 1 AND status = 'live'").bind(ts),
++    DB.prepare(
++      `INSERT INTO incentive_audit (id, admin_id, admin_name, action, detail, created_at)
++       SELECT ?, NULL, 'System', 'auto-pause', ?, ?
++        WHERE EXISTS (SELECT 1 FROM incentive_config WHERE id = 1 AND status = 'paused' AND updated_at = ?)`
++    ).bind(generateId(), `live → paused. Auto-paused: monthly budget reached (${naira(paid)} of ${naira(cfg.rules.monthlyBudget)}).`, ts, ts),
++  ]);
++}
+--- /dev/null
++++ b/src/services/uploaderRisk.js
+@@ -0,0 +1,31 @@
++// One definition of "how risky is this uploader", shared by the moderation queue (badges)
++// and the payout engine (what to do when a quick-approve carries no reward choice), so the
++// two can never disagree.
++const RANK = { low: 0, medium: 1, high: 2 };
++
++// x: { open_flag, rejected_14d, acct_created, shared_ip }  (plain DB values)
++export function uploaderRiskFrom(x, nowMs = Date.now()) {
++  const notes = [];
++  let level = "low";
++  const raise = (to) => { if (RANK[to] > RANK[level]) level = to; };
++
++  if (x.open_flag) { raise("high"); notes.push("Has an open reward flag"); }
++  if (x.rejected_14d >= 3) { raise("high"); notes.push(`${x.rejected_14d} uploads rejected in the last 14 days`); }
++  else if (x.rejected_14d >= 1) { raise("medium"); notes.push(`${x.rejected_14d} upload${x.rejected_14d > 1 ? "s" : ""} rejected in the last 14 days`); }
++  const ageDays = (nowMs - new Date(x.acct_created).getTime()) / 86400000;
++  if (Number.isFinite(ageDays) && ageDays < 7) { raise("medium"); notes.push(`Account is ${Math.max(0, Math.floor(ageDays))} day(s) old`); }
++  if (x.shared_ip) { raise("medium"); notes.push("Signed up from the same connection as another account"); }
++  return { level, notes };
++}
++
++export async function loadUploaderRisk(DB, uploaderId, nowMs = Date.now()) {
++  const fourteenDaysAgo = new Date(nowMs - 14 * 86400000).toISOString();
++  const x = await DB.prepare(
++    `SELECT u.created_at AS acct_created,
++            (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = u.id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
++            EXISTS (SELECT 1 FROM incentive_flags f WHERE f.user_id = u.id AND f.status = 'open') AS open_flag,
++            EXISTS (SELECT 1 FROM users o WHERE u.signup_ip_hash IS NOT NULL AND o.signup_ip_hash = u.signup_ip_hash AND o.id != u.id) AS shared_ip
++       FROM users u WHERE u.id = ?`
++  ).bind(fourteenDaysAgo, uploaderId).first();
++  return x ? uploaderRiskFrom(x, nowMs) : { level: "low", notes: [] };
++}
+--- /dev/null
++++ b/test/phase6c-incentives-admin.test.js
+@@ -0,0 +1,225 @@
++// Phase 6c (update package, Phase 3): moderator-facing money views and safeguards. The reward preview in the
++// moderation queue, automatic reversal when an approved resource is removed, reward rows in the admin
++// transactions list, and one end-to-end run (approve → clear → spend → Overview totals).
++// Run: node --experimental-sqlite test/phase6c-incentives-admin.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, seedBounty, LIVE_RULES } from "./incentiveTestLib.js";
++import { approveResourceById, getModerationQueue } from "../src/controllers/moderationController.js";
++import { removeApprovedResource } from "../src/controllers/adminResourceController.js";
++import { getTransactions, getTransactionSummary } from "../src/controllers/adminTransactionController.js";
++import { getSummary, reversePayout } from "../src/controllers/adminIncentiveController.js";
++import { getMyIncentives } from "../src/controllers/incentiveController.js";
++import { chargeForDownload, getBalance } from "../src/controllers/walletController.js";
++import { clearMaturedRewards } from "../src/jobs/incentiveJobs.js";
++
++const R = (over = {}, rewards = {}) => ({ ...LIVE_RULES, ...over, rewards: { ...LIVE_RULES.rewards, ...rewards } });
++const A1 = { id: "admin1", role: "admin" };
++function world(status = "live", rules = LIVE_RULES) {
++  const w = freshEnv();
++  seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" }); seedUser(w.DB, "admin2", { name: "Mod Two", role: "admin" });
++  seedUser(w.DB, "stu", { name: "Student One" });
++  setCfg(w.DB, status, rules);
++  return w;
++}
++const approve = (env, admin, id, review = {}) => approveResourceById(ctx(env, { user: admin }), id, { pages: 5, snippet: "", rewardTier: undefined, rewardNote: "", fileHash: null, ...review });
++const rows = (DB, where = "1=1", ...a) => all(DB, `SELECT * FROM reward_ledger WHERE ${where} ORDER BY created_at, rowid`, ...a);
++const stu = (DB, id = "stu") => one(DB, "SELECT reward_pending p, reward_balance b, wallet_balance w FROM users WHERE id=?", id);
++const queueItem = async (env, id, admin = A1) => (await getModerationQueue(ctx(env, { user: admin, query: { limit: "50" } }))).body.queue.find((q) => q.id === id);
++
++// ============================================================ reward preview in the moderation queue
++{
++  const { env, DB } = world("off");
++  seedResource(DB, { id: "p", status: "pending", uploader: "stu" });
++  check("preview: program off → the queue has no reward fields at all", !("rewardPreview" in (await queueItem(env, "p"))));
++}
++{
++  // each scenario builds a world with one pending item "it"; the preview must agree with what approving really does
++  const scenarios = {
++    "normal":            { build: () => world(), expect: { blocked: false, amount: 100 } },
++    "own upload":        { build: () => { const w = world(); DB_uploader(w, "admin1"); return w; }, expect: { blocked: true, reason: /own upload/ } },
++    "frozen student":    { build: () => { const w = world(); w.DB._raw.prepare("UPDATE users SET rewards_frozen=1 WHERE id='stu'").run(); return w; }, expect: { blocked: true, reason: /frozen/ } },
++    "weekly cap hit":    { build: () => { const w = world(); seedLedger(w.DB, { user: "stu", amount: 300, status: "cleared", approver: "admin2" }); return w; }, expect: { blocked: true, reason: /Weekly cap/ } },
++    "weekly cap partial":{ build: () => { const w = world(); seedLedger(w.DB, { user: "stu", amount: 250, status: "cleared", approver: "admin2" }); return w; }, expect: { blocked: false, amount: 50 } },
++    "budget exhausted":  { build: () => { const w = world(); seedUser(w.DB, "o"); seedLedger(w.DB, { user: "o", amount: 20000, status: "cleared", approver: "admin2" }); return w; }, expect: { blocked: true, reason: /Monthly reward budget/ } },
++    "budget partial":    { build: () => { const w = world(); seedUser(w.DB, "o"); seedLedger(w.DB, { user: "o", amount: 19970, status: "cleared", approver: "admin2" }); return w; }, expect: { blocked: false, amount: 30 } },
++    "my daily limit":    { build: () => { const w = world("live", R({ adminDailyLimit: 50 })); return w; }, expect: { blocked: true, reason: /daily award limit/ } },
++    "no budget set":     { build: () => world("live", R({ monthlyBudget: 0 })), expect: { blocked: true, reason: /No monthly budget/ } },
++    "type with no reward": { build: () => world(), type: "Other", expect: { blocked: true, reason: /No reward is set/ } },
++    "open request":      { build: () => { const w = world(); seedBounty(w.DB, { id: "B", course: "CSC 301", reward: 140, expires: iso(-5) }); return w; }, bounty: "B", expect: { blocked: false, amount: 140 } },
++    "paused":            { build: () => world("paused"), expect: { blocked: true, reason: /paused/ } },
++  };
++  function DB_uploader(w, id) { w.DB._raw.prepare("UPDATE resources SET uploader_id=? WHERE id='it'").run(id); }
++  for (const [name, sc] of Object.entries(scenarios)) {
++    const { env, DB } = sc.build();
++    seedResource(DB, { id: "old", status: "approved", uploader: name === "own upload" ? "admin1" : "stu" }); // not their first, so no bonus muddies the numbers
++    seedResource(DB, { id: "it", status: "pending", uploader: name === "own upload" ? "admin1" : "stu", type: sc.type || "Past Question", bountyId: sc.bounty || null });
++    const item = await queueItem(env, "it");
++    const p = item.rewardPreview;
++    const ok = p && p.blocked === sc.expect.blocked && (sc.expect.blocked ? sc.expect.reason.test(p.blockReason) : p.amount === sc.expect.amount);
++    check(`preview[${name}]: ${sc.expect.blocked ? "blocked — " + p?.blockReason : "pays ₦" + p?.amount}`, ok, JSON.stringify(p));
++    const real = await approve(env, A1, "it");           // quick-approve: the default tier, exactly what the preview describes
++    const paid = rows(DB, "resource_id='it'").reduce((s, r) => s + r.amount, 0);
++    check(`preview[${name}]: agrees with what approving really does`, sc.expect.blocked ? paid === 0 : paid === sc.expect.amount, `preview=${JSON.stringify(p)} paid=${paid} msg=${real.body.message}`);
++  }
++  const w = world("shadow"); seedResource(w.DB, { id: "p", status: "pending", uploader: "stu" });
++  check("preview: also shown in shadow mode", (await queueItem(w.env, "p")).rewardPreview.blocked === false);
++}
++
++// ============================================================ automatic reversal when an approved resource is removed
++const remove = (env, id, reason = "Wrong course") => removeApprovedResource(ctx(env, { user: A1, params: { id }, body: { reason } }));
++{
++  const { env, DB } = world();
++  seedUser(DB, "inv", { name: "Inviter" });
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu" });
++  await approve(env, A1, "r1");
++  check("removal setup: student has ₦150 pending and the inviter ₦50", stu(DB).p === 150 && stu(DB, "inv").p === 50);
++  const r = await remove(env, "r1", "Wrong course, it's actually CSC 302");
++  check("removal: succeeds and tells the moderator the rewards were taken back", r.status === 200 && r.body.success && /3 reward\(s\) paid for it were taken back automatically/.test(r.body.message), r.body.message);
++  check("removal: the resource is moved to Rejected", one(DB, "SELECT status FROM resources WHERE id='r1'").status === "rejected");
++  check("removal: the student's AND the inviter's pending rewards are returned to ₦0", stu(DB).p === 0 && stu(DB, "inv").p === 0);
++  check("removal: every reward marked reversed, each with a negative reversal row carrying the reason", rows(DB, "type='reward'").every((x) => x.status === "reversed") && rows(DB, "type='reversal'").length === 3 && rows(DB, "type='reversal'").every((x) => /Wrong course/.test(x.reversal_reason)));
++  check("removal: the inviter's 'earned from this friend' is wound back", one(DB, "SELECT earned FROM referrals WHERE id='rf'").earned === 0);
++  const a = one(DB, "SELECT * FROM incentive_audit WHERE action='auto-reverse'");
++  check("removal: written to the audit log with who, how many, how much and why", a && a.admin_name === "Admin One" && /reversed 3 reward\(s\) totalling ₦200/.test(a.detail) && /Wrong course/.test(a.detail), JSON.stringify(a));
++}
++{
++  const { env, DB } = world(); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "plain", status: "approved", uploader: "stu" });
++  const r = await remove(env, "plain", "Poor quality");
++  check("removal with no rewards: the response is EXACTLY what it always was", r.body.message === "Resource removed and moved to Rejected" && all(DB, "SELECT id FROM incentive_audit WHERE action='auto-reverse'").length === 0);
++}
++{
++  const { env, DB } = world("off"); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "late", status: "approved", uploader: "stu" });
++  seedLedger(DB, { id: "L", user: "stu", amount: 100, status: "pending", resource: "late" });
++  DB._raw.prepare("UPDATE users SET reward_pending=100 WHERE id='stu'").run();
++  await remove(env, "late");
++  check("removal: rewards already paid are still taken back even if the program has since been switched OFF", stu(DB).p === 0 && one(DB, "SELECT status s FROM reward_ledger WHERE id='L'").s === "reversed");
++}
++{
++  // a cleared reward that was already SPENT: removal leaves a reward debt (negative balance), not an error
++  const { env, DB } = world("live", R({ holdDays: 0 }));   // (no earlier approved upload, so the first-upload bonus applies)
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu" });
++  seedResource(DB, { id: "dl", status: "approved", uploader: "admin2", pages: 5 });   // costs ₦200
++  seedResource(DB, { id: "dl2", status: "approved", uploader: "admin2", pages: 5 });  // costs ₦200
++  await approve(env, A1, "r1");                                                      // ₦100 + ₦50 first bonus, spendable at once (holdDays 0)
++  check("spent-then-removed setup: ₦150 spendable", stu(DB).b === 150 && stu(DB).p === 0);
++  DB._raw.prepare("UPDATE users SET wallet_balance=50 WHERE id='stu'").run();
++  const pay = await chargeForDownload(ctx(env, { user: { id: "stu" }, body: { resourceId: "dl" } }));
++  check("spent-then-removed setup: the ₦200 download used the ₦150 reward + ₦50 cash", pay.status === 200 && pay.body.rewardsUsed === 150 && stu(DB).b === 0 && stu(DB).w === 0);
++  const r = await remove(env, "r1", "Duplicate of another resource");
++  check("removal after the reward was SPENT: succeeds and the balance goes to exactly ₦-150 (a debt)", r.status === 200 && stu(DB).b === -150, JSON.stringify(stu(DB)));
++  check("removal: both rewards are reversed", rows(DB, "type='reward' AND resource_id='r1'").every((x) => x.status === "reversed"));
++  const blocked = await chargeForDownload(ctx(env, { user: { id: "stu" }, body: { resourceId: "dl2" } }));
++  check("…and the student can't download again until they top up (₦200 + ₦150 debt)", blocked.status === 402 && blocked.body.currentBalance === 0);
++  DB._raw.prepare("UPDATE users SET wallet_balance=350 WHERE id='stu'").run();
++  const ok = await chargeForDownload(ctx(env, { user: { id: "stu" }, body: { resourceId: "dl2" } }));
++  check("…after topping up ₦350 the debt is settled and the download works, leaving ₦0 and no debt", ok.status === 200 && stu(DB).w === 0 && stu(DB).b === 0);
++}
++{
++  const { env, DB } = world();
++  seedBounty(DB, { id: "BNT", course: "CSC 301", reward: 120, max: 1, expires: iso(-5) });
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu", bountyId: "BNT" });
++  await approve(env, A1, "r1", { rewardTier: "bounty" });
++  check("request setup: fulfilled by this upload", one(DB, "SELECT paid, status FROM bounties WHERE id='BNT'").status === "fulfilled");
++  await remove(env, "r1", "Not the right course");
++  const b = one(DB, "SELECT paid, status FROM bounties WHERE id='BNT'");
++  check("removal: the request REOPENS (its need is still unmet) and can be fulfilled again", b.paid === 0 && b.status === "open", JSON.stringify(b));
++}
++{
++  const { env, DB } = world();
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu" });
++  await approve(env, A1, "r1");
++  const ledgerRow = rows(DB, "tier='standard'")[0];
++  const rev = await reversePayout(ctx(env, { user: A1, params: { id: ledgerRow.id }, body: { reason: "Manual correction" } }));
++  check("a bounty/referral/standard manual reversal still works through the same engine (regression)", rev.status === 200 && stu(DB).p === 0);
++}
++{
++  const { env, DB } = world();
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu" });
++  await approve(env, A1, "r1");
++  DB._raw.exec("DROP TABLE reward_ledger");
++  const r = await remove(env, "r1");
++  check("removal NEVER fails because of the reward side: it succeeds with a warning to check Payouts", r.status === 200 && r.body.success && /could not be reversed automatically/.test(r.body.message) && one(DB, "SELECT status FROM resources WHERE id='r1'").status === "rejected", r.body.message);
++}
++{
++  // reversing a REFERRAL / BOUNTY reward by hand also unwinds its side effects
++  const { env, DB } = world(); seedUser(DB, "inv");
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  seedBounty(DB, { id: "B2", course: "CSC 301", reward: 100, expires: iso(-5) });
++  seedResource(DB, { id: "r1", status: "pending", uploader: "stu", bountyId: "B2" });
++  await approve(env, A1, "r1", { rewardTier: "bounty" });
++  const refRow = rows(DB, "tier='referral'")[0], bountyRow = rows(DB, "tier='bounty'")[0];
++  await reversePayout(ctx(env, { user: A1, params: { id: refRow.id }, body: { reason: "Ring suspected" } }));
++  await reversePayout(ctx(env, { user: A1, params: { id: bountyRow.id }, body: { reason: "Fake upload" } }));
++  check("manual reversal: a referral reward reduces what the inviter 'earned' from that friend", one(DB, "SELECT earned FROM referrals WHERE id='rf'").earned === 0);
++  check("manual reversal: a request reward reopens the request", one(DB, "SELECT paid, status FROM bounties WHERE id='B2'").status === "open" && one(DB, "SELECT paid FROM bounties WHERE id='B2'").paid === 0);
++}
++
++// ============================================================ admin transactions: rewards as virtual types
++{
++  const { env, DB } = world();
++  seedUser(DB, "u1", { name: "Ada Obi", email: "ada@x.com" }); seedUser(DB, "u2", { name: "Bayo Lawal" });
++  const tx = (id, user, type, amount, status, fromRewards = 0, at = iso(1)) =>
++    DB._raw.prepare("INSERT INTO transactions (id,user_id,type,amount,status,from_rewards,description,created_at,updated_at) VALUES (?,?,?,?,?,?,'',?,?)").run(id, user, type, amount, status, fromRewards, at, at);
++  tx("t1", "u1", "deposit", 5000, "successful"); tx("t2", "u1", "purchase", 380, "successful", 100); tx("t3", "u2", "purchase", 200, "successful"); tx("t4", "u2", "deposit", 999, "failed");
++  seedLedger(DB, { id: "R1", user: "u1", amount: 100, status: "cleared" });
++  seedLedger(DB, { id: "R2", user: "u1", amount: 50, status: "pending" });
++  seedLedger(DB, { id: "R3", user: "u1", amount: 80, status: "reversed" });
++  seedLedger(DB, { id: "R3r", user: "u1", amount: -80, status: "reversed", type: "reversal", reverses: "R3" });
++  seedLedger(DB, { id: "R4", user: "u1", amount: 70, status: "shadow" });
++  seedLedger(DB, { id: "R5", user: null, amount: 60, status: "cleared" });
++  const list = async (query = {}) => (await getTransactions(ctx(env, { user: A1, query: { limit: "100", ...query } }))).body;
++
++  let r = await list();
++  const ids = r.transactions.map((t) => t.id).sort();
++  check("transactions: wallet transactions AND reward rows appear in one list", ids.join() === ["R1", "R2", "R3", "R3r", "t1", "t2", "t3", "t4"].sort().join(), ids.join());
++  check("transactions: shadow rows and rewards of deleted accounts are NOT shown", !ids.includes("R4") && !ids.includes("R5"));
++  r = await list({ type: "reward" });
++  check("transactions: filter 'reward' → the 3 reward credits (pending shows as pending, the rest successful)", r.transactions.length === 3 && r.transactions.find((t) => t.id === "R2").status === "pending" && r.transactions.find((t) => t.id === "R1").status === "successful");
++  r = await list({ type: "reward_reversal" });
++  check("transactions: filter 'reward_reversal' → one row, shown as a POSITIVE amount (the UI renders it as a debit)", r.transactions.length === 1 && r.transactions[0].amount === 80 && r.transactions[0].type === "reward_reversal");
++  r = await list({ search: "Ada" });
++  check("transactions: searching a student's name finds their reward rows too", r.transactions.some((t) => t.id === "R1") && r.transactions.every((t) => t.user === "Ada Obi"));
++  r = await list({ status: "pending" });
++  check("transactions: the status filter works on reward rows", r.transactions.length === 1 && r.transactions[0].id === "R2");
++  r = await list({ limit: "3", page: "2" });
++  check("transactions: pagination counts reward rows consistently", r.pagination.total === 8 && r.transactions.length === 3 && r.pagination.pages === 3);
++
++  const s = (await getTransactionSummary(ctx(env, { user: A1 }))).body;
++  check("summary: deposit VOLUME ignores rewards entirely (₦5,000 + the failed one is excluded)", s.totalDepositVolume === 5000, JSON.stringify(s));
++  check("summary: 'spent' counts only the CASH part of purchases (₦380−₦100 + ₦200 = ₦480)", s.totalSpentVolume === 480, JSON.stringify(s));
++}
++
++// ============================================================ end to end: approve → clear → spend → totals
++{
++  const { env, DB } = world();
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedResource(DB, { id: "up", status: "pending", uploader: "stu" });
++  seedResource(DB, { id: "dl", status: "approved", uploader: "admin2", pages: 5 });  // costs ₦200
++  await approve(env, A1, "up");
++  let s = (await getSummary(ctx(env, { user: A1 }))).body;
++  check("e2e: after approval the Overview shows ₦100 paid this month and ₦100 owed to students", s.budget.paidThisMonth === 100 && s.outstanding === 100 && s.redeemed === 0, JSON.stringify(s.budget));
++  let me = (await getMyIncentives(ctx(env, { user: { id: "stu" } }))).body;
++  check("e2e: the student sees ₦100 PENDING (not spendable yet) and ₦0 spendable", me.balance.pending === 100 && me.balance.reward === 0 && me.weekEarned === 100);
++  const early = await chargeForDownload(ctx(env, { user: { id: "stu" }, body: { resourceId: "dl" } }));
++  check("e2e: during the hold period the reward can't be spent", early.status === 402 && early.body.currentBalance === 0);
++  const cleared = await clearMaturedRewards(env, { now: new Date(Date.now() + 4 * 864e5) });
++  check("e2e: after the hold period the hourly job makes it spendable", cleared.cleared === 1);
++  me = (await getMyIncentives(ctx(env, { user: { id: "stu" } }))).body;
++  check("e2e: the student now sees ₦100 spendable, ₦0 pending, and the ledger row is 'cleared'", me.balance.reward === 100 && me.balance.pending === 0 && me.ledger[0].status === "cleared");
++  DB._raw.prepare("UPDATE users SET wallet_balance=150 WHERE id='stu'").run();
++  const bal = await getBalance(ctx(env, { user: { id: "stu" } }));
++  check("e2e: wallet balance shows cash + rewards (₦250)", bal.body.balance === 250);
++  const buy = await chargeForDownload(ctx(env, { user: { id: "stu" }, body: { resourceId: "dl" } }));
++  check("e2e: a ₦200 download uses the ₦100 reward first, then ₦100 cash", buy.status === 200 && buy.body.rewardsUsed === 100 && buy.body.fundedUsed === 100 && buy.body.newBalance === 50);
++  s = (await getSummary(ctx(env, { user: A1 }))).body;
++  check("e2e: Overview now shows ₦100 redeemed, and nothing owed (it was spent)", s.redeemed === 100 && s.outstanding === 0, JSON.stringify([s.redeemed, s.outstanding]));
++  const t = (await getTransactionSummary(ctx(env, { user: A1 }))).body;
++  check("e2e: cash revenue counts only the ₦100 of real money", t.totalSpentVolume === 100);
++}
++
++summary();
+--- /dev/null
++++ b/test/phase6c-incentives-engine.test.js
+@@ -0,0 +1,408 @@
++// Phase 6c (update package, Phase 3): the payout engine that runs when a moderator approves an upload.
++// Controller-level tests: real controllers + real schema.sql in SQLite, with a fake request context.
++// Run: node --experimental-sqlite test/phase6c-incentives-engine.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, seedBounty, hookAfter, LIVE_RULES } from "./incentiveTestLib.js";
++import { approveResourceById, getModerationQueue } from "../src/controllers/moderationController.js";
++import { awardForApproval, applyLimits } from "../src/services/rewardEngine.js";
++
++const R = (over = {}, rewards = {}) => ({ ...LIVE_RULES, ...over, rewards: { ...LIVE_RULES.rewards, ...rewards } });
++const A1 = { id: "admin1", role: "admin" }, A2 = { id: "admin2", role: "admin" };
++
++function world(status = "live", rules = LIVE_RULES) {
++  const w = freshEnv();
++  seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" });
++  seedUser(w.DB, "admin2", { name: "Mod Two", role: "admin" });
++  seedUser(w.DB, "stu", { name: "Student One" });
++  setCfg(w.DB, status, rules);
++  return w;
++}
++const pend = (DB, id, o = {}) => seedResource(DB, { id, status: "pending", uploader: "stu", ...o });
++const approve = (env, admin, id, review = {}) =>
++  approveResourceById(ctx(env, { user: admin }), id, { pages: 5, snippet: "", rewardTier: undefined, rewardNote: "", fileHash: null, ...review });
++const rows = (DB, where = "1=1", ...a) => all(DB, `SELECT * FROM reward_ledger WHERE ${where} ORDER BY created_at, rowid`, ...a);
++const u = (DB, id = "stu") => one(DB, "SELECT reward_pending p, reward_balance b, rewards_frozen f FROM users WHERE id=?", id);
++// The ledger and the balances must never disagree (valid whenever nothing has been spent).
++const consistent = (DB) => all(DB, "SELECT id FROM users").every(({ id }) => {
++  const sum = (s) => n(DB, "SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND type='reward' AND status=?", id, s);
++  const x = u(DB, id);
++  return x.p === sum("pending") && x.b === sum("cleared");
++});
++
++// =============================================================== program off: nothing at all
++{
++  const { env, DB } = world("off");
++  pend(DB, "r1");
++  const r = await approve(env, A1, "r1");
++  check("off: approval works and the response is EXACTLY what it always was", r.status === 200 && r.body.success && r.body.message === "Resource approved" && !("reward" in r.body), JSON.stringify(r.body));
++  check("off: no ledger rows, no balance change", rows(DB).length === 0 && u(DB).p === 0 && u(DB).b === 0);
++}
++
++// =============================================================== live: tiers, bonus, clamps
++{
++  const { env, DB } = world();
++  pend(DB, "r1");
++  let r = await approve(env, A1, "r1");
++  const rs = rows(DB);
++  check("live: first approved past question pays standard ₦100 + first-upload bonus ₦50", r.body.reward.status === "paid" && r.body.reward.amount === 150 && rs.length === 2 && rs.find((x) => x.tier === "standard").amount === 100 && rs.find((x) => x.tier === "first").amount === 50, JSON.stringify(rs.map((x) => [x.tier, x.amount])));
++  const std = rs.find((x) => x.tier === "standard");
++  check("live: rows are PENDING, owned by the student, tied to the resource, stamped with the approver", rs.every((x) => x.status === "pending" && x.user_id === "stu" && x.resource_id === "r1" && x.approved_by === "admin1" && x.type === "reward"));
++  check("live: clears_at is now + holdDays (3 days)", Math.abs(new Date(std.clears_at).getTime() - (Date.now() + 3 * 864e5)) < 10000);
++  check("live: the money sits in reward_pending (not yet spendable)", u(DB).p === 150 && u(DB).b === 0);
++  check("live: moderator is told what happened, in the approval message", /Resource approved\. Reward of ₦150 recorded/.test(r.body.message) && /3 days/.test(r.body.message), r.body.message);
++  check("live: label is human-readable", /CSC 301 Past Question approved/.test(std.label) && rs.find((x) => x.tier === "first").label === "First approved upload bonus");
++
++  pend(DB, "r2"); r = await approve(env, A1, "r2");
++  check("live: the bonus is ONE-TIME (second upload earns only ₦100)", r.body.reward.amount === 100 && rows(DB, "resource_id='r2'").length === 1 && u(DB).p === 250);
++  pend(DB, "r3"); r = await approve(env, A1, "r3");
++  check("weekly cap: pays the REMAINDER (cap 300, earned 250 → ₦50)", r.body.reward.amount === 50 && u(DB).p === 300, r.body.message);
++  pend(DB, "r4"); r = await approve(env, A1, "r4");
++  check("weekly cap: once reached, approval still succeeds but nothing is paid, and the moderator is told why", r.status === 200 && r.body.success && r.body.reward.status === "blocked" && /Weekly cap reached/.test(r.body.message) && rows(DB, "resource_id='r4'").length === 0 && one(DB, "SELECT status FROM resources WHERE id='r4'").status === "approved");
++  check("ledger always equals the balances after all of the above", consistent(DB));
++}
++{
++  const { env, DB } = world();
++  pend(DB, "ln", { type: "Lecture Note" }); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  check("lecture note pays its own standard amount (₦60), no bonus when not first", (await approve(env, A1, "ln")).body.reward.amount === 60);
++  pend(DB, "other", { type: "Other" });
++  const r = await approve(env, A1, "other");
++  check("types without a standard reward pay nothing and say so", r.body.reward.status === "blocked" && /No reward is set for this type/.test(r.body.message) && rows(DB, "resource_id='other'").length === 0);
++}
++{
++  const { env, DB } = world("live", R({ maxSinglePayout: 120 }));
++  pend(DB, "r1");
++  const r = await approve(env, A1, "r1");
++  check("maxSinglePayout clamps the TOTAL (₦100 + ₦50 bonus capped at ₦120 → 100 + 20)", r.body.reward.amount === 120 && rows(DB).map((x) => x.amount).sort((a, b) => a - b).join() === "20,100");
++}
++{
++  const { env, DB } = world();
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  pend(DB, "hi"); pend(DB, "ra");
++  check("high tier pays ₦150", (await approve(env, A1, "hi", { rewardTier: "high", rewardNote: "Not on Sharef yet" })).body.reward.amount === 150);
++  check("the moderator's reason is stored with the reward", rows(DB, "tier='high'")[0].note === "Not on Sharef yet");
++  check("rare tier pays ₦200 (the weekly cap leaves ₦150, so it is clamped)", (await approve(env, A1, "ra", { rewardTier: "rare", rewardNote: "Very hard to find" })).body.reward.amount === 150);
++  const w2 = world(); seedResource(w2.DB, { id: "old", status: "approved", uploader: "stu" }); pend(w2.DB, "ra");
++  check("rare tier pays ₦200 when the cap allows", (await approve(w2.env, A1, "ra", { rewardTier: "rare", rewardNote: "Very hard to find" })).body.reward.amount === 200);
++  const w3 = world(); pend(w3.DB, "none");
++  const r = await approve(w3.env, A1, "none", { rewardTier: "none" });
++  check("tier 'none': approved, nothing paid (not even the first-upload bonus)", r.body.success && rows(w3.DB).length === 0 && r.body.message === "Resource approved");
++}
++
++// =============================================================== self-approval, frozen, suspended, duplicates
++{
++  const { env, DB } = world();
++  seedUser(DB, "admin3", { name: "Self Approver", role: "admin" });
++  pend(DB, "mine", { uploader: "admin3" });
++  const r = await approve(env, { id: "admin3", role: "admin" }, "mine");
++  check("self-approval: the approval goes through but earns nothing, with an explanation", r.body.success && rows(DB).length === 0 && /themselves|own/i.test(r.body.message), r.body.message);
++  DB._raw.prepare("UPDATE users SET rewards_frozen=1 WHERE id='stu'").run();
++  pend(DB, "fz"); const f = await approve(env, A1, "fz");
++  check("frozen student: approved, no reward, told why", f.body.success && /frozen/i.test(f.body.message) && rows(DB, "user_id='stu'").length === 0);
++  DB._raw.prepare("UPDATE users SET rewards_frozen=0, account_status='suspended' WHERE id='stu'").run();
++  pend(DB, "sp"); check("suspended student earns nothing", rows(DB, "user_id='stu'").length === 0 && (await approve(env, A1, "sp")).body.reward.status === "blocked");
++}
++{
++  const { env, DB } = world();
++  const H = "a".repeat(64);
++  pend(DB, "d1"); pend(DB, "d2"); pend(DB, "d3"); seedUser(DB, "other");
++  pend(DB, "d4", { uploader: "other" });
++  check("duplicates: the first copy of a file is paid", (await approve(env, A1, "d1", { fileHash: H })).body.reward.status === "paid");
++  const dup = await approve(env, A1, "d2", { fileHash: H });
++  check("duplicates: re-uploading the SAME file (same hash) earns nothing", dup.body.reward.status === "blocked" && /already approved/.test(dup.body.message) && rows(DB, "resource_id='d2'").length === 0);
++  const dup2 = await approve(env, A1, "d4", { fileHash: H });
++  check("duplicates: also when a DIFFERENT student uploads the same file", dup2.body.reward.status === "blocked" && rows(DB, "resource_id='d4'").length === 0);
++  check("duplicates: a different file (other hash) is paid; no hash = can't tell, so paid", (await approve(env, A1, "d3", { fileHash: "b".repeat(64) })).body.reward.status === "paid");
++}
++
++// =============================================================== requests (bounties)
++{
++  const { env, DB } = world();
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedBounty(DB, { id: "BNT", course: "CSC 305", reward: 120, max: 1, expires: iso(-5) });
++  pend(DB, "b1", { course: "CSC 305", bountyId: "BNT" });
++  let r = await approve(env, A1, "b1", { rewardTier: "bounty" });
++  const row = rows(DB, "resource_id='b1'")[0];
++  check("request: pays the request's reward (₦120), tagged with the request", r.body.reward.amount === 120 && row.tier === "bounty" && row.bounty_id === "BNT");
++  check("request: slot used up → request marked fulfilled", one(DB, "SELECT paid, status FROM bounties WHERE id='BNT'").paid === 1 && one(DB, "SELECT status FROM bounties WHERE id='BNT'").status === "fulfilled");
++  pend(DB, "b2", { course: "CSC 305", bountyId: "BNT" });
++  r = await approve(env, A1, "b2", { rewardTier: "bounty" });
++  check("request: a later upload for a FULL request quietly falls back to the standard reward", r.body.reward.amount === 100 && rows(DB, "resource_id='b2'")[0].tier === "standard");
++}
++{
++  const { env, DB } = world("live", R({ weeklyCap: 5000 })); // roomy cap: this block tests request RULES, not the cap
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedBounty(DB, { id: "WRONG", course: "MTH 101", reward: 200, expires: iso(-5) });
++  pend(DB, "m1", { course: "CSC 305", bountyId: "WRONG" });
++  check("request: a request for a DIFFERENT course is never paid (standard instead)", (await approve(env, A1, "m1", { rewardTier: "bounty" })).body.reward.amount === 100);
++  seedBounty(DB, { id: "LATE", course: "CSC 400", reward: 180, expires: iso(1) }); // closed yesterday
++  pend(DB, "l1", { course: "CSC 400", bountyId: "LATE", createdAt: iso(3) }); // uploaded while it was still open
++  check("request: judged on UPLOAD time, so a slow moderator can't make a student miss the deadline", (await approve(env, A1, "l1", { rewardTier: "bounty" })).body.reward.amount === 180);
++  seedBounty(DB, { id: "LATE2", course: "CSC 401", reward: 180, expires: iso(1) });
++  pend(DB, "l2", { course: "CSC 401", bountyId: "LATE2", createdAt: iso(0) }); // uploaded AFTER it closed
++  check("request: but an upload made after the deadline doesn't qualify", (await approve(env, A1, "l2", { rewardTier: "bounty" })).body.reward.amount === 100);
++  seedBounty(DB, { id: "QUICK", course: "CSC 500", reward: 90, expires: iso(-5) });
++  pend(DB, "q1", { course: "CSC 500", bountyId: "QUICK" });
++  check("quick-approve (no reward choice) defaults to the request's reward when there is one", (await approve(env, A1, "q1")).body.reward.amount === 90 && rows(DB, "resource_id='q1'")[0].tier === "bounty");
++}
++{
++  // two uploads race for the LAST slot of one request
++  const { env, DB } = world();
++  seedUser(DB, "s2", { name: "Student Two" });
++  seedBounty(DB, { id: "ONE", course: "CSC 305", reward: 120, max: 1, expires: iso(-5) });
++  pend(DB, "x1", { course: "CSC 305", bountyId: "ONE" }); pend(DB, "x2", { uploader: "s2", course: "CSC 305", bountyId: "ONE" });
++  await Promise.all([approve(env, A1, "x1", { rewardTier: "bounty" }), approve(env, A2, "x2", { rewardTier: "bounty" })]);
++  check("request race: exactly ONE student gets the single slot, never two", n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE tier='bounty'") === 1 && one(DB, "SELECT paid FROM bounties WHERE id='ONE'").paid === 1);
++  check("request race: ledger still matches the balances", consistent(DB));
++}
++
++// =============================================================== monthly budget + auto-pause, moderator daily limit
++{
++  const { env, DB } = world("live", R({ monthlyBudget: 120 }));
++  seedUser(DB, "other");
++  seedLedger(DB, { user: "other", amount: 100, status: "cleared", approver: "admin2" });
++  pend(DB, "r1");
++  const r = await approve(env, A1, "r1");
++  check("monthly budget: pays what is left (₦120 − ₦100 = ₦20), not the full amount", r.body.reward.amount === 20 && rows(DB, "user_id='stu'").length === 1, r.body.message);
++  check("monthly budget: reaching it AUTO-PAUSES the program", one(DB, "SELECT status FROM incentive_config").status === "paused");
++  const a = all(DB, "SELECT * FROM incentive_audit WHERE action='auto-pause'");
++  check("auto-pause is written to the audit log by 'System' with the figures", a.length === 1 && a[0].admin_name === "System" && a[0].admin_id === null && /budget reached/i.test(a[0].detail) && /₦120/.test(a[0].detail), JSON.stringify(a));
++  pend(DB, "r2"); const r2 = await approve(env, A1, "r2");
++  check("paused: approvals still succeed, nothing new is paid, the moderator is told", r2.body.success && rows(DB, "resource_id='r2'").length === 0 && /paused/i.test(r2.body.message) && all(DB, "SELECT id FROM incentive_audit WHERE action='auto-pause'").length === 1);
++  const s = await (await import("../src/controllers/adminIncentiveController.js")).getSummary(ctx(env, { user: A1 }));
++  check("auto-pause raises an alert on the Overview tab", s.body.alerts.some((x) => /paused automatically/i.test(x.text)));
++}
++{
++  const { env, DB } = world("live", R({ monthlyBudget: 100 }));
++  pend(DB, "r1"); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  await approve(env, A1, "r1");
++  check("monthly budget: paying EXACTLY the budget also pauses", one(DB, "SELECT status FROM incentive_config").status === "paused");
++}
++{
++  const { env, DB } = world("live", R({ monthlyBudget: 0 }));
++  pend(DB, "r1"); const r = await approve(env, A1, "r1");
++  check("no budget set: pays nothing and says to set one (inert by default)", r.body.reward.status === "blocked" && /No monthly budget/.test(r.body.message) && rows(DB).length === 0);
++  const w = world("live", R({ weeklyCap: 0 })); pend(w.DB, "r1");
++  check("no weekly cap set: pays nothing and says to set one", /No weekly earning cap/.test((await approve(w.env, A1, "r1")).body.message));
++}
++{
++  const { env, DB } = world("live", R({ adminDailyLimit: 150 }));
++  seedUser(DB, "other"); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  seedLedger(DB, { user: "other", amount: 100, status: "pending", approver: "admin1" });                 // admin1 awarded ₦100 today
++  seedLedger(DB, { user: "other", amount: 500, status: "cleared", approver: "admin1", createdAt: iso(2) }); // two days ago: doesn't count
++  pend(DB, "r1"); pend(DB, "r2");
++  let r = await approve(env, A1, "r1");
++  check("moderator daily limit: if this award would exceed it, NOTHING is paid (all-or-nothing) and they're told", r.body.reward.status === "blocked" && /daily award limit/.test(r.body.message) && rows(DB, "resource_id='r1'").length === 0);
++  r = await approve(env, A2, "r2");
++  check("moderator daily limit: is per moderator (another moderator can still award)", r.body.reward.amount === 100);
++}
++
++// =============================================================== races: limits are enforced INSIDE the write
++{
++  const { env, DB } = world("live", R({ weeklyCap: 150 }));
++  seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  pend(DB, "a"); pend(DB, "b");
++  await Promise.all([approve(env, A1, "a"), approve(env, A2, "b")]);
++  const total = n(DB, "SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id='stu'");
++  check("race: two approvals for one student can NEVER exceed the weekly cap together (₦150)", total === 150, `total=${total}`);
++  check("race: balance equals the ledger", consistent(DB));
++}
++{
++  const { env, DB } = world("live", R({ monthlyBudget: 120 }));
++  seedUser(DB, "s2", { name: "Student Two" }); seedUser(DB, "s3", { name: "Student Three" });
++  for (const id of ["s1", "s2", "s3"]) seedResource(DB, { id: "old-" + id, status: "approved", uploader: id === "s1" ? "stu" : id });
++  pend(DB, "a"); pend(DB, "b", { uploader: "s2" }); pend(DB, "c", { uploader: "s3" });
++  await Promise.all([approve(env, A1, "a"), approve(env, A2, "b"), approve(env, A1, "c")]);
++  const total = n(DB, "SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger");
++  check("race: three approvals together can never overspend the monthly budget (₦120)", total === 120, `total=${total}`);
++  check("race: ledger still matches the balances", consistent(DB));
++}
++
++{
++  // a brand-new student's TWO first uploads approved at the same moment: both look "first", only one may get the bonus
++  const { env, DB } = world("live", R({ weeklyCap: 5000 }));
++  pend(DB, "a"); pend(DB, "b");
++  await Promise.all([approve(env, A1, "a"), approve(env, A2, "b")]);
++  check("race: two simultaneous first uploads earn the first-upload bonus exactly ONCE", n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE tier='first'") === 1, `bonuses=${n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE tier='first'")}`);
++  check("race: and both uploads still earned their standard reward", n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE tier='standard'") === 2 && consistent(DB));
++}
++
++// =============================================================== shadow + paused + hold days
++{
++  const { env, DB } = world("shadow", R({ weeklyCap: 150 }));
++  seedUser(DB, "inv"); seedBounty(DB, { id: "BS", course: "CSC 305", reward: 100, expires: iso(-5) });
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1", { course: "CSC 305", bountyId: "BS" });
++  let r = await approve(env, A1, "r1", { rewardTier: "bounty" });
++  const rs = rows(DB);
++  check("shadow: rows are written with status 'shadow' (the same maths as live)", rs.length >= 2 && rs.every((x) => x.status === "shadow") && r.body.reward.status === "shadow" && /Shadow mode/.test(r.body.message), r.body.message);
++  check("shadow: NO balance moves for anyone", u(DB).p === 0 && u(DB).b === 0 && u(DB, "inv").p === 0);
++  check("shadow: request and referral state are NOT touched", one(DB, "SELECT paid, status FROM bounties WHERE id='BS'").paid === 0 && one(DB, "SELECT status FROM referrals WHERE id='rf'").status === "verified");
++  pend(DB, "r2"); r = await approve(env, A1, "r2");
++  check("shadow: shadow rows count toward limits WHILE in shadow (projection matches live)", r.body.reward.status === "blocked" && /Weekly cap/.test(r.body.message), r.body.message);
++  setCfg(DB, "live", R({ weeklyCap: 150 }));
++  pend(DB, "r3"); r = await approve(env, A1, "r3");
++  check("going live: earlier SHADOW rows don't eat the real weekly cap", r.body.reward.status === "paid" && r.body.reward.amount === 100 && u(DB).p === 100, r.body.message);
++}
++{
++  // restored + re-approved after the program went live: a shadow row must not block the real payment
++  const { env, DB } = world("shadow");
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  DB._raw.prepare("UPDATE resources SET status='pending', reviewed_by=NULL, reviewed_at=NULL WHERE id='r1'").run();
++  DB._raw.prepare("DELETE FROM reward_ledger WHERE tier='first'").run(); // (the one-time bonus has its own guard, tested separately)
++  setCfg(DB, "live");
++  const r = await approve(env, A1, "r1");
++  check("shadow→live: re-approving an upload that only has a SHADOW row is paid for real", r.body.reward.status === "paid" && rows(DB, "status='pending' AND resource_id='r1'").length >= 1, r.body.message);
++}
++{
++  const { env, DB } = world("paused");
++  pend(DB, "r1"); const r = await approve(env, A1, "r1");
++  check("paused: approved, nothing paid, balances untouched", r.body.success && rows(DB).length === 0 && /paused/i.test(r.body.message));
++}
++{
++  const { env, DB } = world("live", R({ holdDays: 0 }));
++  pend(DB, "r1"); const r = await approve(env, A1, "r1");
++  check("holdDays 0: paid straight into the spendable balance as 'cleared'", rows(DB).every((x) => x.status === "cleared") && u(DB).p === 0 && u(DB).b === 150 && !/becomes spendable/.test(r.body.message));
++  check("holdDays 0: ledger matches balances", consistent(DB));
++}
++
++// =============================================================== referrals
++{
++  const { env, DB } = world();
++  seedUser(DB, "inv", { name: "Inviter" });
++  const ref = (status = "verified") => DB._raw.prepare("INSERT OR REPLACE INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu',?,?,?)").run(status, iso(5), iso(5));
++  ref();
++  pend(DB, "r1"); const r = await approve(env, A1, "r1");
++  const inv = rows(DB, "user_id='inv'");
++  check("referral: the inviter is paid when the friend's first upload is approved", inv.length === 1 && inv[0].tier === "referral" && inv[0].amount === 50 && inv[0].referral_id === "rf" && inv[0].resource_id === "r1" && u(DB, "inv").p === 50);
++  check("referral: friend is marked 'contributed' and the inviter's earnings recorded", one(DB, "SELECT status, earned FROM referrals WHERE id='rf'").status === "contributed" && one(DB, "SELECT earned FROM referrals WHERE id='rf'").earned === 50);
++  check("referral: the approval message mentions the inviter's bonus; the student still gets their own reward", /Referral bonus ₦50/.test(r.body.message) && r.body.reward.amount === 150);
++  pend(DB, "r2"); await approve(env, A1, "r2");
++  check("referral: paid ONCE only (the friend's second upload pays no one else)", rows(DB, "tier='referral'").length === 1);
++  check("referral: ledger matches balances", consistent(DB));
++}
++{
++  const { env, DB } = world(); seedUser(DB, "inv");
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','signed_up',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  check("referral: NOT paid until the friend has verified their account", rows(DB, "user_id='inv'").length === 0 && one(DB, "SELECT status FROM referrals WHERE id='rf'").status === "signed_up");
++}
++{
++  const { env, DB } = world(); seedUser(DB, "inv", { frozen: 1 });
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  check("referral: a frozen inviter isn't paid, and the referral is closed so it can't be retried later", rows(DB, "user_id='inv'").length === 0 && one(DB, "SELECT status, earned FROM referrals WHERE id='rf'").status === "contributed");
++}
++{
++  const { env, DB } = world();
++  seedUser(DB, "inv", { ip: "samehash" }); DB._raw.prepare("UPDATE users SET signup_ip_hash='samehash' WHERE id='stu'").run();
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); const r = await approve(env, A1, "r1");
++  check("referral ring: a friend who signed up from the inviter's own connection earns the inviter NOTHING", rows(DB, "user_id='inv'").length === 0 && /withheld/.test(r.body.message) && one(DB, "SELECT status FROM referrals WHERE id='rf'").status === "contributed");
++  check("referral ring: the student's own reward is unaffected", r.body.reward.amount === 150);
++}
++{
++  const { env, DB } = world("live", R({}, { referralFirstApproval: 0 })); seedUser(DB, "inv");
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  check("referral: configured to ₦0 → no payment", rows(DB, "user_id='inv'").length === 0);
++  const w = world(); seedUser(w.DB, "inv"); seedLedger(w.DB, { user: "inv", amount: 300, status: "cleared" }); // inviter already at weekly cap
++  w.DB._raw.prepare("UPDATE users SET reward_balance=300 WHERE id='inv'").run();
++  w.DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(w.DB, "r1"); const r = await approve(w.env, A1, "r1");
++  check("referral: the INVITER's own weekly cap applies to the bonus", rows(w.DB, "user_id='inv' AND tier='referral'").length === 0 && r.body.reward.amount === 150);
++}
++{
++  const { env, DB } = world("shadow"); seedUser(DB, "inv");
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  check("referral (shadow): recorded as a shadow row, no money, status unchanged", rows(DB, "user_id='inv'")[0]?.status === "shadow" && u(DB, "inv").p === 0 && one(DB, "SELECT status FROM referrals WHERE id='rf'").status === "verified");
++}
++{
++  const { env, DB } = world(); seedUser(DB, "inv");
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf','inv','stu','verified',?,?)").run(iso(5), iso(5));
++  pend(DB, "r1"); await approve(env, A1, "r1", { rewardTier: "none" });
++  check("referral: an approval that earns nothing doesn't use up the referral", one(DB, "SELECT status FROM referrals WHERE id='rf'").status === "verified" && rows(DB).length === 0);
++}
++
++// =============================================================== idempotency
++{
++  const { env, DB } = world();
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  const before = { rows: rows(DB).length, p: u(DB).p };
++  const second = await approve(env, A1, "r1");
++  check("double-click: a second approval of the same item is rejected (409) and pays nothing", second.status === 409 && rows(DB).length === before.rows && u(DB).p === before.p);
++  const resource = one(DB, "SELECT * FROM resources WHERE id='r1'");
++  const again = await awardForApproval(DB, { resource, admin: A1, review: {}, ts: new Date().toISOString() });
++  check("engine retry: calling it twice for the same upload pays once — the 2nd is refused and the batch rolls back", again.status === "blocked" && /already rewarded once/.test(again.message) && rows(DB).length === before.rows && u(DB).p === before.p);
++  check("idempotency: the ledger still matches the balances", consistent(DB));
++}
++{
++  // removed then restored then approved again: no double-dip even though the first reward was reversed
++  const { env, DB } = world(); seedResource(DB, { id: "old", status: "approved", uploader: "stu" });
++  pend(DB, "r1"); await approve(env, A1, "r1");
++  const { removeApprovedResource, restoreToPending } = await import("../src/controllers/adminResourceController.js");
++  await removeApprovedResource(ctx(env, { user: A1, params: { id: "r1" }, body: { reason: "Wrong course" } }));
++  await restoreToPending(ctx(env, { user: A1, params: { id: "r1" } }));
++  const r = await approve(env, A1, "r1");
++  check("remove → restore → re-approve cannot be paid a second time", r.body.reward.status === "blocked" && /already rewarded once/.test(r.body.message) && u(DB).p === 0 && rows(DB, "status IN ('pending','cleared')").length === 0);
++}
++
++// =============================================================== defaults for quick-approve + safety nets
++{
++  const { env, DB } = world();
++  pend(DB, "risky"); const t0 = (id) => seedResource(DB, { id, status: "rejected", uploader: "stu", reviewedAt: iso(1) });
++  ["j1", "j2", "j3"].forEach(t0);
++  let r = await approve(env, A1, "risky");
++  check("quick-approve for a HIGH-risk student pays nothing automatically and says to use the full dialog", r.body.reward.status === "blocked" && /high-risk/.test(r.body.message) && rows(DB).length === 0, r.body.message);
++  pend(DB, "risky2");
++  r = await approve(env, A1, "risky2", { rewardTier: "standard" });
++  check("…but when a moderator deliberately chooses a reward in the dialog, it is paid", r.body.reward.status === "paid");
++}
++{
++  const { env, DB } = world();
++  pend(DB, "r1");
++  DB._raw.exec("DROP TABLE reward_ledger");
++  const r = await approve(env, A1, "r1");
++  check("engine failure NEVER undoes an approval: success, with a clear warning for the moderator", r.status === 200 && r.body.success && r.body.reward.status === "error" && /could not be recorded/.test(r.body.message) && one(DB, "SELECT status FROM resources WHERE id='r1'").status === "approved", JSON.stringify(r.body));
++}
++
++// =============================================================== the guards INSIDE the write (world changes mid-approval)
++// Everything above checks the plan; these prove the write itself refuses what became illegal a moment after the plan was made.
++{
++  // another approval hands this student the one-time bonus after our check said "no bonus given yet"
++  const { env, DB } = world("live", R({ weeklyCap: 5000 }));
++  pend(DB, "mine"); seedResource(DB, { id: "elsewhere", status: "pending", uploader: "stu" });
++  const resource = one(DB, "SELECT * FROM resources WHERE id='mine'");
++  const racing = hookAfter(DB, /tier = 'first'.*LIMIT 1/s, async () => {
++    DB._raw.prepare("INSERT INTO reward_ledger (id,user_id,type,amount,status,tier,label,resource_id,approved_by,created_at) VALUES ('RACED','stu','reward',50,'pending','first','First approved upload bonus','elsewhere','admin2',?)").run(new Date().toISOString());
++    DB._raw.prepare("UPDATE users SET reward_pending = 50 WHERE id='stu'").run();
++  });
++  const r = await awardForApproval(racing, { resource, admin: A1, review: {}, ts: new Date().toISOString() });
++  check("write-time guard: a bonus granted by someone else a moment ago is NOT granted again (still exactly one bonus)", n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE tier='first'") === 1 && r.amount === 100, JSON.stringify(r));
++  check("write-time guard: the standard reward was still paid and the balances agree (₦50 raced bonus + ₦100)", u(DB).p === 150 && consistent(DB));
++}
++{
++  // the moderator's daily limit is used up by a parallel approval after our check passed
++  const { env, DB } = world("live", R({ adminDailyLimit: 150 }));
++  seedUser(DB, "other"); seedResource(DB, { id: "old", status: "approved", uploader: "stu" }); pend(DB, "mine");
++  const resource = one(DB, "SELECT * FROM resources WHERE id='mine'");
++  const racing = hookAfter(DB, /FROM resources\s+WHERE uploader_id = \?/, async () => {
++    DB._raw.prepare("INSERT INTO reward_ledger (id,user_id,type,amount,status,tier,label,approved_by,created_at) VALUES ('PARALLEL','other','reward',100,'pending','standard','x','admin1',?)").run(new Date().toISOString());
++  });
++  const r = await awardForApproval(racing, { resource, admin: A1, review: {}, ts: new Date().toISOString() });
++  check("write-time guard: a moderator's daily limit used up a moment earlier by a parallel approval stops THIS payout", rows(DB, "resource_id='mine'").length === 0 && r.status === "blocked" && /moment of approval/.test(r.message), JSON.stringify(r));
++  check("write-time guard: and nothing was credited to the student", u(DB).p === 0 && u(DB).b === 0);
++}
++
++// =============================================================== limits maths (pure)
++{
++  const rules = R();
++  const L = (o) => applyLimits(rules, { total: 100, earned7d: 0, paidMonth: 0, adminToday: 0, ...o });
++  check("limits: nothing used → full amount", L({}).amount === 100);
++  check("limits: weekly remainder clamps", L({ earned7d: 250 }).amount === 50);
++  check("limits: monthly remainder clamps", L({ paidMonth: 19950 }).amount === 50);
++  check("limits: the smaller of the two clamps wins", L({ earned7d: 280, paidMonth: 19950 }).amount === 20);
++  check("limits: moderator limit is all-or-nothing", L({ adminToday: 2950 }).amount === 0 && L({ adminToday: 2900 }).amount === 100);
++  check("limits: exhausted → zero with a reason", L({ earned7d: 300 }).reason === "Weekly cap reached for this student." && L({ paidMonth: 20000 }).reason === "Monthly reward budget reached.");
++}
++
++summary();
+--- /dev/null
++++ b/test/phase6c-incentives-jobs.test.js
+@@ -0,0 +1,238 @@
++// Phase 6c (update package, Phase 3): scheduled jobs. Hourly clearing of rewards past their hold period,
++// daily fraud-signal detection, and the cron dispatcher. Controller/service-level tests (real schema, SQLite).
++// Run: node --experimental-sqlite test/phase6c-incentives-jobs.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, LIVE_RULES } from "./incentiveTestLib.js";
++import { clearMaturedRewards, detectFlags, runScheduledJobs, CRON_HOURLY, CRON_DAILY, FLAG_RULES, CLEAR_LIMITS } from "../src/jobs/incentiveJobs.js";
++import { getFlags, getFlagCount } from "../src/controllers/adminIncentiveController.js";
++import { reversalStatements } from "../src/services/rewardReversal.js";
++
++const bal = (DB, id) => one(DB, "SELECT reward_pending p, reward_balance b FROM users WHERE id=?", id);
++const pendingRow = (DB, o) => {
++  const id = seedLedger(DB, { status: "pending", ...o });
++  DB._raw.prepare("UPDATE reward_ledger SET clears_at=? WHERE id=?").run(o.clearsAt ?? iso(1), id);
++  return id;
++};
++const status = (DB, id) => one(DB, "SELECT status s FROM reward_ledger WHERE id=?", id).s;
++const consistent = (DB) => all(DB, "SELECT id FROM users").every(({ id }) => {
++  const sum = (s) => n(DB, "SELECT COALESCE(SUM(amount),0) AS n FROM reward_ledger WHERE user_id=? AND type='reward' AND status=?", id, s);
++  const x = bal(DB, id);
++  return x.p === sum("pending") && x.b === sum("cleared");
++});
++const quiet = async (fn) => { const e = console.error; console.error = () => {}; try { return await fn(); } finally { console.error = e; } };
++
++// ============================================================ clearing
++{
++  const { env, DB } = freshEnv();
++  ["a", "b", "ghost"].forEach((id) => seedUser(DB, id));
++  DB._raw.prepare("UPDATE users SET reward_pending=250 WHERE id='a'").run();
++  const due = pendingRow(DB, { user: "a", amount: 100, clearsAt: iso(1) });
++  const notDue = pendingRow(DB, { user: "a", amount: 150, clearsAt: iso(-1) });
++  const reversed = seedLedger(DB, { user: "b", amount: 70, status: "reversed" });
++  DB._raw.prepare("UPDATE reward_ledger SET clears_at=? WHERE id=?").run(iso(1), reversed);
++  const orphan = pendingRow(DB, { user: null, amount: 40, clearsAt: iso(1) });
++
++  const r = await clearMaturedRewards(env);
++  check("clearing: a reward past its hold period becomes 'cleared' and is moved pending → spendable", r.cleared === 1 && r.failed === 0 && status(DB, due) === "cleared" && bal(DB, "a").p === 150 && bal(DB, "a").b === 100, JSON.stringify([r, bal(DB, "a")]));
++  check("clearing: a reward still inside its hold period is untouched", status(DB, notDue) === "pending");
++  check("clearing: reversed rewards and rewards of deleted accounts are left alone", status(DB, reversed) === "reversed" && status(DB, orphan) === "pending" && bal(DB, "b").b === 0);
++  const again = await clearMaturedRewards(env);
++  check("clearing: running it again is a no-op (idempotent)", again.cleared === 0 && bal(DB, "a").p === 150 && bal(DB, "a").b === 100);
++  check("clearing: balances still match the ledger", consistent(DB));
++  const later = await clearMaturedRewards(env, { now: new Date(Date.now() + 2 * 864e5) });
++  check("clearing: later, the remaining reward matures too", later.cleared === 1 && bal(DB, "a").p === 0 && bal(DB, "a").b === 250 && consistent(DB));
++}
++{
++  const MAX = CLEAR_LIMITS.batch * CLEAR_LIMITS.rounds; // most rewards one hourly run will clear
++  const { env, DB } = freshEnv(); seedUser(DB, "big");
++  DB._raw.prepare("UPDATE users SET reward_pending=?1 WHERE id='big'").run(100 * 10);
++  for (let i = 0; i < 100; i++) pendingRow(DB, { user: "big", amount: 10 });
++  const r = await clearMaturedRewards(env);
++  check("clearing: a backlog of 100 rewards is cleared in one run (several batches)", r.cleared === 100 && bal(DB, "big").b === 1000 && bal(DB, "big").p === 0 && consistent(DB));
++
++  const w = freshEnv(); seedUser(w.DB, "huge");
++  const total = MAX + 40;
++  w.DB._raw.prepare("UPDATE users SET reward_pending=?1 WHERE id='huge'").run(total);
++  for (let i = 0; i < total; i++) pendingRow(w.DB, { user: "huge", amount: 1 });
++  const first = await clearMaturedRewards(w.env);
++  check(`clearing: a run is BOUNDED (${MAX} max) so a huge backlog can never time a run out…`, first.cleared === MAX && n(w.DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE status='pending'") === 40);
++  const second = await clearMaturedRewards(w.env);
++  check("…and the next run simply continues where it stopped", second.cleared === 40 && bal(w.DB, "huge").b === total && consistent(w.DB));
++}
++{
++  // one corrupt row must not stop everyone else getting paid
++  const { env, DB } = freshEnv(); seedUser(DB, "broken"); seedUser(DB, "fine");
++  DB._raw.prepare("UPDATE users SET reward_pending=50 WHERE id='fine'").run();
++  const bad = pendingRow(DB, { user: "broken", amount: 100, clearsAt: iso(2) });   // ledger says 100 pending, balance says 0 → would violate CHECK
++  const good = pendingRow(DB, { user: "fine", amount: 50, clearsAt: iso(1) });
++  const r = await quiet(() => clearMaturedRewards(env));
++  check("clearing: a corrupt row is skipped on its own, everyone else is still cleared", r.cleared === 1 && r.failed === 1 && status(DB, good) === "cleared" && status(DB, bad) === "pending" && bal(DB, "fine").b === 50, JSON.stringify(r));
++  check("clearing: the corrupt row's student is NOT credited (no money created from nothing)", bal(DB, "broken").b === 0 && bal(DB, "broken").p === 0);
++  const r2 = await quiet(() => clearMaturedRewards(env));
++  check("clearing: a permanently bad row doesn't make the job spin", r2.cleared === 0 && r2.failed === 1);
++}
++
++{
++  // The job reads "what is due", and only THEN does a moderator reverse one of those rewards. The job
++  // must not move that reward's money (it would double-count the reversal).
++  const { env, DB } = freshEnv(); seedUser(DB, "admin1", { role: "admin" }); seedUser(DB, "s");
++  DB._raw.prepare("UPDATE users SET reward_pending=150 WHERE id='s'").run();
++  const victim = pendingRow(DB, { user: "s", amount: 100, clearsAt: iso(2) });
++  const other = pendingRow(DB, { user: "s", amount: 50, clearsAt: iso(1) });
++  let hooked = false;
++  const origPrepare = DB.prepare.bind(DB);
++  const hookedDb = new Proxy(DB, { get(target, key) {
++    if (key !== "prepare") return target[key];
++    return (sql) => {
++      const st = origPrepare(sql);
++      if (!/clears_at <= \?/.test(sql) || !/LIMIT/.test(sql)) return st;
++      return { bind: (...args) => { const b = st.bind(...args); return { all: async () => {
++        const result = await b.all();
++        if (!hooked) { hooked = true; const row = one(DB, "SELECT * FROM reward_ledger WHERE id=?", victim); await DB.batch(reversalStatements(DB, row, { adminId: "admin1", adminName: "Admin", reason: "reversed mid-run", ts: new Date().toISOString() })); }
++        return result;
++      } }; } };
++    };
++  } });
++  const r = await clearMaturedRewards({ DB: hookedDb });
++  check("clearing vs reversal race: the reversed reward is NOT moved to spendable by a stale list", hooked && status(DB, victim) === "reversed" && status(DB, other) === "cleared", JSON.stringify([r, status(DB, victim), status(DB, other)]));
++  check("clearing vs reversal race: balances are exactly right (₦0 pending, ₦50 spendable), nothing failed", r.failed === 0 && bal(DB, "s").p === 0 && bal(DB, "s").b === 50, JSON.stringify([r, bal(DB, "s")]));
++}
++
++// ============================================================ flag detection
++const flagsFor = (DB, userId) => all(DB, "SELECT * FROM incentive_flags WHERE user_id=?", userId);
++const signalsOf = (DB, userId) => flagsFor(DB, userId).flatMap((f) => JSON.parse(f.signals));
++const world = (status = "live", rules = LIVE_RULES) => { const w = freshEnv(); seedUser(w.DB, "uploader"); seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" }); setCfg(w.DB, status, rules); return w; };
++
++{
++  const { env, DB } = world("off");
++  seedUser(DB, "s1"); for (let i = 0; i < 3; i++) seedResource(DB, { id: "x" + i, status: "rejected", uploader: "s1", reviewedAt: iso(2) });
++  DB._raw.prepare("UPDATE resources SET rejection_reason='Duplicate resource'").run();
++  const r = await detectFlags(env);
++  check("flags: program OFF → the job does nothing", r.skipped === true && n(DB, "SELECT COUNT(*) AS n FROM incentive_flags") === 0);
++}
++{
++  const { env, DB } = world();
++  const rej = (uid, reasons, daysAgo) => reasons.forEach((reason, i) => {
++    seedResource(DB, { id: `${uid}-${i}`, status: "rejected", uploader: uid, reviewedAt: iso(daysAgo) });
++    DB._raw.prepare("UPDATE resources SET rejection_reason=? WHERE id=?").run(reason, `${uid}-${i}`);
++  });
++  for (const id of ["s1", "s2", "s3", "s4"]) seedUser(DB, id);
++  rej("s1", ["Duplicate resource", "SPAM / junk", "duplicate of CSC 301 notes"], 3);   // 3 duplicate/spam, recent → FLAG (case-insensitive)
++  rej("s2", ["Duplicate resource", "spam"], 3);                                         // only 2 → no
++  rej("s3", ["Duplicate", "Duplicate", "Duplicate"], 20);                               // too old → no
++  rej("s4", ["Poor quality", "Wrong course", "Incomplete"], 3);                         // rejected, but not duplicate/spam → no
++  const r = await detectFlags(env);
++  check("flags/spam: 3+ duplicate-or-spam rejections in 14 days → flagged, in plain English", r.opened === 1 && signalsOf(DB, "s1").some((s) => /3 duplicate or spam uploads rejected/.test(s)), JSON.stringify(signalsOf(DB, "s1")));
++  check("flags/spam: 2 recent, 3 old, or 3 for other reasons → NOT flagged", [flagsFor(DB, "s2"), flagsFor(DB, "s3"), flagsFor(DB, "s4")].every((f) => f.length === 0));
++  const rows = flagsFor(DB, "s1");
++  check("flags: opened as 'open' with a timestamp; nothing was frozen or reversed automatically", rows[0].status === "open" && !!rows[0].created_at && one(DB, "SELECT rewards_frozen f FROM users WHERE id='s1'").f === 0);
++}
++{
++  const { env, DB } = world();
++  const invite = (inv, ids, ipFor) => ids.forEach((id) => { seedUser(DB, id, { ip: ipFor(id) }); DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES (?,?,?,'verified',?,?)").run("rf-" + id, inv, id, iso(3), iso(3)); });
++  seedUser(DB, "i1", { ip: "H1" }); seedUser(DB, "i2", { ip: "H2" }); seedUser(DB, "i3", { ip: "H3" });
++  invite("i1", ["a1", "a2"], () => "H1");               // 2 friends on the inviter's own connection → FLAG
++  invite("i2", ["b1"], () => "H2");                     // 1 → no (could be a roommate)
++  invite("i3", ["c1", "c2"], (id) => "OTHER-" + id);    // 2 friends on different connections → no
++  await detectFlags(env);
++  check("flags/ring: 2+ referred friends on the inviter's own connection → flagged", signalsOf(DB, "i1").some((s) => /2 referred friends signed up from the same connection/.test(s)));
++  check("flags/ring: a single shared connection, or different connections → NOT flagged", flagsFor(DB, "i2").length === 0 && flagsFor(DB, "i3").length === 0);
++}
++{
++  const { env, DB } = world();                // weekly cap ₦300
++  const earn = (uid, daysAgo, amount, status = "cleared") => seedLedger(DB, { user: uid, amount, status, createdAt: iso(daysAgo) });
++  for (const id of ["k1", "k2", "k3", "k4"]) seedUser(DB, id);
++  [1, 8, 15, 22].forEach((d) => earn("k1", d, 300));                    // at the cap in 4 consecutive weeks → FLAG
++  [1, 8, 15].forEach((d) => earn("k2", d, 300));                        // only 3 weeks → no
++  [1, 8, 15, 22].forEach((d, i) => earn("k3", d, i === 2 ? 299 : 300)); // one week ₦1 under the cap → no
++  [1, 8, 15, 22].forEach((d) => earn("k4", d, 300, "reversed"));         // reversed rewards don't count
++  await detectFlags(env);
++  check("flags/cap-streak: at the weekly cap 4 weeks in a row → flagged", signalsOf(DB, "k1").some((s) => /full weekly cap \(₦300\) 4 weeks in a row/.test(s)), JSON.stringify(signalsOf(DB, "k1")));
++  // (these students may still be flagged by the separate "never spent" signal; here we only assert the CAP-STREAK signal)
++  const streakSignal = (id) => signalsOf(DB, id).some((s) => /weekly cap/.test(s));
++  check("flags/cap-streak: 3 weeks, ₦1 under the cap in one week, or reversed rewards → no cap-streak signal", ["k2", "k3", "k4"].every((id) => !streakSignal(id)), JSON.stringify(["k2", "k3", "k4"].map((id) => signalsOf(DB, id))));
++  const z = world("live", { ...LIVE_RULES, weeklyCap: 0 }); seedUser(z.DB, "k1"); [1, 8, 15, 22].forEach((d) => seedLedger(z.DB, { user: "k1", amount: 300, status: "cleared", createdAt: iso(d) }));
++  await detectFlags(z.env);
++  check("flags/cap-streak: with no weekly cap configured this signal is simply off", !signalsOf(z.DB, "k1").some((s) => /weekly cap/.test(s)));
++}
++{
++  const { env, DB } = world();
++  for (const id of ["h1", "h2", "h3", "h4"]) seedUser(DB, id);
++  const rewards = (uid, amount, oldestDaysAgo) => { seedLedger(DB, { user: uid, amount: amount - 100, status: "cleared", createdAt: iso(oldestDaysAgo) }); seedLedger(DB, { user: uid, amount: 100, status: "cleared", createdAt: iso(1) }); };
++  rewards("h1", 600, 20); DB._raw.prepare("UPDATE users SET reward_balance=600 WHERE id='h1'").run();    // earned, never spent → FLAG
++  rewards("h2", 600, 20);
++  DB._raw.prepare("INSERT INTO transactions (id,user_id,type,amount,status,resource_id,description,created_at,updated_at) VALUES ('p','h2','purchase',200,'successful',NULL,'',?,?)").run(iso(5), iso(5)); // has bought something
++  rewards("h3", 600, 5);                                                                                  // too recent
++  rewards("h4", 400, 20);                                                                                 // under ₦500
++  await detectFlags(env);
++  check("flags/never-spent: ≥₦500 earned over 14+ days and nothing ever downloaded → flagged", signalsOf(DB, "h1").some((s) => /earned ₦600 in rewards but has never downloaded anything/.test(s)), JSON.stringify(signalsOf(DB, "h1")));
++  check("flags/never-spent: someone who HAS downloaded, is too new, or earned less → NOT flagged", [flagsFor(DB, "h2"), flagsFor(DB, "h3"), flagsFor(DB, "h4")].every((f) => f.length === 0));
++  check("flags: `exposure` is the unspent money at risk (balance ₦600 here)", flagsFor(DB, "h1")[0].exposure === 600);
++}
++{
++  const { env, DB } = world();
++  seedUser(DB, "admin2", { role: "admin" });
++  for (const id of ["m1", "m2", "m3"]) seedUser(DB, id);
++  const give = (uid, admin, count) => { for (let i = 0; i < count; i++) seedLedger(DB, { user: uid, amount: 100, status: "cleared", approver: admin, createdAt: iso(2) }); };
++  give("m1", "admin1", 5);                         // one moderator, 5 times → FLAG
++  give("m2", "admin1", 4);                         // 4 → no
++  give("m3", "admin1", 3); give("m3", "admin2", 2); // 5 total but two moderators → no
++  await detectFlags(env);
++  check("flags/same-moderator: 5 approvals of one student by one moderator in 14 days → flagged", signalsOf(DB, "m1").some((s) => /5 of this student's uploads were approved by the same moderator/.test(s)));
++  check("flags/same-moderator: 4, or 5 split across two moderators → NOT flagged", flagsFor(DB, "m2").length === 0 && flagsFor(DB, "m3").length === 0);
++}
++{
++  // several signals for one student → ONE flag with both lines; re-running updates it, never duplicates
++  const { env, DB } = world(); seedUser(DB, "multi");
++  for (let i = 0; i < 3; i++) { seedResource(DB, { id: "mm" + i, status: "rejected", uploader: "multi", reviewedAt: iso(1) }); DB._raw.prepare("UPDATE resources SET rejection_reason='Spam' WHERE id=?").run("mm" + i); }
++  for (let i = 0; i < 5; i++) seedLedger(DB, { user: "multi", amount: 100, status: "cleared", approver: "admin1", createdAt: iso(2) });
++  const r1 = await detectFlags(env);
++  check("flags: two signals on one student → a single flag listing both", r1.opened === 1 && flagsFor(DB, "multi").length === 1 && signalsOf(DB, "multi").length === 2);
++  const id1 = flagsFor(DB, "multi")[0].id;
++  const auditsAfterFirst = n(DB, "SELECT COUNT(*) AS n FROM incentive_audit WHERE action='flags'");
++  const r2 = await detectFlags(env);
++  check("flags: running again updates the SAME open flag (no duplicates, no new audit noise)", r2.opened === 0 && r2.updated === 1 && flagsFor(DB, "multi").length === 1 && flagsFor(DB, "multi")[0].id === id1 && n(DB, "SELECT COUNT(*) AS n FROM incentive_audit WHERE action='flags'") === auditsAfterFirst);
++  const audit = one(DB, "SELECT * FROM incentive_audit WHERE action='flags'");
++  check("flags: opening new flags is recorded in the audit log by 'System'", auditsAfterFirst === 1 && audit.admin_name === "System" && audit.admin_id === null && /opened 1 new flag/.test(audit.detail));
++  // visible to moderators through the admin API
++  const list = await getFlags(ctx(env, { user: { id: "admin1", role: "admin" }, query: {} }));
++  const cnt = await getFlagCount(ctx(env, { user: { id: "admin1", role: "admin" } }));
++  check("flags: they show up in the admin Flags tab and the sidebar count", list.body.flags.some((f) => f.student === "User multi" && f.signals.length === 2) && cnt.body.flagsOpen === 1);
++}
++{
++  // don't nag: recently-resolved flags are skipped; old ones can come back
++  const { env, DB } = world(); seedUser(DB, "recent"); seedUser(DB, "long-ago");
++  for (const uid of ["recent", "long-ago"]) for (let i = 0; i < 5; i++) seedLedger(DB, { user: uid, amount: 100, status: "cleared", approver: "admin1", createdAt: iso(2) });
++  const resolved = (uid, daysAgo) => DB._raw.prepare("INSERT INTO incentive_flags (id,user_id,signals,exposure,status,resolved_at,created_at,updated_at) VALUES (?,?,'[]',0,'dismissed',?,?,?)").run("old-" + uid, uid, iso(daysAgo), iso(daysAgo + 1), iso(daysAgo));
++  resolved("recent", 3); resolved("long-ago", 20);
++  const r = await detectFlags(env);
++  check("flags: a flag dismissed 3 days ago is NOT re-raised (quiet period)…", flagsFor(DB, "recent").filter((f) => f.status === "open").length === 0);
++  check("…but one dismissed 20 days ago can be", flagsFor(DB, "long-ago").filter((f) => f.status === "open").length === 1 && r.opened === 1);
++}
++{
++  const { env, DB } = world("shadow"); seedUser(DB, "sh");
++  for (let i = 0; i < 3; i++) { seedResource(DB, { id: "sh" + i, status: "rejected", uploader: "sh", reviewedAt: iso(1) }); DB._raw.prepare("UPDATE resources SET rejection_reason='duplicate' WHERE id=?").run("sh" + i); }
++  check("flags: also runs in shadow mode (so you can tune before going live)", (await detectFlags(env)).opened === 1);
++  setCfg(DB, "paused"); DB._raw.prepare("DELETE FROM incentive_flags").run();
++  check("flags: and while paused", (await detectFlags(env)).opened === 1);
++}
++check("flag thresholds are the documented, conservative ones", FLAG_RULES.spamRejections === 3 && FLAG_RULES.sharedConnectionReferrals === 2 && FLAG_RULES.capStreakWeeks === 4 && FLAG_RULES.neverSpentMin === 500 && FLAG_RULES.sameModerator === 5);
++
++// ============================================================ cron dispatch
++{
++  const { env, DB } = world("off");
++  const mk = () => { const waits = []; return { waits, ctx: { waitUntil: (p) => waits.push(p) } }; };
++  let purged = [];
++  const purge = async (e, opts) => { purged.push(opts); };
++  let m = mk(); let ran = runScheduledJobs({ cron: CRON_HOURLY }, env, m.ctx, { purgeStaleUploads: purge }); await Promise.all(m.waits);
++  check("cron(hourly): only the reward clearing runs", ran.join() === "clearMaturedRewards" && purged.length === 0);
++  m = mk(); ran = runScheduledJobs({ cron: CRON_DAILY }, env, m.ctx, { purgeStaleUploads: purge }); await Promise.all(m.waits);
++  check("cron(daily): upload cleanup + flag scan run (clearing doesn't)", ran.join() === "purgeStaleUploads,detectFlags" && purged.length === 1 && purged[0].limit === 20);
++  m = mk(); purged = []; ran = runScheduledJobs({}, env, m.ctx, { purgeStaleUploads: purge }); await Promise.all(m.waits);
++  check("cron(unknown / --test-scheduled): everything runs", ran.length === 3 && purged.length === 1);
++  m = mk(); ran = runScheduledJobs({ cron: CRON_DAILY }, env, m.ctx, { purgeStaleUploads: async () => { throw new Error("cloudinary down"); } });
++  const settled = await quiet(() => Promise.all(m.waits).then(() => "ok", () => "rejected"));
++  check("cron: one job failing never breaks the others or crashes the run", settled === "ok");
++  check("cron strings match what wrangler.toml declares", CRON_HOURLY === "0 * * * *" && CRON_DAILY === "0 2 * * *");
++}
++
++summary();
+--- /dev/null
++++ b/test/phase6c-incentives-wallet.test.js
+@@ -0,0 +1,169 @@
++// Phase 6c (update package, Phase 3): paying for downloads with earned rewards (up to 100% of the price),
++// the combined wallet balance, and the reward debt rule. Controller-level tests (real schema, SQLite).
++// Run: node --experimental-sqlite test/phase6c-incentives-wallet.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, seedUser, seedResource, seedLedger } from "./incentiveTestLib.js";
++import { getBalance, chargeForDownload } from "../src/controllers/walletController.js";
++import { verifyDownloadToken } from "../src/utils/downloadToken.js";
++import { reversePayout } from "../src/controllers/adminIncentiveController.js";
++import { calculateResourceCost } from "../src/utils/pricing.js";
++
++const PAGES = 14;                       // ₦200 + 9 pages × ₦20 = ₦380
++const COST = calculateResourceCost(PAGES);
++check("test setup: a 14-page resource costs ₦380", COST === 380);
++
++function world(userOpts = {}) {
++  const w = freshEnv();
++  seedUser(w.DB, "uploader"); seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" });
++  seedUser(w.DB, "me", userOpts);
++  seedResource(w.DB, { id: "r1", pages: PAGES, uploader: "uploader" });
++  seedResource(w.DB, { id: "r2", pages: PAGES, uploader: "uploader" });
++  return w;
++}
++const charge = (env, resourceId = "r1", userId = "me") => chargeForDownload(ctx(env, { user: { id: userId, role: "student" }, body: { resourceId } }));
++const me = (DB) => one(DB, "SELECT wallet_balance w, reward_balance r, reward_pending p FROM users WHERE id='me'");
++const tx = (DB) => all(DB, "SELECT * FROM transactions WHERE user_id='me' AND type='purchase'");
++const nothingChanged = (DB, before) => {
++  const m = me(DB);
++  return m.w === before.w && m.r === before.r && m.p === before.p && tx(DB).length === 0
++    && n(DB, "SELECT COUNT(*) AS n FROM download_logs") === 0 && one(DB, "SELECT downloads d FROM resources WHERE id='r1'").d === 0;
++};
++
++// ============================================================ balance endpoint
++{
++  const { env, DB } = world({ wallet: 700, rb: 160, rp: 100 });
++  const r = await getBalance(ctx(env, { user: { id: "me" } }));
++  check("balance: `balance` is cash + spendable rewards (₦860); pending rewards are NOT included", r.body.success && r.body.balance === 860, JSON.stringify(r.body));
++  check("balance: the parts are exposed too (funded / reward / pending)", r.body.fundedBalance === 700 && r.body.rewardBalance === 160 && r.body.rewardPending === 100);
++  const d = world({ wallet: 100, rb: -150 });
++  check("balance: a reward DEBT (negative balance) is netted off the total", (await getBalance(ctx(d.env, { user: { id: "me" } }))).body.balance === -50);
++  const plain = world({ wallet: 250 });
++  const p = await getBalance(ctx(plain.env, { user: { id: "me" } }));
++  check("balance: a student with no rewards sees exactly what they always saw", p.body.balance === 250 && p.body.fundedBalance === 250 && p.body.rewardBalance === 0);
++}
++
++// ============================================================ charging: no rewards = exactly the old behaviour
++{
++  const { env, DB } = world({ wallet: 1000 });
++  const r = await charge(env);
++  const t = tx(DB)[0];
++  check("no rewards: charge works exactly as before (₦1000 → ₦620)", r.status === 200 && r.body.success && r.body.newBalance === 620 && me(DB).w === 620 && me(DB).r === 0);
++  check("no rewards: purchase recorded at the full price, ₦0 from rewards", t.amount === 380 && t.from_rewards === 0 && t.status === "successful" && t.resource_id === "r1");
++  check("no rewards: download counted and logged; stream link is bound to this user + resource", one(DB, "SELECT downloads d FROM resources WHERE id='r1'").d === 1 && n(DB, "SELECT COUNT(*) AS n FROM download_logs") === 1);
++  const token = new URL(r.body.fileUrl).searchParams.get("token");
++  const payload = await verifyDownloadToken(env, token);
++  check("no rewards: the file link is issued for this user and resource", payload.userId === "me" && payload.resourceId === "r1");
++  check("no rewards: response reports how it was paid", r.body.rewardsUsed === 0 && r.body.fundedUsed === 380);
++}
++{
++  const { env, DB } = world({ wallet: 100 });
++  const before = me(DB);
++  const r = await charge(env);
++  check("no rewards: not enough money → 402 with the SAME shape the UI already handles", r.status === 402 && r.body.insufficientBalance === true && r.body.required === 380 && r.body.currentBalance === 100 && r.body.success === false);
++  check("no rewards: an insufficient attempt changes NOTHING (balances, transactions, logs, counters)", nothingChanged(DB, before));
++}
++
++// ============================================================ 100% of rewards can be used
++{
++  const { env, DB } = world({ wallet: 0, rb: 500 });
++  const r = await charge(env);
++  const t = tx(DB)[0];
++  check("rewards cover the WHOLE price: ₦0 cash needed, ₦500 → ₦120", r.status === 200 && r.body.success && me(DB).w === 0 && me(DB).r === 120 && r.body.newBalance === 120, JSON.stringify([r.status, me(DB)]));
++  check("rewards cover the whole price: recorded as ₦380 from rewards, ₦0 funded", t.amount === 380 && t.from_rewards === 380 && r.body.rewardsUsed === 380 && r.body.fundedUsed === 0);
++}
++{
++  const { env, DB } = world({ wallet: 1000, rb: 100 });
++  const r = await charge(env);
++  check("rewards are spent FIRST, then cash (₦100 rewards + ₦280 cash)", me(DB).r === 0 && me(DB).w === 720 && tx(DB)[0].from_rewards === 100 && r.body.rewardsUsed === 100 && r.body.fundedUsed === 280 && r.body.newBalance === 720);
++}
++{
++  const { env, DB } = world({ wallet: 100, rb: 100 });
++  const before = me(DB);
++  const r = await charge(env);
++  check("rewards + cash together still short → 402; `currentBalance` is what they could spend (₦200)", r.status === 402 && r.body.currentBalance === 200 && r.body.required === 380);
++  check("…and nothing at all changed", nothingChanged(DB, before));
++}
++{
++  const { env, DB } = world({ wallet: 0, rb: 0, rp: 1000 });
++  const before = me(DB);
++  const r = await charge(env);
++  check("PENDING rewards (still in their hold period) cannot be spent", r.status === 402 && r.body.currentBalance === 0 && nothingChanged(DB, before));
++}
++{
++  const { env, DB } = world({ wallet: 380, rb: 380 });
++  const r = await charge(env);
++  check("exact money (rewards = price): spends the rewards, keeps the cash untouched", r.status === 200 && me(DB).r === 0 && me(DB).w === 380);
++}
++
++// ============================================================ frozen students
++{
++  const { env, DB } = world({ wallet: 100, rb: 500, frozen: 1 });
++  const before = me(DB);
++  const r = await charge(env);
++  check("frozen: rewards can't be spent, so ₦100 cash isn't enough (and `currentBalance` says ₦100)", r.status === 402 && r.body.currentBalance === 100 && nothingChanged(DB, before));
++  const rich = world({ wallet: 1000, rb: 500, frozen: 1 });
++  const ok = await charge(rich.env);
++  check("frozen: with enough cash the download works and the frozen rewards stay untouched", ok.status === 200 && me(rich.DB).w === 620 && me(rich.DB).r === 500 && tx(rich.DB)[0].from_rewards === 0);
++}
++
++// ============================================================ reward DEBT (a reward reversed after it was spent)
++{
++  const { env, DB } = world({ wallet: 480, rb: -100 });
++  const r = await charge(env);
++  check("debt: ₦100 owed is settled from cash first (₦380 + ₦100 = ₦480 needed)", r.status === 200 && me(DB).w === 0 && me(DB).r === 0 && tx(DB)[0].from_rewards === 0 && r.body.newBalance === 0, JSON.stringify(me(DB)));
++  const short = world({ wallet: 479, rb: -100 });
++  const before = me(short.DB);
++  const s = await charge(short.env);
++  check("debt: ₦1 short of (price + debt) → blocked, and the UI is told they have ₦379 against ₦380", s.status === 402 && s.body.required === 380 && s.body.currentBalance === 379 && nothingChanged(short.DB, before));
++}
++
++// ============================================================ re-downloads and races
++{
++  const { env, DB } = world({ wallet: 380 });
++  await charge(env);
++  const after1 = me(DB);
++  seedLedger(DB, { user: "me", amount: 10, status: "cleared" }); DB._raw.prepare("UPDATE users SET rewards_frozen=1, reward_balance=-999 WHERE id='me'").run(); // frozen AND in debt
++  const again = await charge(env);
++  check("re-download of something already bought is FREE, even for a frozen student in debt", again.status === 200 && again.body.alreadyOwned === true && tx(DB).length === 1 && me(DB).w === after1.w);
++}
++{
++  const { env, DB } = world({ wallet: 1000 });
++  const [a, b] = await Promise.all([charge(env), charge(env)]);
++  check("double-click: two simultaneous charges for the same file bill ONCE", tx(DB).length === 1 && me(DB).w === 620 && [a, b].filter((x) => x.body.alreadyOwned).length + [a, b].filter((x) => x.body.alreadyOwned === false).length === 2);
++}
++{
++  const { env, DB } = world({ wallet: 0, rb: 400 });
++  const [a, b] = await Promise.all([charge(env, "r1"), charge(env, "r2")]);
++  const ok = [a, b].filter((x) => x.status === 200), fail = [a, b].filter((x) => x.status === 402);
++  check("race: ₦400 of rewards can't pay for TWO ₦380 downloads at once — exactly one succeeds", ok.length === 1 && fail.length === 1 && me(DB).r === 20 && tx(DB).length === 1, JSON.stringify([a.status, b.status, me(DB)]));
++}
++{
++  const { env, DB } = world({ wallet: 300, rb: 200 });
++  const [a, b] = await Promise.all([charge(env, "r1"), charge(env, "r2")]);
++  check("race: cash + rewards (₦500) pays for one ₦380 download, never two", [a, b].filter((x) => x.status === 200).length === 1 && me(DB).w + me(DB).r === 120 && me(DB).w >= 0);
++}
++{
++  const { env, DB } = world({ wallet: 0, rb: 800 });
++  await Promise.all([charge(env, "r1"), charge(env, "r2")]);
++  check("race: ₦800 of rewards CAN pay for two ₦380 downloads (₦40 left)", tx(DB).length === 2 && me(DB).r === 40 && me(DB).w === 0);
++}
++
++// ============================================================ the full story: earn, spend, get reversed, owe, top up
++{
++  const { env, DB } = world({ wallet: 0, rb: 380 });
++  const L = seedLedger(DB, { id: "REWARD1", user: "me", amount: 380, status: "cleared", label: "CSC 301 approved" });
++  const spend = await charge(env, "r1");
++  check("story: the student spends a ₦380 reward on a download", spend.status === 200 && me(DB).r === 0 && me(DB).w === 0);
++  const rev = await reversePayout(ctx(env, { user: { id: "admin1", role: "admin" }, params: { id: L }, body: { reason: "Duplicate of an existing resource" } }));
++  check("story: the reward is then reversed — the balance goes NEGATIVE (₦-380), nothing breaks", rev.status === 200 && me(DB).r === -380);
++  const blocked = await charge(env, "r2");
++  check("story: with no cash and a reward debt, the next download is blocked", blocked.status === 402 && blocked.body.currentBalance === 0);
++  DB._raw.prepare("UPDATE users SET wallet_balance = 500 WHERE id='me'").run();
++  const still = await charge(env, "r2");
++  check("story: topping up ₦500 isn't enough (needs ₦380 + ₦380 debt); they are told they have ₦120", still.status === 402 && still.body.currentBalance === 120);
++  DB._raw.prepare("UPDATE users SET wallet_balance = 760 WHERE id='me'").run();
++  const done = await charge(env, "r2");
++  check("story: after topping up ₦760 the debt is settled and the download works (₦0 left, no debt)", done.status === 200 && me(DB).w === 0 && me(DB).r === 0);
++  check("story: a purchase made with rewards that were later reversed still shows the original facts", tx(DB).find((t) => t.resource_id === "r1").from_rewards === 380);
++}
++
++summary();
+--- a/src/controllers/adminIncentiveController.js
++++ b/src/controllers/adminIncentiveController.js
+@@ -39,7 +39,6 @@
+   weeklyCap: "Weekly earning cap",
+   maxSinglePayout: "Largest single payout",
+   adminDailyLimit: "Daily award limit per moderator",
+-  maxRewardShare: "Most of a download payable with rewards",
+   holdDays: "Hold period",
+   ratioAlert: "Revenue alert threshold",
+   pastQuestion: "Standard: past question",
+@@ -50,7 +49,7 @@
+   referralSignup: "Referral: friend signs up",
+   referralFirstApproval: "Referral: friend's first upload approved",
+ };
+-const FIELD_MAX = { holdDays: 30, maxRewardShare: 100 };
++const FIELD_MAX = { holdDays: 30 };
+ 
+ function flatConfig(cfg) {
+   return {
+@@ -139,6 +138,11 @@
+       alerts.push({ level: "warn", text: "No weekly earning cap is set. Set one in Rules to limit what one student can earn." });
+     }
+ 
++    if (cfg.status === "paused") {
++      const auto = await DB.prepare("SELECT created_at FROM incentive_audit WHERE action = 'auto-pause' AND created_at >= ? ORDER BY created_at DESC LIMIT 1").bind(monthStart).first();
++      if (auto) alerts.push({ level: "warn", text: "Rewards were paused automatically because this month's budget was reached. Raise the budget in Rules (or wait for next month), then switch back to Live." });
++    }
++
+     return c.json({
+       success: true,
+       status: cfg.status,
+@@ -373,7 +377,7 @@
+   }
+ }
+ 
+-const REVERSE_CHUNK = 15; // rewards reversed per atomic batch (5 statements each)
++const REVERSE_CHUNK = 8; // rewards reversed per atomic batch (5 statements each = 40; kept modest, see CLEAR_LIMITS in jobs/incentiveJobs.js)
+ 
+ // @route POST /api/admin/incentives/flags/:id/resolve   { action: freeze|reverse_all|dismiss, note }
+ // (the frontend sends the moderator's written reason as `note`)
+--- a/src/controllers/adminResourceController.js
++++ b/src/controllers/adminResourceController.js
+@@ -1,5 +1,7 @@
+ import { sanitizeError } from "../utils/sanitizeError.js";
+ import { incentiveCascadeForResource } from "../services/referralService.js";
++import { reverseRewardsForResource } from "../services/rewardReversal.js";
++import { adminDisplayName } from "../services/incentiveConfig.js";
+ import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
+ import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
+ 
+@@ -232,7 +234,19 @@
+       return c.json({ success: false, message: exists ? "This resource is not currently approved" : "Resource not found" }, exists ? 409 : 404);
+     }
+ 
+-    return c.json({ success: true, message: "Resource removed and moved to Rejected" });
++    // Rewards paid for an approval that turned out to be a mistake are taken back automatically.
++    // The removal itself has already succeeded, so a problem here is reported, not fatal.
++    let message = "Resource removed and moved to Rejected";
++    try {
++      const ts = new Date().toISOString();
++      const adminName = await adminDisplayName(c.env.DB, user.id);
++      const undone = await reverseRewardsForResource(c.env.DB, { resourceId: id, adminId: user.id, adminName, reason: String(reason).slice(0, 300), ts });
++      if (undone.count > 0) message += `. ${undone.count} reward(s) paid for it were taken back automatically.`;
++    } catch (revErr) {
++      console.error("auto-reversal failed:", revErr?.message);
++      message += ". Its reward could not be reversed automatically, so please check Incentives → Payouts.";
++    }
++    return c.json({ success: true, message });
+   } catch (err) {
+     console.error("adminResourceController error:", err?.message);
+     return c.json({ success: false, message: "Could not remove resource", error: sanitizeError(c.env, err) }, 500);
+--- a/src/controllers/adminTransactionController.js
++++ b/src/controllers/adminTransactionController.js
+@@ -1,6 +1,20 @@
+ import { sanitizeError } from "../utils/sanitizeError.js";
+ import { EFFECTIVE_STATUS_CASE, activeSinceIso } from "./adminUserController.js";
+ 
++// Every wallet transaction PLUS rewards, as one list. Rewards are not wallet transactions, so they
++// are presented here as two extra virtual types ("reward" = credit, "reward_reversal" = debit) built
++// from the reward ledger. Shadow rows are never shown (no money ever moved). Money TOTALS below only
++// ever sum type = 'deposit' / 'purchase', so promotional money can't inflate revenue.
++const TX_BASE = `
++  SELECT id, user_id, type, amount, status, from_rewards, created_at FROM transactions
++  UNION ALL
++  SELECT id, user_id, 'reward', amount, CASE status WHEN 'pending' THEN 'pending' ELSE 'successful' END, 0, created_at
++    FROM reward_ledger WHERE type = 'reward' AND status != 'shadow' AND user_id IS NOT NULL
++  UNION ALL
++  SELECT id, user_id, 'reward_reversal', -amount, 'successful', 0, created_at
++    FROM reward_ledger WHERE type = 'reversal' AND user_id IS NOT NULL
++`;
++
+ // @route GET /api/admin/transactions/summary
+ // Powers the category-breakdown cards (Active/Suspended/Inactive) and the
+ // overview stat cards (Total Deposit Volume, Total Spent, etc).
+@@ -9,9 +23,10 @@
+     const activeSince = activeSinceIso();
+ 
+     const { results } = await c.env.DB.prepare(
+-      `WITH tx_data AS (
++      `WITH base AS (${TX_BASE}),
++       tx_data AS (
+          SELECT t.*, ${EFFECTIVE_STATUS_CASE} AS effective_status
+-         FROM transactions t
++         FROM base t
+          JOIN users u ON u.id = t.user_id
+        )
+        SELECT
+@@ -19,7 +34,7 @@
+          COUNT(*) AS count,
+          COUNT(DISTINCT user_id) AS users,
+          SUM(CASE WHEN type = 'deposit' AND status = 'successful' THEN amount ELSE 0 END) AS volume,
+-         SUM(CASE WHEN type = 'purchase' AND status = 'successful' THEN amount ELSE 0 END) AS spent
++         SUM(CASE WHEN type = 'purchase' AND status = 'successful' THEN amount - from_rewards ELSE 0 END) AS spent
+        FROM tx_data
+        GROUP BY effective_status`
+     )
+@@ -60,10 +75,11 @@
+     const skip = (page - 1) * limit;
+ 
+     const cte = `
+-      WITH tx_data AS (
++      WITH base AS (${TX_BASE}),
++      tx_data AS (
+         SELECT t.*, u.full_name AS user_full_name, u.email AS user_email,
+                ${EFFECTIVE_STATUS_CASE} AS effective_status
+-        FROM transactions t
++        FROM base t
+         JOIN users u ON u.id = t.user_id
+       )
+     `;
+@@ -80,7 +96,7 @@
+     }
+     const where = conditions.join(" AND ");
+ 
+-    const dataSql = `${cte} SELECT * FROM tx_data WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
++    const dataSql = `${cte} SELECT * FROM tx_data WHERE ${where} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`;
+     const countSql = `${cte} SELECT COUNT(*) AS n FROM tx_data WHERE ${where}`;
+ 
+     const [{ results }, countRow] = await Promise.all([
+--- a/src/controllers/browseController.js
++++ b/src/controllers/browseController.js
+@@ -121,38 +121,6 @@
+   }
+ }
+ 
+-// @route GET /api/resources/continue-learning
+-// Most recently downloaded resources for the logged-in user.
+-export async function getContinueLearning(c) {
+-  try {
+-    const limit = Number(c.req.query("limit")) || 5;
+-    const user = c.get("user");
+-
+-    // GROUP BY handles the "one row per resource, most recent download"
+-    // dedup natively, and LIMIT means only `limit` rows are ever fetched —
+-    // the original fetched the user's ENTIRE download history and deduped
+-    // in JS, flagged in the earlier performance audit as a query that
+-    // would only get slower as one user's history grows. This version
+-    // doesn't have that problem.
+-    const { results } = await c.env.DB.prepare(
+-      `SELECT r.*, MAX(dl.created_at) AS last_downloaded_at
+-       FROM download_logs dl
+-       JOIN resources r ON r.id = dl.resource_id
+-       WHERE dl.user_id = ? AND r.status = 'approved'
+-       GROUP BY r.id
+-       ORDER BY last_downloaded_at DESC
+-       LIMIT ?`
+-    )
+-      .bind(user.id, limit)
+-      .all();
+-
+-    return c.json({ success: true, resources: results.map(shapeResource) });
+-  } catch (err) {
+-    console.error("browseController error:", err?.message);
+-    return c.json({ success: false, message: "Could not fetch continue learning", error: sanitizeError(c.env, err) }, 500);
+-  }
+-}
+-
+ // @route GET /api/resources/past-questions
+ // Search + filter for the Past Questions page
+ export async function searchPastQuestions(c) {
+--- a/src/controllers/incentiveController.js
++++ b/src/controllers/incentiveController.js
+@@ -33,7 +33,6 @@
+       status: cfg.status, // 'live' | 'paused'
+       holdDays: r.holdDays,
+       weeklyCap: r.weeklyCap,
+-      maxRewardShare: r.maxRewardShare,
+       ...(cfg.season ? { season: cfg.season } : {}),
+       rewards: {
+         pastQuestion: r.rewards.pastQuestion,
+--- a/src/controllers/moderationController.js
++++ b/src/controllers/moderationController.js
+@@ -4,7 +4,10 @@
+ import { timeAgo } from "../utils/timeAgo.js";
+ import { sendResourceStatusEmail } from "../services/emailService.js";
+ import { generateId } from "../utils/id.js";
+-import { getIncentiveConfig } from "../services/incentiveConfig.js";
++import { getIncentiveConfig, paidStatuses } from "../services/incentiveConfig.js";
++import { uploaderRiskFrom } from "../services/uploaderRisk.js";
++import { awardForApproval, previewAward, sumRewards } from "../services/rewardEngine.js";
++import { startOfMonthInLagos } from "../utils/lagosDay.js";
+ 
+ const AGED_THRESHOLD_DAYS = 4;
+ const REWARD_TIERS = ["bounty", "standard", "high", "rare", "none"];
+@@ -23,23 +26,19 @@
+ // form (shadow/live/paused). With the program 'off' the queue is exactly what it always was.
+ // `bounty`: the request this upload answers, if it can still be paid.
+ // `uploaderRisk`: plain-English reasons to look twice before paying this student.
+-function rewardFieldsFor(x, nowMs) {
++function rewardFieldsFor(x, nowMs, rctx) {
+   if (!x) return {};
+   const out = {};
+   if (x.bounty_id && x.bounty_status === "open" && x.bounty_expires > new Date(nowMs).toISOString() && x.bounty_paid < x.bounty_max) {
+     out.bounty = { id: x.bounty_id, reward: x.bounty_reward };
+   }
+-  const notes = [];
+-  let level = "low";
+-  const RANK = { low: 0, medium: 1, high: 2 };
+-  const raise = (to) => { if (RANK[to] > RANK[level]) level = to; };
+-  if (x.open_flag) { raise("high"); notes.push("Has an open reward flag"); }
+-  if (x.rejected_14d >= 3) { raise("high"); notes.push(`${x.rejected_14d} uploads rejected in the last 14 days`); }
+-  else if (x.rejected_14d >= 1) { raise("medium"); notes.push(`${x.rejected_14d} upload${x.rejected_14d > 1 ? "s" : ""} rejected in the last 14 days`); }
+-  const ageDays = (nowMs - new Date(x.acct_created).getTime()) / 86400000;
+-  if (Number.isFinite(ageDays) && ageDays < 7) { raise("medium"); notes.push(`Account is ${Math.max(0, Math.floor(ageDays))} day(s) old`); }
+-  if (x.shared_ip) { raise("medium"); notes.push("Signed up from the same connection as another account"); }
+-  out.uploaderRisk = { level, notes };
++  out.uploaderRisk = uploaderRiskFrom(x, nowMs);
++  // What approving this with the default tier would do right now (or why it can't pay).
++  const preview = previewAward(rctx.cfg, {
++    adminId: rctx.adminId, uploaderId: x.uploader_id, frozen: !!x.frozen, type: x.rtype,
++    hasBounty: !!out.bounty, bountyReward: x.bounty_reward, earned7d: x.earned7d, paidMonth: rctx.paidMonth, adminToday: rctx.adminToday,
++  });
++  if (preview) out.rewardPreview = preview;
+   return out;
+ }
+ 
+@@ -66,26 +65,38 @@
+     // Same page (same filter, order, limit and offset), plus reward context.
+     let extras = new Map();
+     const incentiveCfg = await getIncentiveConfig(c.env.DB);
++    const admin = c.get("user");
++    let rewardCtx = null;
+     if (incentiveCfg.status !== "off") {
++      const counted = paidStatuses(incentiveCfg.status);
++      const marks = counted.map(() => "?").join(",");
+       const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+-      const { results: extraRows } = await c.env.DB.prepare(
+-        `SELECT r.id AS rid,
+-                b.id AS bounty_id, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
+-                b.paid AS bounty_paid, b.max_payouts AS bounty_max,
+-                u.created_at AS acct_created,
+-                (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = r.uploader_id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
+-                EXISTS (SELECT 1 FROM incentive_flags f WHERE f.user_id = r.uploader_id AND f.status = 'open') AS open_flag,
+-                EXISTS (SELECT 1 FROM users o WHERE u.signup_ip_hash IS NOT NULL AND o.signup_ip_hash = u.signup_ip_hash AND o.id != u.id) AS shared_ip
+-           FROM resources r
+-           LEFT JOIN users u ON u.id = r.uploader_id
+-           LEFT JOIN bounties b ON b.id = r.bounty_id
+-          WHERE r.status = 'pending'
+-          ORDER BY r.created_at ${sortDirection}
+-          LIMIT ? OFFSET ?`
+-      )
+-        .bind(fourteenDaysAgo, limit, skip)
+-        .all();
+-      extras = new Map(extraRows.map((e) => [e.rid, e]));
++      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
++      const [paidMonth, adminToday, extraResult] = await Promise.all([
++        sumRewards(c.env.DB, { since: startOfMonthInLagos().toISOString(), counted }),
++        sumRewards(c.env.DB, { approverId: admin.id, since: startOfTodayInLagos().toISOString(), counted }),
++        c.env.DB.prepare(
++          `SELECT r.id AS rid, r.uploader_id AS uploader_id, r.type AS rtype,
++                  b.id AS bounty_id, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
++                  b.paid AS bounty_paid, b.max_payouts AS bounty_max,
++                  u.created_at AS acct_created, u.rewards_frozen AS frozen,
++                  (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = r.uploader_id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
++                  EXISTS (SELECT 1 FROM incentive_flags f WHERE f.user_id = r.uploader_id AND f.status = 'open') AS open_flag,
++                  EXISTS (SELECT 1 FROM users o WHERE u.signup_ip_hash IS NOT NULL AND o.signup_ip_hash = u.signup_ip_hash AND o.id != u.id) AS shared_ip,
++                  (SELECT COALESCE(SUM(l.amount), 0) FROM reward_ledger l
++                    WHERE l.user_id = r.uploader_id AND l.type = 'reward' AND l.status IN (${marks}) AND l.created_at >= ?) AS earned7d
++             FROM resources r
++             LEFT JOIN users u ON u.id = r.uploader_id
++             LEFT JOIN bounties b ON b.id = r.bounty_id
++            WHERE r.status = 'pending'
++            ORDER BY r.created_at ${sortDirection}
++            LIMIT ? OFFSET ?`
++        )
++          .bind(fourteenDaysAgo, ...counted, sevenDaysAgo, limit, skip)
++          .all(),
++      ]);
++      extras = new Map(extraResult.results.map((e) => [e.rid, e]));
++      rewardCtx = { cfg: incentiveCfg, adminId: admin.id, paidMonth, adminToday };
+     }
+     const nowMs = Date.now();
+ 
+@@ -104,7 +115,7 @@
+         size: formatFileSize(r.file_size_bytes),
+         uploadDate: timeAgo(r.created_at),
+         isAged: ageDays >= AGED_THRESHOLD_DAYS,
+-        ...rewardFieldsFor(extras.get(r.id), nowMs),
++        ...rewardFieldsFor(extras.get(r.id), nowMs, rewardCtx),
+       };
+     });
+ 
+@@ -239,7 +250,18 @@
+   const resource = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
+   await notifyUploaderOfDecision(c, resource, "resource_approved");
+ 
+-  return c.json({ success: true, message: "Resource approved" });
++  // Reward program (no-op while it is 'off'). The approval has already succeeded and must stay
++  // succeeded, so a failure here is reported to the moderator rather than undoing the approval.
++  let reward = null;
++  try {
++    reward = await awardForApproval(c.env.DB, { resource, admin: user, review, ts: nowIso() });
++  } catch (err) {
++    console.error("awardForApproval failed:", err?.message);
++    reward = { status: "error", amount: 0, message: "The reward could not be recorded (the approval itself went through). Check Incentives → Payouts and the server logs." };
++  }
++  // With the program off `reward` is null and the response is exactly what it always was.
++  const message = reward?.message ? `Resource approved. ${reward.message}` : "Resource approved";
++  return c.json({ success: true, message, ...(reward ? { reward } : {}) });
+ }
+ 
+ // @route POST /api/admin/moderation/:id/approve
+--- a/src/controllers/walletController.js
++++ b/src/controllers/walletController.js
+@@ -28,8 +28,12 @@
+ export async function getBalance(c) {
+   try {
+     const user = c.get("user");
+-    const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
+-    return c.json({ success: true, balance: row?.wallet_balance ?? 0 });
++    const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance, reward_pending FROM users WHERE id = ?").bind(user.id).first();
++    const funded = row?.wallet_balance ?? 0;
++    const reward = row?.reward_balance ?? 0;
++    // `balance` is everything the student can draw on (cash + earned rewards; a negative reward
++    // balance after a reversal is netted off). The parts are exposed too for screens that want them.
++    return c.json({ success: true, balance: funded + reward, fundedBalance: funded, rewardBalance: reward, rewardPending: row?.reward_pending ?? 0 });
+   } catch (err) {
+     console.error("getBalance failed:", errText(err));
+     return c.json({ success: false, message: "Could not fetch balance", error: sanitizeError(c.env, err) }, 500);
+@@ -306,36 +310,50 @@
+ 
+     const cost = calculateResourceCost(resource.pages);
+     const ts = nowIso();
++    const txId = generateId();
+ 
+-    // ONE atomic batch (single SQL transaction): deduct, record the purchase,
+-    // bump the counter, log the download, read back the balance.
+-    //  - Insufficient funds: the deduction would drive wallet_balance below
+-    //    zero, which violates the schema's CHECK (wallet_balance >= 0). That
+-    //    aborts and rolls back the ENTIRE batch — nothing is recorded.
+-    //  - Concurrent duplicate purchase (double-click / two tabs): violates
+-    //    the unique index on successful purchases, rolling back this batch's
+-    //    deduction too — so nobody is ever charged twice.
+-    //  - Any other failure: everything rolls back; the user keeps their money
+-    //    and gets no download, instead of the old "paid but nothing happened".
++    // ONE atomic batch (single SQL transaction), exactly as before, now with two pots of money:
++    // earned rewards are spent FIRST (all of it if it covers the price, no cap), then the funded wallet.
++    //  - The split is decided in SQL from the balances at the moment of the write, so two downloads
++    //    started at once can't both spend the same reward.
++    //  - A NEGATIVE reward balance (a reward reversed after it was spent) is a debt: it is settled
++    //    from the funded wallet before anything else, so it blocks downloads until the student tops up.
++    //  - Frozen students can't spend rewards (only their funded wallet).
++    //  - Insufficient money: the deduction would drive wallet_balance below zero, violating the
++    //    schema's CHECK (wallet_balance >= 0). That aborts and rolls back the ENTIRE batch, nothing recorded.
++    //  - Concurrent duplicate purchase: violates the unique index on successful purchases and rolls the
++    //    whole batch back, so nobody is ever charged twice.
+     let results;
+     try {
+       results = await c.env.DB.batch([
+-        c.env.DB.prepare("UPDATE users SET wallet_balance = wallet_balance - ?, updated_at = ? WHERE id = ?").bind(cost, ts, user.id),
+         c.env.DB.prepare(
+-          `INSERT INTO transactions (id, user_id, type, amount, status, resource_id, description, created_at, updated_at)
+-           VALUES (?, ?, 'purchase', ?, 'successful', ?, ?, ?, ?)`
+-        ).bind(generateId(), user.id, cost, resourceId, `${resource.course} — ${resource.title}`, ts, ts),
++          `INSERT INTO transactions (id, user_id, type, amount, status, resource_id, description, from_rewards, created_at, updated_at)
++           SELECT ?, id, 'purchase', ?, 'successful', ?, ?,
++                  CASE WHEN rewards_frozen = 0 AND reward_balance > 0 THEN MIN(reward_balance, ?) ELSE 0 END, ?, ?
++             FROM users WHERE id = ?`
++        ).bind(txId, cost, resourceId, `${resource.course} — ${resource.title}`, cost, ts, ts, user.id),
++        c.env.DB.prepare(
++          `UPDATE users
++              SET wallet_balance = wallet_balance - (? - (SELECT from_rewards FROM transactions WHERE id = ?)) - MAX(-reward_balance, 0),
++                  reward_balance = reward_balance - (SELECT from_rewards FROM transactions WHERE id = ?) + MAX(-reward_balance, 0),
++                  updated_at = ?
++            WHERE id = ?`
++        ).bind(cost, txId, txId, ts, user.id),
+         c.env.DB.prepare("UPDATE resources SET downloads = downloads + 1, updated_at = ? WHERE id = ?").bind(ts, resourceId),
+         c.env.DB.prepare("INSERT INTO download_logs (id, user_id, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+           .bind(generateId(), user.id, resourceId, ts, ts),
+-        c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id),
++        c.env.DB.prepare("SELECT wallet_balance, reward_balance FROM users WHERE id = ?").bind(user.id),
++        c.env.DB.prepare("SELECT from_rewards FROM transactions WHERE id = ?").bind(txId),
+       ]);
+     } catch (batchErr) {
+       const msg = errText(batchErr);
+       if (/CHECK constraint failed/i.test(msg)) {
+-        const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
++        const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance, rewards_frozen FROM users WHERE id = ?").bind(user.id).first();
++        // What this student can actually spend on this item: cash plus usable rewards; a reward debt
++        // (negative balance) reduces it, and a frozen student's rewards don't count.
++        const rewardPart = row?.rewards_frozen ? Math.min(row?.reward_balance ?? 0, 0) : row?.reward_balance ?? 0;
+         return c.json(
+-          { success: false, insufficientBalance: true, message: "Insufficient wallet balance", required: cost, currentBalance: row?.wallet_balance ?? 0 },
++          { success: false, insufficientBalance: true, message: "Insufficient wallet balance", required: cost, currentBalance: Math.max(0, (row?.wallet_balance ?? 0) + rewardPart) },
+           402
+         );
+       }
+@@ -346,10 +364,12 @@
+       throw batchErr;
+     }
+ 
+-    let newBalance = results?.[4]?.results?.[0]?.wallet_balance;
++    const after = results?.[4]?.results?.[0];
++    const rewardsUsed = results?.[5]?.results?.[0]?.from_rewards ?? 0;
++    let newBalance = after ? after.wallet_balance + after.reward_balance : undefined;
+     if (newBalance === undefined) {
+-      const row = await c.env.DB.prepare("SELECT wallet_balance FROM users WHERE id = ?").bind(user.id).first();
+-      newBalance = row?.wallet_balance;
++      const row = await c.env.DB.prepare("SELECT wallet_balance, reward_balance FROM users WHERE id = ?").bind(user.id).first();
++      newBalance = (row?.wallet_balance ?? 0) + (row?.reward_balance ?? 0);
+     }
+ 
+     return c.json({
+@@ -357,6 +377,8 @@
+       alreadyOwned: false,
+       fileUrl: await buildDownloadStreamUrl(c, resourceId, user.id),
+       newBalance,
++      rewardsUsed,
++      fundedUsed: cost - rewardsUsed,
+       message: "Payment successful, download starting",
+     });
+   } catch (err) {
+--- a/src/db/schema.sql
++++ b/src/db/schema.sql
+@@ -349,7 +349,7 @@
+ -- Idempotency: the same student can never be paid twice for the same resource and tier,
+ -- however many times an approval is retried, re-approved, or raced.
+ CREATE UNIQUE INDEX idx_reward_ledger_once
+-  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL;
++  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL AND status != 'shadow';
+ -- A reward can be reversed at most once.
+ CREATE UNIQUE INDEX idx_reward_ledger_one_reversal
+   ON reward_ledger (reverses_id) WHERE reverses_id IS NOT NULL;
+--- a/src/index.js
++++ b/src/index.js
+@@ -8,6 +8,7 @@
+ import downloadsRoutes from "./routes/downloadsRoutes.js";
+ import incentiveRoutes from "./routes/incentiveRoutes.js";
+ import adminIncentiveRoutes from "./routes/adminIncentiveRoutes.js";
++import { runScheduledJobs } from "./jobs/incentiveJobs.js";
+ import walletRoutes from "./routes/walletRoutes.js";
+ import moderationRoutes from "./routes/moderationRoutes.js";
+ import adminResourceRoutes from "./routes/adminResourceRoutes.js";
+@@ -80,10 +81,9 @@
+   return c.json({ success: false, message: "Internal server error" }, 500);
+ });
+ 
+-// Cron Trigger entry point (optional — add `[triggers] crons = ["0 3 * * *"]`
+-// to wrangler.toml). Cleans up uploads that were started but never finished.
++// Cron Trigger entry point; the schedule logic lives in jobs/incentiveJobs.js (see wrangler.toml for the crons).
+ async function scheduled(event, env, ctx) {
+-  ctx.waitUntil(purgeStaleUploads(env, { limit: 20 }));
++  runScheduledJobs(event, env, ctx, { purgeStaleUploads });
+ }
+ 
+ export default {
+--- a/src/routes/resourceRoutes.js
++++ b/src/routes/resourceRoutes.js
+@@ -5,7 +5,6 @@
+   getRecentFeed,
+   getTrending,
+   getRecommended,
+-  getContinueLearning,
+   searchPastQuestions,
+   getResourcePreview,
+ } from "../controllers/browseController.js";
+@@ -22,7 +21,6 @@
+ resourceRoutes.get("/recent", protect, getRecentFeed);
+ resourceRoutes.get("/trending", protect, getTrending);
+ resourceRoutes.get("/recommended", protect, getRecommended);
+-resourceRoutes.get("/continue-learning", protect, getContinueLearning);
+ resourceRoutes.get("/past-questions", protect, searchPastQuestions);
+ resourceRoutes.get("/my-uploads", protect, getMyUploads);
+ resourceRoutes.get("/:id/preview", protect, getResourcePreview);
+--- a/src/services/incentiveConfig.js
++++ b/src/services/incentiveConfig.js
+@@ -9,7 +9,6 @@
+   weeklyCap: 0,
+   maxSinglePayout: 250,
+   adminDailyLimit: 3000,
+-  maxRewardShare: 50,
+   holdDays: 3,
+   ratioAlert: 40,
+   rewards: {
+@@ -23,7 +22,7 @@
+   },
+ };
+ 
+-export const RULE_KEYS = ["monthlyBudget", "weeklyCap", "maxSinglePayout", "adminDailyLimit", "maxRewardShare", "holdDays", "ratioAlert"];
++export const RULE_KEYS = ["monthlyBudget", "weeklyCap", "maxSinglePayout", "adminDailyLimit", "holdDays", "ratioAlert"];
+ export const REWARD_KEYS = Object.keys(DEFAULT_RULES.rewards);
+ 
+ const num = (v, fallback) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fallback);
+--- a/src/services/rewardReversal.js
++++ b/src/services/rewardReversal.js
+@@ -49,6 +49,24 @@
+     ),
+   ];
+ 
++  // Taking back a request's reward frees that slot again (the need is still unmet), and taking back a
++  // referral reward reduces what the inviter shows as earned from that friend. Both only fire if the
++  // reversal above really happened in this batch.
++  if (row.tier === "bounty" && row.bounty_id) {
++    statements.push(
++      DB.prepare(
++        `UPDATE bounties SET paid = MAX(paid - 1, 0), status = CASE WHEN status = 'fulfilled' THEN 'open' ELSE status END, updated_at = ?
++          WHERE id = ? AND ${reversedGuard}`
++      ).bind(ts, row.bounty_id, ...guardArgs)
++    );
++  }
++  if (row.tier === "referral" && row.referral_id) {
++    statements.push(
++      DB.prepare(`UPDATE referrals SET earned = MAX(earned - ?, 0), updated_at = ? WHERE id = ? AND ${reversedGuard}`)
++        .bind(amount, ts, row.referral_id, ...guardArgs)
++    );
++  }
++
+   if (audit) {
+     statements.push(
+       DB.prepare(
+@@ -59,3 +77,30 @@
+   }
+   return statements;
+ }
++
++const CHUNK = 8; // rewards per atomic batch (5 statements each = 40; kept modest, see CLEAR_LIMITS in jobs/incentiveJobs.js)
++
++// Reverses every reward still pending/cleared that was paid for one resource. Used when an approved
++// resource is later removed (duplicate / wrong / bad): the reward was paid for an approval that was
++// a mistake, so it is taken back automatically, with the moderator's removal reason on the record.
++// Returns { count, total }. Safe to call twice (already-reversed rows are skipped).
++export async function reverseRewardsForResource(DB, { resourceId, adminId, adminName, reason, ts }) {
++  const { results: rows } = await DB.prepare(
++    `SELECT id, user_id, amount, tier, label, resource_id, bounty_id, referral_id FROM reward_ledger
++      WHERE resource_id = ? AND type = 'reward' AND status IN ('pending','cleared') AND user_id IS NOT NULL ORDER BY created_at`
++  ).bind(resourceId).all();
++  if (rows.length === 0) return { count: 0, total: 0 };
++
++  for (let i = 0; i < rows.length; i += CHUNK) {
++    await DB.batch(rows.slice(i, i + CHUNK).flatMap((row) => reversalStatements(DB, row, { adminId, adminName, reason, ts })));
++  }
++  const done = await DB.prepare(
++    "SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total FROM reward_ledger WHERE resource_id = ? AND type = 'reward' AND reversed_at = ? AND reversed_by = ?"
++  ).bind(resourceId, ts, adminId).first();
++  if (done.n > 0) {
++    await DB.prepare("INSERT INTO incentive_audit (id, admin_id, admin_name, action, detail, created_at) VALUES (?, ?, ?, 'auto-reverse', ?, ?)")
++      .bind(generateId(), adminId, adminName, `Resource removed: reversed ${done.n} reward(s) totalling ₦${Math.round(done.total).toLocaleString("en-NG")}. Reason: ${reason}`.slice(0, 1000), ts)
++      .run();
++  }
++  return { count: done.n, total: done.total };
++}
+--- a/test/incentiveTestLib.js
++++ b/test/incentiveTestLib.js
+@@ -35,7 +35,7 @@
+ export const n = (DB, sql, ...a) => DB._raw.prepare(sql).get(...a).n;
+ 
+ export const LIVE_RULES = {
+-  monthlyBudget: 20000, weeklyCap: 300, maxSinglePayout: 250, adminDailyLimit: 3000, maxRewardShare: 50, holdDays: 3, ratioAlert: 40,
++  monthlyBudget: 20000, weeklyCap: 300, maxSinglePayout: 250, adminDailyLimit: 3000, holdDays: 3, ratioAlert: 40,
+   rewards: { pastQuestion: 100, lectureNote: 60, high: 150, rare: 200, firstApproval: 50, referralSignup: 0, referralFirstApproval: 50 },
+ };
+ export function setCfg(DB, status, rules = LIVE_RULES) {
+@@ -50,11 +50,11 @@
+ }
+ export function seedResource(DB, o) {
+   const { id, status = "approved", type = "Past Question", uploader = "uploader", reviewedBy = null, reviewedAt = null, bountyId = null,
+-          course = "CSC 301", createdAt = iso(1), hash = null } = o;
++          course = "CSC 301", createdAt = iso(1), hash = null, pages = 5 } = o;
+   DB._raw.prepare(`INSERT INTO resources (id,title,type,department,course,level,semester,session,uploader_id,file_name,file_url,cloudinary_public_id,
+       file_size_bytes,file_extension,pages,status,reviewed_by,reviewed_at,bounty_id,file_hash,created_at,updated_at)
+-      VALUES (?,?,?,'Computer Science',?,'300','First','2024/2025',?,'f.pdf','https://x/f.pdf','pub',1000,'pdf',5,?,?,?,?,?,?,?)`)
+-    .run(id, "T " + id, type, course, uploader, status, reviewedBy, reviewedAt, bountyId, hash, createdAt, createdAt);
++      VALUES (?,?,?,'Computer Science',?,'300','First','2024/2025',?,'f.pdf','https://x/f.pdf','pub',1000,'pdf',?,?,?,?,?,?,?,?)`)
++    .run(id, "T " + id, type, course, uploader, pages, status, reviewedBy, reviewedAt, bountyId, hash, createdAt, createdAt);
+ }
+ let lid = 0;
+ export function seedLedger(DB, o) {
+@@ -70,3 +70,27 @@
+       VALUES (?,?,?,?,?,?,?,?,'',?,?,?,?)`).run(id, course, course.toUpperCase().replace(/[^A-Z0-9]/g, ""), type, level, reward, max, paid, expires, status, created, created);
+   return id;
+ }
++
++// Wraps a DB so that, the first time a statement whose SQL matches `regex` finishes reading, `after()` runs
++// (once). Lets a test change the world BETWEEN a controller's checks and its write, which is the only way to
++// prove that the guards inside the write itself (not just the checks before it) really hold.
++export function hookAfter(DB, regex, after) {
++  let fired = false;
++  const original = DB.prepare.bind(DB);
++  return new Proxy(DB, {
++    get(target, key) {
++      if (key !== "prepare") return target[key];
++      return (sql) => {
++        const st = original(sql);
++        if (!regex.test(sql)) return st;
++        return {
++          bind: (...args) => {
++            const b = st.bind(...args);
++            const wrap = (method) => async () => { const r = await b[method](); if (!fired) { fired = true; await after(); } return r; };
++            return { first: wrap("first"), all: wrap("all"), run: () => b.run() };
++          },
++        };
++      };
++    },
++  });
++}
+--- a/test/phase4b.test.js
++++ b/test/phase4b.test.js
+@@ -125,40 +125,7 @@
+     check("trending: stale downloads excluded from window", body.resources.length === 0, JSON.stringify(body));
+   }
+ 
+-  // =========================================================================
+-  // getContinueLearning
+-  // =========================================================================
+-  {
+-    const { env, DB } = freshEnv();
+-    seedUser(DB, { id: "u1" });
+-    seedResource(DB, { id: "r1" });
+-    seedResource(DB, { id: "r2" });
+-    seedResource(DB, { id: "r3", status: "pending" }); // should never show even if downloaded
+-
+-    // r1 downloaded twice (older + newer) -> should dedupe to ONE entry, most recent
+-    seedDownload(DB, { id: "d1", user: "u1", resource: "r1", createdAt: isoDaysAgo(5) });
+-    seedDownload(DB, { id: "d2", user: "u1", resource: "r1", createdAt: isoDaysAgo(1) });
+-    seedDownload(DB, { id: "d3", user: "u1", resource: "r2", createdAt: isoDaysAgo(3) });
+-    seedDownload(DB, { id: "d4", user: "u1", resource: "r3", createdAt: isoDaysAgo(1) }); // pending resource
+-
+-    const token = await tokenFor(env, "u1");
+-    const res = await getAuthed("/api/resources/continue-learning", token, env);
+-    const body = await res.json();
+-    check("continue-learning: dedupes to 2 resources (r3 excluded)", body.resources.length === 2, JSON.stringify(body));
+-    check("continue-learning: most recent first", body.resources[0].id === "r1");
+-  }
+-  {
+-    // another user's downloads don't leak in
+-    const { env, DB } = freshEnv();
+-    seedUser(DB, { id: "u1" });
+-    seedUser(DB, { id: "u2" });
+-    seedResource(DB, { id: "r1" });
+-    seedDownload(DB, { id: "d1", user: "u2", resource: "r1" });
+-    const token = await tokenFor(env, "u1");
+-    const res = await getAuthed("/api/resources/continue-learning", token, env);
+-    const body = await res.json();
+-    check("continue-learning: isolated per user", body.resources.length === 0);
+-  }
++  // (getContinueLearning was removed with the dashboard redesign: the dashboard no longer shows it.)
+ 
+   // =========================================================================
+   // searchPastQuestions
+--- a/test/phase6b-incentives-admin.test.js
++++ b/test/phase6b-incentives-admin.test.js
+@@ -115,15 +115,17 @@
+   bad = good(); bad.monthlyBudget = -5; check("config PUT: negative → 400", (await put(bad)).status === 400);
+   bad = good(); bad.rewards.pastQuestion = 99.5; check("config PUT: fractional naira → 400", (await put(bad)).status === 400);
+   bad = good(); bad.holdDays = 31; check("config PUT: hold period > 30 days → 400", (await put(bad)).status === 400);
+-  bad = good(); bad.maxRewardShare = 101; check("config PUT: reward share > 100% → 400", (await put(bad)).status === 400);
+   bad = good(); delete bad.rewards.rare; check("config PUT: missing reward key → 400", (await put(bad)).status === 400);
+   bad = good(); bad.monthlyBudget = "20000"; check("config PUT: numeric strings rejected (must be numbers)", (await put(bad)).status === 400);
+   check("config PUT: rejected requests wrote nothing (config + audit untouched)", one(DB, "SELECT rules FROM incentive_config").rules === "{}" && auditRows(DB).length === 0);
+ 
+   r = await put(good(), "Recommended launch values");
+-  check("config PUT: valid rules saved and returned flat", r.status === 200 && r.body.success && r.body.monthlyBudget === 20000 && r.body.rewards.pastQuestion === 100 && !r.body.clamped);
++  check("config PUT: valid rules saved and returned flat", r.status === 200 && r.body.success && r.body.monthlyBudget === 20000 && r.body.rewards.pastQuestion === 100 && !r.body.clamped && !("maxRewardShare" in r.body));
+   let a = auditRows(DB);
+   check("config PUT: audit lists the changes AND the reason", a.length === 1 && a[0].action === "rules" && /monthlyBudget 0→20000/.test(a[0].detail) && /Recommended launch values/.test(a[0].detail), a[0]?.detail);
++  const legacy = good(); legacy.maxRewardShare = 50;
++  r = await put(legacy, "An older admin page still sends the removed share setting");
++  check("config PUT: a legacy `maxRewardShare` from an older admin page is ignored, not an error, and never stored", r.status === 200 && r.body.unchanged === true && !("maxRewardShare" in r.body) && !/maxRewardShare/.test(one(DB, "SELECT rules FROM incentive_config").rules));
+   r = await put(good(), "Saving the same values again");
+   check("config PUT: identical values → success, flagged unchanged, NO audit noise", r.body.unchanged === true && auditRows(DB).length === 1);
+ 
+--- a/test/phase6b-incentives-student.test.js
++++ b/test/phase6b-incentives-student.test.js
+@@ -46,8 +46,9 @@
+   setCfg(DB, "live");
+ 
+   let r = await getIncentiveStatus(ctx(env, { user: as("me") }));
+-  check("live: config exposes only student-relevant fields", r.body.enabled && r.body.status === "live" && r.body.holdDays === 3 && r.body.weeklyCap === 300 && r.body.maxRewardShare === 50
++  check("live: config exposes only student-relevant fields", r.body.enabled && r.body.status === "live" && r.body.holdDays === 3 && r.body.weeklyCap === 300
+     && Object.keys(r.body.rewards).sort().join() === "firstApproval,lectureNote,pastQuestion,referralFirstApproval" && r.body.rewards.pastQuestion === 100, JSON.stringify(r.body));
++  check("live: there is no share cap any more (rewards can cover a whole download)", !("maxRewardShare" in r.body));
+   check("live: internal limits (monthly budget, tiers high/rare, admin limit) are NOT exposed", !("monthlyBudget" in r.body) && !("high" in r.body.rewards) && !("adminDailyLimit" in r.body));
+ 
+   seedLedger(DB, { user: "me", amount: 100, status: "pending", label: "CSC 301 approved", createdAt: iso(0) });
+--- a/wrangler.toml
++++ b/wrangler.toml
+@@ -8,6 +8,11 @@
+ database_name = "sharef-db"
+ database_id = "34e84feb-6269-437d-9467-717ef98c8392"   # `wrangler d1 create sharef-db` fills this in
+ 
++# Scheduled jobs (see scheduled() in src/index.js). Hourly: rewards past their hold period become
++# spendable. Daily at 02:00 UTC (03:00 Lagos): cleanup of unfinished uploads + reward fraud-signal scan.
++[triggers]
++crons = ["0 * * * *", "0 2 * * *"]
++
+ [vars]
+ FRONTEND_URL = "https://sharef-resource.vercel.app"   # update to your real Vercel URL
+ 

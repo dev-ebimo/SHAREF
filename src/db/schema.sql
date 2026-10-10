@@ -41,11 +41,20 @@ CREATE TABLE users (
   failed_logins               INTEGER NOT NULL DEFAULT 0,
   lockout_until               TEXT,
   password_changed_at         TEXT,
+  -- Incentive columns (see migrations/004_incentives.sql)
+  reward_balance              REAL NOT NULL DEFAULT 0,       -- spendable rewards. NO >= 0 check: a reversal after the student spent it may legitimately go negative
+  reward_pending              REAL NOT NULL DEFAULT 0 CHECK (reward_pending >= 0),  -- rewards still inside the hold period
+  rewards_frozen              INTEGER NOT NULL DEFAULT 0,    -- 0/1: moderator froze this student's rewards
+  referral_code               TEXT,                          -- unique (partial index below), created lazily
+  referred_by                 TEXT,                          -- inviter's user id (informational, no FK so deletes stay simple)
+  signup_ip_hash              TEXT,                          -- salted SHA-256 of the signup IP, for referral-ring detection only
   created_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
 CREATE INDEX idx_users_role_lastlogin ON users (role, last_login_at DESC);
+CREATE UNIQUE INDEX idx_users_referral_code ON users (referral_code) WHERE referral_code IS NOT NULL;
+CREATE INDEX idx_users_signup_ip_hash ON users (signup_ip_hash) WHERE signup_ip_hash IS NOT NULL;
 
 -- Default shape written into `preferences` for a brand-new user (app-layer
 -- default, since SQLite's column DEFAULT can't express nested JSON structure):
@@ -100,9 +109,14 @@ CREATE TABLE resources (
   reviewed_at                TEXT,
   description                TEXT NOT NULL DEFAULT '',
 
+  -- Incentive columns (see migrations/004_incentives.sql)
+  file_hash                  TEXT,                          -- SHA-256 hex, computed in the moderator's browser at review time; used for duplicate detection
+  bounty_id                  TEXT,                          -- the request (bounty) this upload answers, validated at upload time
+
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+CREATE INDEX idx_resources_file_hash ON resources (file_hash) WHERE file_hash IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- upload_intents — permits for direct browser -> Cloudinary uploads
@@ -152,6 +166,7 @@ CREATE TABLE transactions (
   reference    TEXT UNIQUE,                    -- sparse-unique: SQLite treats each NULL as distinct, same as Mongo
   resource_id  TEXT REFERENCES resources(id),  -- only set for purchases
   description  TEXT NOT NULL DEFAULT '',
+  from_rewards REAL NOT NULL DEFAULT 0,        -- portion of a purchase paid from reward balance (funded part = amount - from_rewards)
   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -253,3 +268,122 @@ CREATE TABLE download_logs (
 CREATE INDEX idx_downloadlogs_user_created     ON download_logs (user_id, created_at DESC);
 CREATE INDEX idx_downloadlogs_user_resource    ON download_logs (user_id, resource_id);
 CREATE INDEX idx_downloadlogs_created_resource ON download_logs (created_at DESC, resource_id);
+
+-- ----------------------------------------------------------------------------
+-- Incentive program (see BACKEND_INTEGRATION.md in the update package)
+--   status 'off' (the default) = nothing observable changes for students or moderators.
+-- ----------------------------------------------------------------------------
+
+-- Single-row settings table (id is forced to 1). `rules` is a JSON object of the
+-- numeric limits and reward amounts; the app merges it over safe defaults.
+CREATE TABLE incentive_config (
+  id               INTEGER PRIMARY KEY CHECK (id = 1),
+  status           TEXT NOT NULL DEFAULT 'off' CHECK (status IN ('off','shadow','live','paused')),
+  rules            TEXT NOT NULL DEFAULT '{}',
+  season_name      TEXT,
+  season_ends_at   TEXT,
+  updated_by       TEXT,
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+INSERT OR IGNORE INTO incentive_config (id, status, rules) VALUES (1, 'off', '{}');
+
+-- Requests ("Wanted") that pay a fixed reward for a specific missing resource.
+CREATE TABLE bounties (
+  id            TEXT PRIMARY KEY,
+  course        TEXT NOT NULL,                    -- as displayed, e.g. 'CSC 305'
+  course_key    TEXT NOT NULL,                    -- normalised for matching: upper-case, letters+digits only ('CSC305')
+  type          TEXT NOT NULL CHECK (type IN ('Past Questions','Lecture Notes','Revision Sheet')),
+  level         TEXT NOT NULL,                    -- '300 Level'
+  reward        REAL NOT NULL CHECK (reward > 0),
+  max_payouts   INTEGER NOT NULL DEFAULT 1 CHECK (max_payouts BETWEEN 1 AND 3),
+  paid          INTEGER NOT NULL DEFAULT 0,
+  note          TEXT NOT NULL DEFAULT '',
+  expires_at    TEXT NOT NULL,                    -- ISO8601 (end of the chosen day, Africa/Lagos)
+  status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','fulfilled')),  -- 'expired' is derived from expires_at
+  created_by    TEXT,                             -- admin id (no FK: an admin deleting their account must not fail)
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_bounties_status_expires ON bounties (status, expires_at);
+CREATE INDEX idx_bounties_course_key ON bounties (course_key);
+
+-- Referral relationships. One inviter per invitee. Statuses move signed_up -> verified -> contributed.
+CREATE TABLE referrals (
+  id          TEXT PRIMARY KEY,
+  inviter_id  TEXT NOT NULL REFERENCES users(id),
+  invitee_id  TEXT NOT NULL UNIQUE REFERENCES users(id),
+  status      TEXT NOT NULL DEFAULT 'signed_up' CHECK (status IN ('signed_up','verified','contributed')),
+  earned      REAL NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_referrals_inviter ON referrals (inviter_id, created_at DESC);
+
+-- Every reward and every reversal. Reversals are separate NEGATIVE rows so history is never rewritten.
+-- user_id / resource_id are nullable for the same reason as transactions: financial history
+-- must outlive a deleted account or resource (see deleteMyAccount / permanentlyDeleteResource).
+CREATE TABLE reward_ledger (
+  id               TEXT PRIMARY KEY,
+  user_id          TEXT REFERENCES users(id),
+  type             TEXT NOT NULL CHECK (type IN ('reward','reversal')),
+  amount           REAL NOT NULL,                 -- reversals are negative
+  status           TEXT NOT NULL CHECK (status IN ('pending','cleared','reversed','shadow')),
+  tier             TEXT CHECK (tier IS NULL OR tier IN ('bounty','standard','high','rare','first','referral','challenge')),
+  label            TEXT NOT NULL DEFAULT '',
+  resource_id      TEXT REFERENCES resources(id),
+  bounty_id        TEXT,
+  referral_id      TEXT,
+  approved_by      TEXT,                          -- admin id (no FK)
+  note             TEXT NOT NULL DEFAULT '',
+  clears_at        TEXT,                          -- when a pending reward becomes spendable
+  reversed_at      TEXT,
+  reversed_by      TEXT,
+  reversal_reason  TEXT NOT NULL DEFAULT '',
+  reverses_id      TEXT,                          -- on a reversal row: the reward it cancels
+  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_reward_ledger_user_created ON reward_ledger (user_id, created_at DESC);
+CREATE INDEX idx_reward_ledger_status_clears ON reward_ledger (status, clears_at);
+CREATE INDEX idx_reward_ledger_created ON reward_ledger (created_at);
+CREATE INDEX idx_reward_ledger_approver ON reward_ledger (approved_by, created_at);
+-- Idempotency: the same student can never be paid twice for the same resource and tier,
+-- however many times an approval is retried, re-approved, or raced.
+CREATE UNIQUE INDEX idx_reward_ledger_once
+  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL AND status != 'shadow';
+-- A reward can be reversed at most once.
+CREATE UNIQUE INDEX idx_reward_ledger_one_reversal
+  ON reward_ledger (reverses_id) WHERE reverses_id IS NOT NULL;
+
+-- Fraud signals raised by the nightly job (Phase 3) and resolved by a moderator.
+CREATE TABLE incentive_flags (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id),
+  signals      TEXT NOT NULL DEFAULT '[]',        -- JSON array of plain-English lines
+  exposure     REAL NOT NULL DEFAULT 0,
+  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','dismissed','frozen','reversed')),
+  note         TEXT NOT NULL DEFAULT '',
+  resolved_by  TEXT,
+  resolved_at  TEXT,
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_incentive_flags_status ON incentive_flags (status, created_at DESC);
+CREATE INDEX idx_incentive_flags_user ON incentive_flags (user_id);
+
+-- Append-only record of every consequential admin action. admin_name is a snapshot so
+-- the log stays readable after an account is deleted; admin_id is NULL for system events.
+CREATE TABLE incentive_audit (
+  id          TEXT PRIMARY KEY,
+  admin_id    TEXT,
+  admin_name  TEXT NOT NULL,
+  action      TEXT NOT NULL,
+  detail      TEXT NOT NULL DEFAULT '',
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX idx_incentive_audit_created ON incentive_audit (created_at DESC);
+
+-- Makes the audit log tamper-evident: rows can be added but never changed or removed.
+CREATE TRIGGER incentive_audit_no_update BEFORE UPDATE ON incentive_audit
+BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;
+CREATE TRIGGER incentive_audit_no_delete BEFORE DELETE ON incentive_audit
+BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;

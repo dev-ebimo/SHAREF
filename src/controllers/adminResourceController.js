@@ -1,4 +1,7 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
+import { incentiveCascadeForResource } from "../services/referralService.js";
+import { reverseRewardsForResource } from "../services/rewardReversal.js";
+import { adminDisplayName } from "../services/incentiveConfig.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
 
@@ -231,7 +234,19 @@ export async function removeApprovedResource(c) {
       return c.json({ success: false, message: exists ? "This resource is not currently approved" : "Resource not found" }, exists ? 409 : 404);
     }
 
-    return c.json({ success: true, message: "Resource removed and moved to Rejected" });
+    // Rewards paid for an approval that turned out to be a mistake are taken back automatically.
+    // The removal itself has already succeeded, so a problem here is reported, not fatal.
+    let message = "Resource removed and moved to Rejected";
+    try {
+      const ts = new Date().toISOString();
+      const adminName = await adminDisplayName(c.env.DB, user.id);
+      const undone = await reverseRewardsForResource(c.env.DB, { resourceId: id, adminId: user.id, adminName, reason: String(reason).slice(0, 300), ts });
+      if (undone.count > 0) message += `. ${undone.count} reward(s) paid for it were taken back automatically.`;
+    } catch (revErr) {
+      console.error("auto-reversal failed:", revErr?.message);
+      message += ". Its reward could not be reversed automatically, so please check Incentives → Payouts.";
+    }
+    return c.json({ success: true, message });
   } catch (err) {
     console.error("adminResourceController error:", err?.message);
     return c.json({ success: false, message: "Could not remove resource", error: sanitizeError(c.env, err) }, 500);
@@ -302,6 +317,7 @@ export async function permanentlyDeleteResource(c) {
       c.env.DB.prepare("DELETE FROM download_logs WHERE resource_id = ?").bind(id),
       c.env.DB.prepare("UPDATE transactions SET resource_id = NULL WHERE resource_id = ?").bind(id),
       c.env.DB.prepare("UPDATE notifications SET resource_id = NULL, updated_at = ? WHERE resource_id = ?").bind(timestamp, id),
+      ...incentiveCascadeForResource(c.env.DB, id),
       c.env.DB.prepare("DELETE FROM resources WHERE id = ?").bind(id),
     ]);
 

@@ -93,6 +93,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 cardHTML += `<div class="rejection-reason"><strong>Note:</strong> ${escapeHtml(item.rejectionReason)}</div>`;
             }
 
+            // Reward status (only present once the incentive backend is live).
+            if (item.reward && item.reward.amount && item.status !== 'rejected') {
+                const rwLabel = item.reward.status === 'reversed' ? 'Reward taken back'
+                    : item.status === 'approved' ? 'Reward ' + (item.reward.status === 'pending' ? 'clearing' : 'earned')
+                    : 'Up to ';
+                cardHTML += `<div class="rw-upload-chip ${escapeHtml(item.reward.status || '')}">${rwLabel === 'Up to ' ? 'Up to ' : rwLabel + ' '}₦${Number(item.reward.amount).toLocaleString('en-NG')}${item.status === 'pending' ? ' if approved' : ''}</div>`;
+            }
+
             cardHTML += `
                 <div class="card-footer">
                     <span class="card-meta">Uploaded: ${formatDate(item.createdAt)}</span>

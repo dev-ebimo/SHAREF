@@ -125,40 +125,7 @@ async function run() {
     check("trending: stale downloads excluded from window", body.resources.length === 0, JSON.stringify(body));
   }
 
-  // =========================================================================
-  // getContinueLearning
-  // =========================================================================
-  {
-    const { env, DB } = freshEnv();
-    seedUser(DB, { id: "u1" });
-    seedResource(DB, { id: "r1" });
-    seedResource(DB, { id: "r2" });
-    seedResource(DB, { id: "r3", status: "pending" }); // should never show even if downloaded
-
-    // r1 downloaded twice (older + newer) -> should dedupe to ONE entry, most recent
-    seedDownload(DB, { id: "d1", user: "u1", resource: "r1", createdAt: isoDaysAgo(5) });
-    seedDownload(DB, { id: "d2", user: "u1", resource: "r1", createdAt: isoDaysAgo(1) });
-    seedDownload(DB, { id: "d3", user: "u1", resource: "r2", createdAt: isoDaysAgo(3) });
-    seedDownload(DB, { id: "d4", user: "u1", resource: "r3", createdAt: isoDaysAgo(1) }); // pending resource
-
-    const token = await tokenFor(env, "u1");
-    const res = await getAuthed("/api/resources/continue-learning", token, env);
-    const body = await res.json();
-    check("continue-learning: dedupes to 2 resources (r3 excluded)", body.resources.length === 2, JSON.stringify(body));
-    check("continue-learning: most recent first", body.resources[0].id === "r1");
-  }
-  {
-    // another user's downloads don't leak in
-    const { env, DB } = freshEnv();
-    seedUser(DB, { id: "u1" });
-    seedUser(DB, { id: "u2" });
-    seedResource(DB, { id: "r1" });
-    seedDownload(DB, { id: "d1", user: "u2", resource: "r1" });
-    const token = await tokenFor(env, "u1");
-    const res = await getAuthed("/api/resources/continue-learning", token, env);
-    const body = await res.json();
-    check("continue-learning: isolated per user", body.resources.length === 0);
-  }
+  // (getContinueLearning was removed with the dashboard redesign: the dashboard no longer shows it.)
 
   // =========================================================================
   // searchPastQuestions

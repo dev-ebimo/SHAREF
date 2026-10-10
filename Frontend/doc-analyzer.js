@@ -247,8 +247,22 @@
     return libs;
   }
 
+  // SHA-256 of the file as lowercase hex, or null if the browser can't do it. The server
+  // uses it to spot the same file being uploaded twice. It is advisory, so ANY problem here
+  // must stay invisible and never get in the way of reviewing the document.
+  async function sha256Hex(buffer) {
+    try {
+      if (!root.crypto || !root.crypto.subtle) return null;
+      var digest = await root.crypto.subtle.digest("SHA-256", buffer);
+      return Array.prototype.map.call(new Uint8Array(digest), function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+    } catch (e) {
+      return null;
+    }
+  }
+
   async function analyze(fileUrl, fileName) {
     var ext = extOf(fileName);
+    var fileHash = null;
     try {
       var res = await fetch(fileUrl);
       if (!res.ok) return failure("Couldn't download the file for analysis — enter the page count manually.");
@@ -256,10 +270,16 @@
       if (declared && declared > MAX_ANALYZE_BYTES) return failure("This file is too large to analyze automatically — enter the page count manually.");
       var buffer = await res.arrayBuffer();
       if (buffer.byteLength > MAX_ANALYZE_BYTES) return failure("This file is too large to analyze automatically — enter the page count manually.");
+      fileHash = await sha256Hex(buffer);
       var libs = await loadLibsFor(ext);
-      return await analyzeBuffer(buffer, fileName, libs);
+      var result = await analyzeBuffer(buffer, fileName, libs);
+      result.fileHash = fileHash;
+      return result;
     } catch (err) {
-      return failure("Couldn't analyze this file automatically — enter the page count manually.");
+      // The file was downloaded (so the hash is still useful) even if parsing it failed.
+      var failed = failure("Couldn't analyze this file automatically — enter the page count manually.");
+      failed.fileHash = fileHash;
+      return failed;
     }
   }
 

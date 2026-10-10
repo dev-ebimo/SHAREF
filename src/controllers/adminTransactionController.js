@@ -1,6 +1,20 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { EFFECTIVE_STATUS_CASE, activeSinceIso } from "./adminUserController.js";
 
+// Every wallet transaction PLUS rewards, as one list. Rewards are not wallet transactions, so they
+// are presented here as two extra virtual types ("reward" = credit, "reward_reversal" = debit) built
+// from the reward ledger. Shadow rows are never shown (no money ever moved). Money TOTALS below only
+// ever sum type = 'deposit' / 'purchase', so promotional money can't inflate revenue.
+const TX_BASE = `
+  SELECT id, user_id, type, amount, status, from_rewards, created_at FROM transactions
+  UNION ALL
+  SELECT id, user_id, 'reward', amount, CASE status WHEN 'pending' THEN 'pending' ELSE 'successful' END, 0, created_at
+    FROM reward_ledger WHERE type = 'reward' AND status != 'shadow' AND user_id IS NOT NULL
+  UNION ALL
+  SELECT id, user_id, 'reward_reversal', -amount, 'successful', 0, created_at
+    FROM reward_ledger WHERE type = 'reversal' AND user_id IS NOT NULL
+`;
+
 // @route GET /api/admin/transactions/summary
 // Powers the category-breakdown cards (Active/Suspended/Inactive) and the
 // overview stat cards (Total Deposit Volume, Total Spent, etc).
@@ -9,9 +23,10 @@ export async function getTransactionSummary(c) {
     const activeSince = activeSinceIso();
 
     const { results } = await c.env.DB.prepare(
-      `WITH tx_data AS (
+      `WITH base AS (${TX_BASE}),
+       tx_data AS (
          SELECT t.*, ${EFFECTIVE_STATUS_CASE} AS effective_status
-         FROM transactions t
+         FROM base t
          JOIN users u ON u.id = t.user_id
        )
        SELECT
@@ -19,7 +34,7 @@ export async function getTransactionSummary(c) {
          COUNT(*) AS count,
          COUNT(DISTINCT user_id) AS users,
          SUM(CASE WHEN type = 'deposit' AND status = 'successful' THEN amount ELSE 0 END) AS volume,
-         SUM(CASE WHEN type = 'purchase' AND status = 'successful' THEN amount ELSE 0 END) AS spent
+         SUM(CASE WHEN type = 'purchase' AND status = 'successful' THEN amount - from_rewards ELSE 0 END) AS spent
        FROM tx_data
        GROUP BY effective_status`
     )
@@ -60,10 +75,11 @@ export async function getTransactions(c) {
     const skip = (page - 1) * limit;
 
     const cte = `
-      WITH tx_data AS (
+      WITH base AS (${TX_BASE}),
+      tx_data AS (
         SELECT t.*, u.full_name AS user_full_name, u.email AS user_email,
                ${EFFECTIVE_STATUS_CASE} AS effective_status
-        FROM transactions t
+        FROM base t
         JOIN users u ON u.id = t.user_id
       )
     `;
@@ -80,7 +96,7 @@ export async function getTransactions(c) {
     }
     const where = conditions.join(" AND ");
 
-    const dataSql = `${cte} SELECT * FROM tx_data WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+    const dataSql = `${cte} SELECT * FROM tx_data WHERE ${where} ORDER BY created_at DESC, id LIMIT ? OFFSET ?`;
     const countSql = `${cte} SELECT COUNT(*) AS n FROM tx_data WHERE ${where}`;
 
     const [{ results }, countRow] = await Promise.all([

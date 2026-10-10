@@ -1,0 +1,462 @@
+--- a/src/index.js
++++ b/src/index.js
+@@ -5,6 +5,7 @@
+ import bookmarkRoutes from "./routes/bookmarkRoutes.js";
+ import studentNotificationRoutes from "./routes/studentNotificationRoutes.js";
+ import resourceRoutes from "./routes/resourceRoutes.js";
++import downloadsRoutes from "./routes/downloadsRoutes.js";
+ import walletRoutes from "./routes/walletRoutes.js";
+ import moderationRoutes from "./routes/moderationRoutes.js";
+ import adminResourceRoutes from "./routes/adminResourceRoutes.js";
+@@ -58,6 +59,7 @@
+ app.route("/api/bookmarks", bookmarkRoutes);
+ app.route("/api/notifications", studentNotificationRoutes);
+ app.route("/api/resources", resourceRoutes);
++app.route("/api/downloads", downloadsRoutes);
+ app.route("/api/wallet", walletRoutes);
+ app.route("/api/admin/moderation", moderationRoutes);
+ app.route("/api/admin/resources", adminResourceRoutes);
+--- a/src/routes/resourceRoutes.js
++++ b/src/routes/resourceRoutes.js
+@@ -4,6 +4,7 @@
+ import {
+   getRecentFeed,
+   getTrending,
++  getRecommended,
+   getContinueLearning,
+   searchPastQuestions,
+   getResourcePreview,
+@@ -20,6 +21,7 @@
+ 
+ resourceRoutes.get("/recent", protect, getRecentFeed);
+ resourceRoutes.get("/trending", protect, getTrending);
++resourceRoutes.get("/recommended", protect, getRecommended);
+ resourceRoutes.get("/continue-learning", protect, getContinueLearning);
+ resourceRoutes.get("/past-questions", protect, searchPastQuestions);
+ resourceRoutes.get("/my-uploads", protect, getMyUploads);
+--- /dev/null
++++ b/src/routes/downloadsRoutes.js
+@@ -0,0 +1,11 @@
++import { Hono } from "hono";
++import { listMyDownloads, getDownloadFile } from "../controllers/downloadsController.js";
++import { protect } from "../middleware/protect.js";
++
++const downloadsRoutes = new Hono();
++
++// A student's library of files they have paid for. Re-downloading is free.
++downloadsRoutes.get("/", protect, listMyDownloads);
++downloadsRoutes.get("/:resourceId/file", protect, getDownloadFile);
++
++export default downloadsRoutes;
+--- /dev/null
++++ b/src/controllers/downloadsController.js
+@@ -0,0 +1,109 @@
++import { sanitizeError } from "../utils/sanitizeError.js";
++import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
++import { formatFileSize, levelLabel } from "../utils/resourceShape.js";
++import { recordDownloadOnly } from "./walletController.js";
++
++// "Ownership" is the same record /wallet/charge uses to answer `alreadyOwned`:
++// a successful purchase transaction. The unique index
++// idx_transactions_one_purchase_per_resource guarantees at most one per
++// (user, resource), so each resource appears once in the library.
++//
++// Purchases of a resource that was later deleted keep their transaction
++// (resource_id is set NULL on deletion, see adminResourceController), so the
++// student's spend history stays accurate. Those rows are listed with
++// available:false, titled from the description the purchase stored.
++
++// @route GET /api/downloads
++export async function listMyDownloads(c) {
++  try {
++    const user = c.get("user");
++
++    const { results } = await c.env.DB.prepare(
++      `SELECT t.id AS tx_id, t.amount AS price_paid, t.description AS tx_description,
++              r.id AS resource_id, r.title, r.course, r.type, r.level, r.status,
++              r.file_extension, r.file_size_bytes,
++              COALESCE(
++                (SELECT MAX(dl.created_at) FROM download_logs dl
++                  WHERE dl.user_id = t.user_id AND dl.resource_id = t.resource_id),
++                t.created_at
++              ) AS downloaded_at
++         FROM transactions t
++         LEFT JOIN resources r ON r.id = t.resource_id
++        WHERE t.user_id = ? AND t.type = 'purchase' AND t.status = 'successful'
++        ORDER BY downloaded_at DESC`
++    )
++      .bind(user.id)
++      .all();
++
++    const downloads = results.map((row) => {
++      if (!row.resource_id) {
++        // Resource was deleted after purchase.
++        const [course, ...rest] = String(row.tx_description || "").split(" — ");
++        return {
++          id: row.tx_id,
++          title: rest.length ? rest.join(" — ") : course || "Removed resource",
++          course: rest.length ? course : "",
++          type: "",
++          level: "",
++          fileExtension: "",
++          size: "",
++          pricePaid: row.price_paid,
++          downloadedAt: row.downloaded_at,
++          available: false,
++        };
++      }
++      return {
++        id: row.resource_id,
++        title: row.title,
++        course: row.course,
++        type: row.type,
++        level: levelLabel(row.level),
++        fileExtension: row.file_extension,
++        size: formatFileSize(row.file_size_bytes),
++        pricePaid: row.price_paid,
++        downloadedAt: row.downloaded_at,
++        available: row.status === "approved",
++      };
++    });
++
++    return c.json({ success: true, downloads });
++  } catch (err) {
++    console.error("downloadsController error:", err?.message);
++    return c.json({ success: false, message: "Could not fetch your downloads", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/downloads/:resourceId/file
++// Free re-download. MUST NEVER touch the wallet: it only checks ownership
++// and mints a short-lived stream link. A caller who doesn't own the resource
++// gets 403 whether or not the id exists, so this can't be used to probe ids.
++export async function getDownloadFile(c) {
++  try {
++    const user = c.get("user");
++    const resourceId = c.req.param("resourceId");
++
++    const owned = await c.env.DB.prepare(
++      "SELECT id FROM transactions WHERE user_id = ? AND resource_id = ? AND type = 'purchase' AND status = 'successful'"
++    )
++      .bind(user.id, resourceId)
++      .first();
++    if (!owned) {
++      return c.json({ success: false, message: "You haven't downloaded this resource yet." }, 403);
++    }
++
++    const resource = await c.env.DB.prepare("SELECT id, status FROM resources WHERE id = ?").bind(resourceId).first();
++    if (!resource || resource.status !== "approved") {
++      return c.json({ success: false, message: "This resource is no longer available." }, 404);
++    }
++
++    // Same bookkeeping as the alreadyOwned branch of /wallet/charge, so the
++    // library's "downloaded at" and the download counters behave identically
++    // whichever endpoint the student used.
++    await recordDownloadOnly(c, resourceId, user.id);
++
++    return c.json({ success: true, fileUrl: await buildDownloadStreamUrl(c, resourceId, user.id) });
++  } catch (err) {
++    console.error("downloadsController error:", err?.message);
++    return c.json({ success: false, message: "Could not start the download", error: sanitizeError(c.env, err) }, 500);
++  }
++}
+--- a/src/controllers/bookmarkController.js
++++ b/src/controllers/bookmarkController.js
+@@ -1,6 +1,6 @@
+ import { sanitizeError } from "../utils/sanitizeError.js";
+ import { generateId } from "../utils/id.js";
+-import { shapeResource } from "../utils/resourceShape.js";
++import { shapeResource, levelLabel } from "../utils/resourceShape.js";
+ 
+ function nowIso() {
+   return new Date().toISOString();
+@@ -47,7 +47,13 @@
+     const user = c.get("user");
+ 
+     const { results } = await c.env.DB.prepare(
+-      `SELECT r.* FROM bookmarks b
++      `SELECT r.*, b.created_at AS saved_at,
++              EXISTS (
++                SELECT 1 FROM transactions t
++                 WHERE t.user_id = b.user_id AND t.resource_id = r.id
++                   AND t.type = 'purchase' AND t.status = 'successful'
++              ) AS owned
++       FROM bookmarks b
+        JOIN resources r ON r.id = b.resource_id
+        WHERE b.user_id = ? AND r.status = 'approved'
+        ORDER BY b.created_at DESC`
+@@ -55,7 +61,17 @@
+       .bind(user.id)
+       .all();
+ 
+-    return c.json({ success: true, resources: results.map(shapeResource) });
++    // Wishlist extras: `owned` hides the price and shows "Downloaded", `savedAt`
++    // drives "Recently added". Only the wishlist page reads `level`, and it
++    // prints it as-is, hence the "300 Level" label.
++    const resources = results.map((r) => ({
++      ...shapeResource(r),
++      level: levelLabel(r.level),
++      fileExtension: r.file_extension,
++      owned: !!r.owned,
++      savedAt: r.saved_at,
++    }));
++    return c.json({ success: true, resources });
+   } catch (err) {
+     console.error("bookmarkController error:", err?.message);
+     return c.json({ success: false, message: "Could not fetch bookmarks", error: sanitizeError(c.env, err) }, 500);
+--- a/src/controllers/browseController.js
++++ b/src/controllers/browseController.js
+@@ -26,6 +26,52 @@
+   }
+ }
+ 
++// @route GET /api/resources/recommended?limit=4
++// Powers the dashboard's "For your level" row: approved resources matching the
++// student's own department AND level, excluding anything they already own,
++// ranked by downloads in the last 30 days and then by recency. A student with
++// no department/level yet gets an empty list (the dashboard shows a
++// "complete your profile" prompt instead).
++export async function getRecommended(c) {
++  try {
++    const limit = Math.min(Math.max(parseInt(c.req.query("limit"), 10) || 4, 1), 12);
++    const user = c.get("user");
++
++    const me = await c.env.DB.prepare("SELECT department, level FROM users WHERE id = ?").bind(user.id).first();
++    if (!me?.department || !me?.level) {
++      return c.json({ success: true, resources: [] });
++    }
++
++    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
++    const { results } = await c.env.DB.prepare(
++      `SELECT r.*, COALESCE(dl.recent_downloads, 0) AS recentDownloads
++         FROM resources r
++         LEFT JOIN (
++           SELECT resource_id, COUNT(*) AS recent_downloads
++             FROM download_logs
++            WHERE created_at >= ?
++            GROUP BY resource_id
++         ) dl ON dl.resource_id = r.id
++        WHERE r.status = 'approved' AND r.department = ? AND r.level = ?
++          AND NOT EXISTS (
++            SELECT 1 FROM transactions t
++             WHERE t.user_id = ? AND t.resource_id = r.id
++               AND t.type = 'purchase' AND t.status = 'successful'
++          )
++        ORDER BY recentDownloads DESC, r.created_at DESC
++        LIMIT ?`
++    )
++      .bind(since, me.department, me.level, user.id, limit)
++      .all();
++
++    const resources = results.map((r) => ({ ...shapeResource(r), recentDownloads: r.recentDownloads }));
++    return c.json({ success: true, resources });
++  } catch (err) {
++    console.error("browseController error:", err?.message);
++    return c.json({ success: false, message: "Could not fetch recommended resources", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
+ // @route GET /api/resources/trending
+ // Powers the Trending resource cards — most downloaded in the last 3 days,
+ // scoped to the logged-in student's own department. A student with no
+--- a/src/controllers/walletController.js
++++ b/src/controllers/walletController.js
+@@ -260,7 +260,7 @@
+   }
+ }
+ 
+-async function recordDownloadOnly(c, resourceId, userId) {
++export async function recordDownloadOnly(c, resourceId, userId) {
+   const ts = nowIso();
+   await c.env.DB.batch([
+     c.env.DB.prepare("UPDATE resources SET downloads = downloads + 1, updated_at = ? WHERE id = ?").bind(ts, resourceId),
+--- a/src/utils/resourceShape.js
++++ b/src/utils/resourceShape.js
+@@ -24,3 +24,8 @@
+     date: r.created_at,
+   };
+ }
++
++// The DB stores level as "300"; screens that show it standalone want "300 Level".
++export function levelLabel(level) {
++  return level ? `${level} Level` : "";
++}
+--- /dev/null
++++ b/test/phase6a-downloads.test.js
+@@ -0,0 +1,176 @@
++// Phase 6a (update package, Phase 1): /downloads, /downloads/:id/file,
++// /bookmarks extras, /resources/recommended.
++// Run: node --experimental-sqlite test/phase6a-downloads.test.js
++import fs from "node:fs";
++import { sign } from "hono/jwt";
++import app from "../src/index.js";
++import { createMockD1 } from "./mockD1.js";
++
++const schemaSql = fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8");
++
++let passed = 0;
++let failed = 0;
++function check(label, cond, extra = "") {
++  if (cond) {
++    console.log("OK  -", label);
++    passed++;
++  } else {
++    console.log("FAIL-", label, extra);
++    failed++;
++  }
++}
++
++function freshEnv() {
++  const DB = createMockD1(schemaSql);
++  return { env: { DB, JWT_SECRET: "test-secret", CLOUDINARY_CLOUD_NAME: "sharef-cloud" }, DB };
++}
++async function tokenFor(env, id, role = "student") {
++  const now = Math.floor(Date.now() / 1000);
++  return sign({ id, role, iat: now, exp: now + 604800 }, env.JWT_SECRET);
++}
++async function getAuthed(path, token, env) {
++  return app.fetch(new Request(`http://localhost${path}`, { headers: { Authorization: `Bearer ${token}` } }), env);
++}
++const isoDaysAgo = (d) => new Date(Date.now() - d * 864e5).toISOString();
++
++function seedUser(DB, id, { department = null, level = null, balance = 0 } = {}) {
++  DB._raw
++    .prepare(
++      `INSERT INTO users (id, full_name, email, password, role, department, level, wallet_balance, is_verified, preferences)
++       VALUES (?, ?, ?, 'hash', 'student', ?, ?, ?, 1, '{}')`
++    )
++    .run(id, `User ${id}`, `${id}@example.com`, department, level, balance);
++}
++function seedResource(DB, o) {
++  const { id, status = "approved", department = "Computer Science", level = "300", downloads = 0, createdAt = isoDaysAgo(1) } = o;
++  DB._raw
++    .prepare(
++      `INSERT INTO resources (id, title, type, department, course, level, semester, session, uploader_id,
++         file_name, file_url, cloudinary_public_id, file_size_bytes, file_extension, pages, status, downloads, created_at)
++       VALUES (?, ?, 'Past Question', ?, 'CSC 301', ?, 'First', '2024/2025', 'uploader',
++         'f.pdf', 'https://x/f.pdf', 'pub', 2516582, 'pdf', 10, ?, ?, ?)`
++    )
++    .run(id, "Title " + id, department, level, status, downloads, createdAt);
++}
++function seedPurchase(DB, { id, user, resource, amount = 380, status = "successful" }) {
++  const at = isoDaysAgo(5);
++  DB._raw
++    .prepare(
++      `INSERT INTO transactions (id, user_id, type, amount, status, resource_id, description, created_at, updated_at)
++       VALUES (?, ?, 'purchase', ?, ?, ?, 'CSC 301 — Past Questions', ?, ?)`
++    )
++    .run(id, user, amount, status, resource, at, at);
++}
++const balanceOf = (DB, id) => DB._raw.prepare("SELECT wallet_balance AS n FROM users WHERE id = ?").get(id).n;
++const countOf = (DB, sql) => DB._raw.prepare(sql).get().n;
++
++async function run() {
++  // ---- GET /api/downloads ------------------------------------------------
++  {
++    const { env, DB } = freshEnv();
++    seedUser(DB, "uploader");
++    seedUser(DB, "me");
++    seedUser(DB, "other");
++    seedResource(DB, { id: "r1" });
++    seedResource(DB, { id: "r2", status: "rejected" });
++    seedResource(DB, { id: "r3" });
++    seedPurchase(DB, { id: "t1", user: "me", resource: "r1" });
++    seedPurchase(DB, { id: "t2", user: "me", resource: "r2" });
++    seedPurchase(DB, { id: "t3", user: "me", resource: "r3", status: "pending" });
++    seedPurchase(DB, { id: "t4", user: "other", resource: "r3" });
++
++    const token = await tokenFor(env, "me");
++    const res = await getAuthed("/api/downloads", token, env);
++    const body = await res.json();
++    check("downloads: 200", res.status === 200 && body.success === true);
++    check("downloads: only my successful purchases", body.downloads.length === 2, JSON.stringify(body.downloads.map((d) => d.id)));
++    const r1 = body.downloads.find((d) => d.id === "r1");
++    check(
++      "downloads: contract fields",
++      r1 && r1.level === "300 Level" && r1.size === "2.4 MB" && r1.pricePaid === 380 && r1.fileExtension === "pdf" && r1.available === true && !!r1.downloadedAt,
++      JSON.stringify(r1)
++    );
++    check("downloads: removed resource -> available:false", body.downloads.find((d) => d.id === "r2")?.available === false);
++
++    const noAuth = await app.fetch(new Request("http://localhost/api/downloads"), env);
++    check("downloads: requires auth", noAuth.status === 401);
++  }
++
++  // ---- GET /api/downloads/:id/file ---------------------------------------
++  {
++    const { env, DB } = freshEnv();
++    seedUser(DB, "uploader");
++    seedUser(DB, "me", { balance: 1000 });
++    seedUser(DB, "stranger", { balance: 1000 });
++    seedResource(DB, { id: "r1" });
++    seedPurchase(DB, { id: "t1", user: "me", resource: "r1" });
++    const txBefore = countOf(DB, "SELECT COUNT(*) AS n FROM transactions");
++
++    const strangerToken = await tokenFor(env, "stranger");
++    let res = await getAuthed("/api/downloads/r1/file", strangerToken, env);
++    check("file: another user's resource -> 403", res.status === 403);
++    res = await getAuthed("/api/downloads/nope/file", strangerToken, env);
++    check("file: unknown id -> 403 (no probing)", res.status === 403);
++
++    const token = await tokenFor(env, "me");
++    res = await getAuthed("/api/downloads/r1/file", token, env);
++    const body = await res.json();
++    check("file: owner -> 200 + stream url", res.status === 200 && body.success && body.fileUrl.includes("/api/resources/r1/stream?token="), JSON.stringify(body));
++    check("file: NEVER charges (balance + transactions unchanged)", balanceOf(DB, "me") === 1000 && countOf(DB, "SELECT COUNT(*) AS n FROM transactions") === txBefore);
++    check("file: records the download", countOf(DB, "SELECT COUNT(*) AS n FROM download_logs WHERE resource_id = 'r1'") === 1);
++  }
++
++  // ---- GET /api/bookmarks extras -----------------------------------------
++  {
++    const { env, DB } = freshEnv();
++    seedUser(DB, "uploader");
++    seedUser(DB, "me");
++    seedResource(DB, { id: "r1" });
++    seedResource(DB, { id: "r2" });
++    const at = isoDaysAgo(2);
++    for (const rid of ["r1", "r2"]) {
++      DB._raw.prepare("INSERT INTO bookmarks (id, user_id, resource_id, created_at, updated_at) VALUES (?, 'me', ?, ?, ?)").run("b" + rid, rid, at, at);
++    }
++    seedPurchase(DB, { id: "t1", user: "me", resource: "r2" });
++
++    const res = await getAuthed("/api/bookmarks", await tokenFor(env, "me"), env);
++    const body = await res.json();
++    const byId = Object.fromEntries(body.resources.map((r) => [r.id, r]));
++    check("bookmarks: owned flag", byId.r2.owned === true && byId.r1.owned === false);
++    check("bookmarks: savedAt / fileExtension / level label", !!byId.r1.savedAt && byId.r1.fileExtension === "pdf" && byId.r1.level === "300 Level");
++    check("bookmarks: required fields intact", byId.r1.id && byId.r1.title && byId.r1.course && byId.r1.type && byId.r1.pages === 10);
++  }
++
++  // ---- GET /api/resources/recommended ------------------------------------
++  {
++    const { env, DB } = freshEnv();
++    seedUser(DB, "uploader");
++    seedUser(DB, "me", { department: "Computer Science", level: "300" });
++    seedUser(DB, "blank");
++    seedResource(DB, { id: "match" });
++    seedResource(DB, { id: "owned" });
++    seedResource(DB, { id: "wrong-level", level: "200" });
++    seedResource(DB, { id: "wrong-dept", department: "Law" });
++    seedResource(DB, { id: "pending", status: "pending" });
++    seedPurchase(DB, { id: "t1", user: "me", resource: "owned" });
++
++    const res = await getAuthed("/api/resources/recommended?limit=4", await tokenFor(env, "me"), env);
++    const body = await res.json();
++    check("recommended: 200, matches department+level, excludes owned/pending/other", res.status === 200 && body.resources.map((r) => r.id).join() === "match", JSON.stringify(body.resources?.map((r) => r.id)));
++    check("recommended: item has recentDownloads", body.resources[0]?.recentDownloads === 0);
++
++    const blank = await getAuthed("/api/resources/recommended", await tokenFor(env, "blank"), env);
++    check("recommended: profile incomplete -> empty list", (await blank.json()).resources.length === 0);
++
++    // must not be swallowed by the /:id catch-all route
++    check("recommended: route precedes /:id", res.status === 200 && Array.isArray(body.resources));
++  }
++
++  console.log(`\n${passed} passed, ${failed} failed`);
++  if (failed > 0) process.exit(1);
++}
++
++run().catch((e) => {
++  console.error("TEST RUNNER CRASHED:", e);
++  process.exit(1);
++});

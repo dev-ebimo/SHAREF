@@ -133,9 +133,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? `<span class="aged-badge">${ICONS.clock}4+ Days Pending</span>`
                 : '';
 
+            let rewardBadgeHTML = '';
+            if (item.bounty) rewardBadgeHTML += '<span class="rw-q-badge">Requested \u00b7 ' + naira(item.bounty.reward) + '</span>';
+            if (item.uploaderRisk && item.uploaderRisk.level !== 'low') rewardBadgeHTML += '<span class="rw-q-badge risk">' + (item.uploaderRisk.level === 'high' ? 'High risk uploader' : 'Review uploader') + '</span>';
+
             card.innerHTML = `
                 <div class="q-left">
-                    ${agedBadgeHTML}
+                    ${agedBadgeHTML}${rewardBadgeHTML}
                     <div class="q-title">${ICONS.doc}${escapeHtml(item.title)}</div>
                     <div class="q-meta">
                         <span>${escapeHtml(item.type)}</span>
@@ -255,6 +259,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Opens the Approve modal and fills the page count once analysis finishes.
     function showApproveModal() {
         const id = currentReviewId;
+        fillRewardPanel(id);
         approveModal.classList.remove('hidden');
         approvePagesInput.value = '';
         approvePagesInput.disabled = true;
@@ -279,7 +284,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function requestApprove(id) {
         currentReviewId = id;
-        const skipConfirm = adminPreferences.moderation && adminPreferences.moderation.confirmBeforeApproval === false;
+        fillRewardPanel(id);
+        const reviewItem = pendingQueue.find(i => i.id === id);
+        // Requested resources and risky uploaders always get the dialog, even if
+        // the moderator turned confirmations off.
+        const skipConfirm = adminPreferences.moderation && adminPreferences.moderation.confirmBeforeApproval === false
+            && !itemNeedsRewardReview(reviewItem);
         if (!skipConfirm) {
             showApproveModal();
             return;
@@ -291,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadReview(id).then(({ analysis }) => {
             document.body.style.cursor = '';
             if (currentReviewId !== id) return;
-            if (analysis.ok) processApprove(analysis.pages, analysis.snippet);
+            if (analysis.ok) processApprove(analysis.pages, analysis.snippet, analysis.fileHash);
             else showApproveModal();
         });
     }
@@ -317,17 +327,110 @@ document.addEventListener('DOMContentLoaded', () => {
         currentReviewId = null;
     }
 
-    function processApprove(pages, snippet) {
+    // ------------------------------------------------------------------
+    // Incentive rewards (see admin-incentives.html). Everything here is
+    // optional: if the program is off, or the endpoint doesn't exist yet,
+    // rewardCfg stays null and approving works exactly as it always did.
+    // The server decides the payout; this only lets a moderator pick a
+    // tier and see the warnings the server attached to the item.
+    // ------------------------------------------------------------------
+    let rewardCfg = null;
+    function naira(n) { return '\u20A6' + Math.round(Number(n) || 0).toLocaleString('en-NG'); }
+
+    function loadRewardConfig() {
+        return authFetch(API_BASE + '/admin/incentives/config')
+            .then(res => res.json())
+            .then(data => { rewardCfg = data.success && data.status !== 'off' ? data : null; })
+            .catch(() => { rewardCfg = null; });
+    }
+    loadRewardConfig();
+
+    function rewardsLive() { return !!rewardCfg && rewardCfg.status === 'live'; }
+
+    function itemNeedsRewardReview(item) {
+        return rewardsLive() && !!item && (!!item.bounty || (item.uploaderRisk && item.uploaderRisk.level !== 'low'));
+    }
+
+    function fillRewardPanel(id) {
+        const panel = document.getElementById('approveRewardPanel');
+        const item = pendingQueue.find(i => i.id === id);
+        if (!panel) return;
+        if (!rewardCfg || !item) { panel.classList.add('hidden'); return; }
+
+        const tiers = rewardCfg.rewards || {};
+        const opts = [];
+        if (item.bounty) opts.push(['bounty', 'Requested resource \u2014 ' + naira(item.bounty.reward)]);
+        opts.push(['standard', 'Standard \u2014 ' + naira(item.type === 'Past Question' ? tiers.pastQuestion : tiers.lectureNote)]);
+        opts.push(['high', 'High-value \u2014 ' + naira(tiers.high)]);
+        opts.push(['rare', 'Rare (not on Sharef yet) \u2014 ' + naira(tiers.rare)]);
+        opts.push(['none', 'No reward']);
+        const sel = document.getElementById('approveRewardTier');
+        sel.innerHTML = opts.map(o => '<option value="' + o[0] + '">' + escapeHtml(o[1]) + '</option>').join('');
+        sel.value = item.bounty ? 'bounty' : 'standard';
+        document.getElementById('approveRewardNote').value = '';
+
+        const hint = document.getElementById('approveRewardHint');
+        const rp = item.rewardPreview;
+        hint.textContent = rewardsLive()
+            ? (rp && rp.blocked ? 'No reward will be paid: ' + rp.blockReason : 'The server applies weekly caps, the monthly budget and any first-upload bonus on top of this.')
+            : rewardCfg.status === 'shadow'
+                ? 'Shadow mode: the reward is recorded as a projection only. No money moves.'
+                : 'Rewards are paused. The upload is approved and no reward is paid.';
+
+        const risk = document.getElementById('approveRiskNote');
+        const r = item.uploaderRisk;
+        if (r && r.level !== 'low') {
+            risk.innerHTML = '<strong>' + (r.level === 'high' ? 'High risk uploader' : 'Check before paying') + '</strong>' +
+                (r.notes || []).map(n => '<span>' + escapeHtml(n) + '</span>').join('');
+            risk.classList.remove('hidden');
+        } else risk.classList.add('hidden');
+        panel.classList.remove('hidden');
+    }
+
+    function collectRewardChoice() {
+        const panel = document.getElementById('approveRewardPanel');
+        if (!panel || panel.classList.contains('hidden')) return null;
+        const tier = document.getElementById('approveRewardTier').value;
+        const note = document.getElementById('approveRewardNote').value.trim();
+        if ((tier === 'high' || tier === 'rare') && note.length < 5) {
+            alert('Add a short reason for a ' + (tier === 'high' ? 'High-value' : 'Rare') + ' reward. It is recorded in the audit log.');
+            return false;
+        }
+        return { rewardTier: tier, rewardNote: note };
+    }
+
+    // Small non-blocking message (the approval dialog has already closed). Used to tell the moderator what
+    // happened with the reward, e.g. "Reward of ₦150 recorded" or "No reward paid: Weekly cap reached".
+    function showApprovalNote(text, isWarning) {
+        var old = document.getElementById('rwApprovalNote');
+        if (old) old.remove();
+        var el = document.createElement('div');
+        el.id = 'rwApprovalNote';
+        el.className = 'rw-approval-note' + (isWarning ? ' warn' : '');
+        el.setAttribute('role', 'status');
+        el.textContent = text;
+        document.body.appendChild(el);
+        setTimeout(function () { if (el.parentNode) el.remove(); }, 6000);
+    }
+
+    function processApprove(pages, snippet, fileHash) {
         if (!currentReviewId) return;
+        const choice = collectRewardChoice();
+        if (choice === false) return; // reward tier needs a reason; alert already shown
+        const payload = { pages: pages, snippet: snippet || '' };
+        if (choice) Object.assign(payload, choice);
+        if (fileHash) payload.fileHash = fileHash; // lets the server spot duplicate uploads
         authFetch(API_BASE + '/admin/moderation/' + currentReviewId + '/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ pages: pages, snippet: snippet || '' }),
+            body: JSON.stringify(payload),
         })
             .then(res => res.json())
             .then(data => {
                 if (!data.success) { alert(data.message || 'Could not approve resource.'); return; }
                 closeAllModals();
+                // Only present when the reward program is on: tell the moderator what happened with the reward.
+                if (data.reward && data.reward.message) showApprovalNote(data.message, data.reward.status === 'blocked' || data.reward.status === 'error');
                 loadQueue().then(maybeOpenNextItem);
             })
             .catch(err => { console.error(err); alert('Network error — could not approve resource.'); });
@@ -368,7 +471,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const cached = analysisCache[currentReviewId];
-        processApprove(pages, cached && cached.ok ? cached.snippet : '');
+        processApprove(pages, cached && cached.ok ? cached.snippet : '', cached && cached.fileHash);
     });
 
     document.getElementById('confirmReject').addEventListener('click', () => {

@@ -173,12 +173,12 @@ document.addEventListener("DOMContentLoaded", () => {
     document.body.style.overflow = "hidden";
     closeModalBtn.focus();
 
-    modalBookmarkBtn.textContent = "Bookmark";
+    modalBookmarkBtn.textContent = "Add to Wishlist";
     authFetch(`${API_BASE}/bookmarks/check/${item.id}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && currentPreviewItem === item) {
-          modalBookmarkBtn.textContent = data.bookmarked ? "Remove Bookmark" : "Bookmark";
+          modalBookmarkBtn.textContent = data.bookmarked ? "Remove from Wishlist" : "Add to Wishlist";
         }
       })
       .catch((err) => console.error(err));
@@ -237,13 +237,13 @@ document.addEventListener("DOMContentLoaded", () => {
       .then((data) => {
         modalBookmarkBtn.disabled = false;
         if (!data.success) {
-          showToast(data.message || "Could not update bookmark.");
+          showToast(data.message || "Could not update wishlist.");
           return;
         }
         if (currentPreviewItem === item) {
-          modalBookmarkBtn.textContent = data.bookmarked ? "Remove Bookmark" : "Bookmark";
+          modalBookmarkBtn.textContent = data.bookmarked ? "Remove from Wishlist" : "Add to Wishlist";
         }
-        showToast(data.bookmarked ? `"${escapeHtml(item.title)}" saved to bookmarks.` : `"${escapeHtml(item.title)}" removed from bookmarks.`);
+        showToast(data.bookmarked ? `"${escapeHtml(item.title)}" added to your wishlist.` : `"${escapeHtml(item.title)}" removed from your wishlist.`);
       })
       .catch((err) => {
         modalBookmarkBtn.disabled = false;

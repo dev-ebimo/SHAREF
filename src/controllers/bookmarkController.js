@@ -1,6 +1,6 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { generateId } from "../utils/id.js";
-import { shapeResource } from "../utils/resourceShape.js";
+import { shapeResource, levelLabel } from "../utils/resourceShape.js";
 
 function nowIso() {
   return new Date().toISOString();
@@ -47,7 +47,13 @@ export async function getBookmarks(c) {
     const user = c.get("user");
 
     const { results } = await c.env.DB.prepare(
-      `SELECT r.* FROM bookmarks b
+      `SELECT r.*, b.created_at AS saved_at,
+              EXISTS (
+                SELECT 1 FROM transactions t
+                 WHERE t.user_id = b.user_id AND t.resource_id = r.id
+                   AND t.type = 'purchase' AND t.status = 'successful'
+              ) AS owned
+       FROM bookmarks b
        JOIN resources r ON r.id = b.resource_id
        WHERE b.user_id = ? AND r.status = 'approved'
        ORDER BY b.created_at DESC`
@@ -55,7 +61,17 @@ export async function getBookmarks(c) {
       .bind(user.id)
       .all();
 
-    return c.json({ success: true, resources: results.map(shapeResource) });
+    // Wishlist extras: `owned` hides the price and shows "Downloaded", `savedAt`
+    // drives "Recently added". Only the wishlist page reads `level`, and it
+    // prints it as-is, hence the "300 Level" label.
+    const resources = results.map((r) => ({
+      ...shapeResource(r),
+      level: levelLabel(r.level),
+      fileExtension: r.file_extension,
+      owned: !!r.owned,
+      savedAt: r.saved_at,
+    }));
+    return c.json({ success: true, resources });
   } catch (err) {
     console.error("bookmarkController error:", err?.message);
     return c.json({ success: false, message: "Could not fetch bookmarks", error: sanitizeError(c.env, err) }, 500);

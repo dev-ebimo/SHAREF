@@ -299,12 +299,17 @@ document.addEventListener("DOMContentLoaded", function () {
       "</div>" +
       '<div class="card-bottom-metrics">' +
         '<div class="metric-node">' + metricIcon + "<span>" + escapeHtml(metricLabel) + "</span></div>" +
+        (resource.pages ? '<span class="price-chip">\u20A6' + calculateResourceCost(Number(resource.pages)).toLocaleString("en-NG") + "</span>" : "") +
       "</div>" +
       '<div class="card-hover-actions">' +
         '<button type="button" class="card-mini-btn is-primary" data-action="open">Preview &amp; Download</button>' +
       "</div>";
     return card;
   }
+
+  // Exposed so dashboard-home.js can render extra sections (e.g. "For your
+  // level") with the exact same cards, price chip and download modal wiring.
+  window.__dashboardBuildCard = buildResourceCard;
 
   // Bookmark ids for the Recently Added cards — populated by the same
   // fetch that feeds Trending, so both render a consistent bookmark state.
@@ -424,49 +429,6 @@ document.addEventListener("DOMContentLoaded", function () {
       if (trendingGrid) trendingGrid.innerHTML = "";
     });
   }
-
-  // ------------------------------------------------------------------
-  // Continue Learning — real data, no fake "% read" (that was never a
-  // real tracked feature). "Continue" just re-opens the same download
-  // modal used everywhere else, since re-downloads are free.
-  // ------------------------------------------------------------------
-  var continueSection = document.getElementById("continueLearningSection");
-  var continueContainer = document.getElementById("continueLearningContainer");
-
-  function renderContinueLearning(resources) {
-    if (!continueContainer) return;
-
-    if (resources.length === 0) {
-      if (continueSection) continueSection.style.display = "none";
-      return;
-    }
-    if (continueSection) continueSection.style.display = "";
-
-    continueContainer.innerHTML = "";
-    var resource = resources[0]; // most recently downloaded
-    window.__dashboardResourceCache[resource.id] = resource;
-
-    var card = document.createElement("button");
-    card.type = "button";
-    card.className = "continue-card";
-    card.dataset.resourceId = resource.id;
-    card.innerHTML =
-      '<div class="continue-meta">' +
-      '<div class="continue-progress-ring" aria-hidden="true"></div>' +
-      "<div><h3>" + resource.title + "</h3><p>" + resource.course + " • " + resource.type + "</p></div>" +
-      "</div>" +
-      '<span class="continue-action">Continue' +
-      '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg>' +
-      "</span>";
-    continueContainer.appendChild(card);
-  }
-
-  authFetch(API_BASE + "/resources/continue-learning?limit=1")
-    .then(function (res) { return res.json(); })
-    .then(function (data) {
-      if (data.success) renderContinueLearning(data.resources);
-    })
-    .catch(function (err) { console.error("Could not load continue learning:", err); });
 
   // Toggle logic for showing hidden feed items — unchanged from before,
   // still just operates on whatever .feed-item elements exist at click time.
@@ -1385,7 +1347,7 @@ document.addEventListener("DOMContentLoaded", function () {
           bookmarkBtn.classList.toggle("is-bookmarked", data.bookmarked);
           var svg = bookmarkBtn.querySelector("svg");
           if (svg) svg.setAttribute("fill", data.bookmarked ? "currentColor" : "none");
-          window.SharefWallet.showToast(data.bookmarked ? "Saved to bookmarks." : "Removed from bookmarks.");
+          window.SharefWallet.showToast(data.bookmarked ? "Added to your wishlist." : "Removed from your wishlist.");
         })
         .catch(function (err) {
           bookmarkBtn.disabled = false;
@@ -1407,14 +1369,6 @@ document.addEventListener("DOMContentLoaded", function () {
       var miniId = miniCard && miniCard.dataset.resourceId;
       var miniResource = miniId && window.__dashboardResourceCache[miniId];
       if (miniResource) openDownloadModal(miniResource);
-      return;
-    }
-
-    var continueCard = e.target.closest(".continue-card");
-    if (continueCard) {
-      var continueId = continueCard.dataset.resourceId;
-      var continueResource = continueId && window.__dashboardResourceCache[continueId];
-      if (continueResource) openDownloadModal(continueResource);
       return;
     }
 

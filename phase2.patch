@@ -1,0 +1,2602 @@
+--- /dev/null
++++ b/src/controllers/incentiveController.js
+@@ -0,0 +1,155 @@
++import { sanitizeError } from "../utils/sanitizeError.js";
++import { startOfWeekInLagos } from "../utils/lagosDay.js";
++import { getIncentiveConfig, isVisibleToStudents } from "../services/incentiveConfig.js";
++import { ensureReferralCode } from "../services/referralService.js";
++
++// The student side of the incentive program. Design rule: while the program is
++// 'off' (the default) or 'shadow' (records what WOULD be paid, invisible to students),
++// every endpoint here behaves as if the feature doesn't exist.
++
++const NOT_OPEN = { success: false, message: "Rewards are not open yet." };
++
++// "Chidinma Okafor" -> "Chidinma O." : other students' full names are never exposed.
++function publicName(fullName) {
++  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
++  if (parts.length === 0) return "Student";
++  if (parts.length === 1) return parts[0];
++  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
++}
++const firstName = (fullName) => String(fullName || "").trim().split(/\s+/)[0] || "Student";
++
++// @route GET /api/incentives/config
++// Always answers (the dashboard and Earn page call it first to decide whether to show anything).
++export async function getIncentiveStatus(c) {
++  try {
++    const cfg = await getIncentiveConfig(c.env.DB);
++    if (!isVisibleToStudents(cfg.status)) {
++      return c.json({ success: true, enabled: false, status: "off" });
++    }
++    const r = cfg.rules;
++    return c.json({
++      success: true,
++      enabled: true,
++      status: cfg.status, // 'live' | 'paused'
++      holdDays: r.holdDays,
++      weeklyCap: r.weeklyCap,
++      maxRewardShare: r.maxRewardShare,
++      ...(cfg.season ? { season: cfg.season } : {}),
++      rewards: {
++        pastQuestion: r.rewards.pastQuestion,
++        lectureNote: r.rewards.lectureNote,
++        firstApproval: r.rewards.firstApproval,
++        referralFirstApproval: r.rewards.referralFirstApproval,
++      },
++    });
++  } catch (err) {
++    console.error("incentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load rewards settings", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/incentives/me
++export async function getMyIncentives(c) {
++  try {
++    const DB = c.env.DB;
++    const user = c.get("user");
++    const cfg = await getIncentiveConfig(DB);
++    if (!isVisibleToStudents(cfg.status)) return c.json(NOT_OPEN, 403);
++
++    const referralCode = await ensureReferralCode(DB, user.id);
++    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
++
++    const [me, week, ledger, referrals] = await Promise.all([
++      DB.prepare("SELECT wallet_balance, reward_balance, reward_pending, rewards_frozen FROM users WHERE id = ?").bind(user.id).first(),
++      // The weekly cap is a rolling 7 days, the same window the payout engine enforces.
++      DB.prepare(
++        `SELECT COALESCE(SUM(amount), 0) AS earned FROM reward_ledger
++          WHERE user_id = ? AND type = 'reward' AND status IN ('pending','cleared') AND created_at >= ?`
++      ).bind(user.id, sevenDaysAgo).first(),
++      // Shadow rows are the admin's what-if data and are NEVER shown to students.
++      DB.prepare(
++        `SELECT id, created_at, label, amount, status FROM reward_ledger
++          WHERE user_id = ? AND status != 'shadow' ORDER BY created_at DESC LIMIT 30`
++      ).bind(user.id).all(),
++      DB.prepare(
++        `SELECT r.status, r.earned, u.full_name FROM referrals r
++           JOIN users u ON u.id = r.invitee_id
++          WHERE r.inviter_id = ? ORDER BY r.created_at DESC LIMIT 50`
++      ).bind(user.id).all(),
++    ]);
++    if (!me) return c.json({ success: false, message: "User not found" }, 404);
++
++    return c.json({
++      success: true,
++      frozen: !!me.rewards_frozen,
++      balance: {
++        funded: me.wallet_balance,
++        reward: me.reward_balance,
++        pending: me.reward_pending,
++      },
++      weekEarned: week.earned,
++      weekCap: cfg.rules.weeklyCap,
++      referralCode,
++      referrals: referrals.results.map((r) => ({ name: firstName(r.full_name), status: r.status, earned: r.earned })),
++      ledger: ledger.results.map((r) => ({ id: r.id, date: r.created_at, label: r.label, amount: r.amount, status: r.status })),
++    });
++  } catch (err) {
++    console.error("incentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load your rewards", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/incentives/requests
++// Open "Wanted" requests: not expired, not fully paid out.
++export async function getOpenRequests(c) {
++  try {
++    const DB = c.env.DB;
++    const cfg = await getIncentiveConfig(DB);
++    if (!isVisibleToStudents(cfg.status)) return c.json(NOT_OPEN, 403);
++
++    const { results } = await DB.prepare(
++      `SELECT id, course, type, level, reward, note FROM bounties
++        WHERE status = 'open' AND expires_at > ? AND paid < max_payouts
++        ORDER BY reward DESC, created_at DESC LIMIT 20`
++    ).bind(new Date().toISOString()).all();
++
++    return c.json({ success: true, requests: results });
++  } catch (err) {
++    console.error("incentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load requests", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/incentives/leaderboard
++// This week's (Monday 00:00, Africa/Lagos) most-approved uploaders. Counts approved
++// uploads only, so it works whether or not any reward was paid.
++export async function getLeaderboard(c) {
++  try {
++    const DB = c.env.DB;
++    const user = c.get("user");
++    const cfg = await getIncentiveConfig(DB);
++    if (!isVisibleToStudents(cfg.status)) return c.json(NOT_OPEN, 403);
++
++    const { results } = await DB.prepare(
++      `SELECT r.uploader_id AS id, u.full_name, COUNT(*) AS approved, MIN(r.reviewed_at) AS first_at
++         FROM resources r JOIN users u ON u.id = r.uploader_id
++        WHERE r.status = 'approved' AND r.reviewed_at >= ? AND u.account_status = 'active'
++        GROUP BY r.uploader_id
++        ORDER BY approved DESC, first_at ASC
++        LIMIT 10`
++    ).bind(startOfWeekInLagos().toISOString()).all();
++
++    return c.json({
++      success: true,
++      leaders: results.map((row, i) => ({
++        rank: i + 1,
++        name: publicName(row.full_name),
++        approved: row.approved,
++        isMe: row.id === user.id,
++      })),
++    });
++  } catch (err) {
++    console.error("incentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load the leaderboard", error: sanitizeError(c.env, err) }, 500);
++  }
++}
+--- /dev/null
++++ b/src/controllers/adminIncentiveController.js
+@@ -0,0 +1,561 @@
++import { sanitizeError } from "../utils/sanitizeError.js";
++import { generateId } from "../utils/id.js";
++import { startOfMonthInLagos, endOfLagosDayIso, todayInLagosYmd } from "../utils/lagosDay.js";
++import {
++  STATUSES, RULE_KEYS, REWARD_KEYS,
++  getIncentiveConfig, paidStatuses, auditStatement, adminDisplayName, courseKey,
++} from "../services/incentiveConfig.js";
++import { reversalStatements } from "../services/rewardReversal.js";
++
++// Every route here is admin-only (see adminIncentiveRoutes.js). Every consequential
++// change is written to the append-only audit log IN THE SAME BATCH as the change itself,
++// so there is no window where something changed but wasn't recorded.
++
++const fail = (c, status, message) => c.json({ success: false, message }, status);
++const placeholders = (arr) => arr.map(() => "?").join(",");
++const naira = (n) => "₦" + Math.round(Number(n) || 0).toLocaleString("en-NG");
++const escapeLike = (s) => s.replace(/[\\%_]/g, "\\$&");
++const PAGE_SIZE = 20;
++const MAX_REASON = 500;
++
++async function readBody(c) {
++  try {
++    const body = await c.req.json();
++    return body && typeof body === "object" ? body : null;
++  } catch {
++    return null;
++  }
++}
++
++// Returns the trimmed reason, or null when it's missing/too short/too long.
++function cleanReason(raw) {
++  const reason = typeof raw === "string" ? raw.trim() : "";
++  return reason.length >= 5 && reason.length <= MAX_REASON ? reason : null;
++}
++const REASON_MSG = "Please give a reason (at least 5 characters).";
++
++const FIELD_LABELS = {
++  monthlyBudget: "Monthly reward budget",
++  weeklyCap: "Weekly earning cap",
++  maxSinglePayout: "Largest single payout",
++  adminDailyLimit: "Daily award limit per moderator",
++  maxRewardShare: "Most of a download payable with rewards",
++  holdDays: "Hold period",
++  ratioAlert: "Revenue alert threshold",
++  pastQuestion: "Standard: past question",
++  lectureNote: "Standard: lecture note",
++  high: "High-value tier",
++  rare: "Rare tier",
++  firstApproval: "First approved upload bonus",
++  referralSignup: "Referral: friend signs up",
++  referralFirstApproval: "Referral: friend's first upload approved",
++};
++const FIELD_MAX = { holdDays: 30, maxRewardShare: 100 };
++
++function flatConfig(cfg) {
++  return {
++    success: true,
++    status: cfg.status,
++    ...cfg.rules,
++    rewards: { ...cfg.rules.rewards },
++    ...(cfg.season ? { seasonName: cfg.season.name, seasonEndsAt: cfg.season.endsAt } : {}),
++    updatedAt: cfg.updatedAt,
++  };
++}
++
++// @route GET /api/admin/incentives/flag-count   (cheap: it feeds the sidebar badge on every admin page)
++export async function getFlagCount(c) {
++  try {
++    const row = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM incentive_flags WHERE status = 'open'").first();
++    return c.json({ success: true, flagsOpen: row?.n || 0 });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load flags", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/admin/incentives/summary
++export async function getSummary(c) {
++  try {
++    const DB = c.env.DB;
++    const cfg = await getIncentiveConfig(DB);
++    const monthStart = startOfMonthInLagos().toISOString();
++    const counted = paidStatuses(cfg.status);
++    const inCounted = placeholders(counted);
++
++    const [paid, owed, redeemed, revenue, approved, flags, approvals, payouts, repeats] = await Promise.all([
++      DB.prepare(`SELECT COALESCE(SUM(amount), 0) AS n FROM reward_ledger WHERE type = 'reward' AND created_at >= ? AND status IN (${inCounted})`)
++        .bind(monthStart, ...counted).first(),
++      // The real liability: positive reward balances plus rewards still in their hold period.
++      // A negative balance (reversal after spending) is a receivable, not a reason to owe less.
++      DB.prepare("SELECT COALESCE(SUM(CASE WHEN reward_balance > 0 THEN reward_balance ELSE 0 END), 0) + COALESCE(SUM(reward_pending), 0) AS n FROM users").first(),
++      DB.prepare("SELECT COALESCE(SUM(from_rewards), 0) AS n FROM transactions WHERE type = 'purchase' AND status = 'successful' AND created_at >= ?")
++        .bind(monthStart).first(),
++      DB.prepare("SELECT COALESCE(SUM(amount), 0) AS n FROM transactions WHERE type = 'deposit' AND status = 'successful' AND created_at >= ?")
++        .bind(monthStart).first(),
++      DB.prepare("SELECT COUNT(*) AS n FROM resources WHERE status = 'approved' AND reviewed_at >= ?").bind(monthStart).first(),
++      DB.prepare("SELECT COUNT(*) AS n FROM incentive_flags WHERE status = 'open'").first(),
++      DB.prepare(
++        `SELECT u.id, u.full_name AS name, COUNT(*) AS approvals
++           FROM resources r JOIN users u ON u.id = r.reviewed_by
++          WHERE r.status = 'approved' AND r.reviewed_at >= ? GROUP BY u.id`
++      ).bind(monthStart).all(),
++      DB.prepare(
++        `SELECT approved_by AS id, COALESCE(SUM(amount), 0) AS paid,
++                COALESCE(SUM(CASE WHEN tier IN ('high','rare') THEN 1 ELSE 0 END), 0) AS high_rare
++           FROM reward_ledger
++          WHERE type = 'reward' AND approved_by IS NOT NULL AND created_at >= ? AND status IN (${inCounted})
++          GROUP BY approved_by`
++      ).bind(monthStart, ...counted).all(),
++      DB.prepare(
++        `SELECT approved_by AS id, COUNT(*) AS n FROM reward_ledger
++          WHERE type = 'reward' AND approved_by IS NOT NULL AND created_at >= ?
++            AND tier IN ('standard','high','rare','bounty') AND status IN (${inCounted})
++          GROUP BY approved_by, user_id HAVING COUNT(*) >= 5`
++      ).bind(monthStart, ...counted).all(),
++    ]);
++
++    // ---- per-moderator table + "needs attention" heuristics ----
++    const payoutById = new Map(payouts.results.map((p) => [p.id, p]));
++    const repeatPayeeIds = new Set(repeats.results.map((r) => r.id));
++    const totalApprovals = approvals.results.reduce((s, a) => s + a.approvals, 0);
++    const avgPerApproval = totalApprovals > 0 ? paid.n / totalApprovals : 0;
++
++    const admins = approvals.results
++      .map((a) => {
++        const p = payoutById.get(a.id) || { paid: 0, high_rare: 0 };
++        let flagged = null;
++        if (avgPerApproval > 0 && a.approvals >= 3 && p.paid / a.approvals > 3 * avgPerApproval) flagged = "Pays far above average";
++        else if (repeatPayeeIds.has(a.id)) flagged = "Pays the same student repeatedly";
++        return { name: a.name, approvals: a.approvals, paid: p.paid, highRare: p.high_rare, flagged };
++      })
++      .sort((x, y) => y.paid - x.paid);
++
++    const alerts = [];
++    if ((cfg.status === "shadow" || cfg.status === "live") && cfg.rules.monthlyBudget <= 0) {
++      alerts.push({ level: "bad", text: "No monthly budget is set, so no rewards can be paid. Set one in Rules." });
++    }
++    if (cfg.status === "live" && cfg.rules.weeklyCap <= 0) {
++      alerts.push({ level: "warn", text: "No weekly earning cap is set. Set one in Rules to limit what one student can earn." });
++    }
++
++    return c.json({
++      success: true,
++      status: cfg.status,
++      config: { ratioAlert: cfg.rules.ratioAlert, maxSinglePayout: cfg.rules.maxSinglePayout },
++      budget: { monthlyCap: cfg.rules.monthlyBudget, paidThisMonth: paid.n, shadow: cfg.status === "shadow" },
++      outstanding: owed.n,
++      redeemed: redeemed.n,
++      fundedRevenue: revenue.n,
++      approvedCount: approved.n,
++      flagsOpen: flags.n,
++      alerts,
++      admins,
++    });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load the summary", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route POST /api/admin/incentives/status   { status, reason }
++export async function setStatus(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    const status = body?.status;
++    if (!STATUSES.includes(status)) return fail(c, 400, "Status must be one of: off, shadow, live, paused.");
++    const reason = cleanReason(body?.reason);
++    if (!reason) return fail(c, 400, REASON_MSG);
++
++    const cfg = await getIncentiveConfig(DB);
++    if (cfg.status === status) return fail(c, 400, `Rewards are already ${status}.`);
++    if (status === "live" && !(cfg.rules.monthlyBudget > 0)) {
++      return fail(c, 400, "Set a monthly reward budget in Rules before going live.");
++    }
++
++    const ts = new Date().toISOString();
++    const name = await adminDisplayName(DB, admin.id);
++    await DB.batch([
++      DB.prepare(
++        `INSERT INTO incentive_config (id, status, rules, updated_by, updated_at) VALUES (1, ?, '{}', ?, ?)
++         ON CONFLICT(id) DO UPDATE SET status = excluded.status, updated_by = excluded.updated_by, updated_at = excluded.updated_at`
++      ).bind(status, admin.id, ts),
++      auditStatement(DB, { adminId: admin.id, adminName: name, action: "status", detail: `${cfg.status} → ${status}. Reason: ${reason}`, ts }),
++    ]);
++    return c.json({ success: true, status });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not change the status", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/admin/incentives/config
++export async function getConfig(c) {
++  try {
++    return c.json(flatConfig(await getIncentiveConfig(c.env.DB)));
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load the rules", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++function checkWholeNumber(key, value) {
++  const max = FIELD_MAX[key] ?? 10_000_000;
++  if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > max) {
++    return `${FIELD_LABELS[key]} must be a whole number from 0 to ${max.toLocaleString("en-NG")}.`;
++  }
++  return null;
++}
++
++// @route PUT /api/admin/incentives/config   { rules, reason }
++export async function updateConfig(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    const reason = cleanReason(body?.reason);
++    if (!reason) return fail(c, 400, REASON_MSG);
++    const r = body?.rules;
++    if (!r || typeof r !== "object" || !r.rewards || typeof r.rewards !== "object") {
++      return fail(c, 400, "Send the full set of rules, including the reward amounts.");
++    }
++
++    const next = { rewards: {} };
++    for (const k of RULE_KEYS) {
++      const msg = checkWholeNumber(k, r[k]);
++      if (msg) return fail(c, 400, msg);
++      next[k] = r[k];
++    }
++    for (const k of REWARD_KEYS) {
++      const msg = checkWholeNumber(k, r.rewards[k]);
++      if (msg) return fail(c, 400, msg);
++      next.rewards[k] = r.rewards[k];
++    }
++
++    // No single approval may ever pay more than the configured ceiling, whatever tier is picked.
++    const clamped = [];
++    for (const k of REWARD_KEYS) {
++      if (next.rewards[k] > next.maxSinglePayout) {
++        clamped.push(`${FIELD_LABELS[k]} ${naira(next.rewards[k])} → ${naira(next.maxSinglePayout)}`);
++        next.rewards[k] = next.maxSinglePayout;
++      }
++    }
++
++    const cfg = await getIncentiveConfig(DB);
++    const changes = [];
++    for (const k of RULE_KEYS) if (cfg.rules[k] !== next[k]) changes.push(`${k} ${cfg.rules[k]}→${next[k]}`);
++    for (const k of REWARD_KEYS) if (cfg.rules.rewards[k] !== next.rewards[k]) changes.push(`rewards.${k} ${cfg.rules.rewards[k]}→${next.rewards[k]}`);
++    if (changes.length === 0) return c.json({ ...flatConfig(cfg), unchanged: true });
++
++    const ts = new Date().toISOString();
++    const name = await adminDisplayName(DB, admin.id);
++    const detail =
++      `${changes.join(", ")}.` + (clamped.length ? ` Capped at the largest single payout: ${clamped.join("; ")}.` : "") + ` Reason: ${reason}`;
++    await DB.batch([
++      DB.prepare(
++        `INSERT INTO incentive_config (id, status, rules, updated_by, updated_at) VALUES (1, 'off', ?, ?, ?)
++         ON CONFLICT(id) DO UPDATE SET rules = excluded.rules, updated_by = excluded.updated_by, updated_at = excluded.updated_at`
++      ).bind(JSON.stringify(next), admin.id, ts),
++      auditStatement(DB, { adminId: admin.id, adminName: name, action: "rules", detail, ts }),
++    ]);
++
++    return c.json({ ...flatConfig(await getIncentiveConfig(DB)), ...(clamped.length ? { clamped } : {}) });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not save the rules", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/admin/incentives/payouts?page=1&status=&q=
++export async function getPayouts(c) {
++  try {
++    const DB = c.env.DB;
++    const page = Math.max(parseInt(c.req.query("page"), 10) || 1, 1);
++    const status = c.req.query("status") || "";
++    const q = (c.req.query("q") || "").trim().slice(0, 60);
++
++    const where = ["l.type = 'reward'"];
++    const args = [];
++    if (["pending", "cleared", "reversed", "shadow"].includes(status)) {
++      where.push("l.status = ?");
++      args.push(status);
++    }
++    if (q) {
++      where.push("(u.full_name LIKE ? ESCAPE '\\' OR l.label LIKE ? ESCAPE '\\')");
++      args.push(`%${escapeLike(q)}%`, `%${escapeLike(q)}%`);
++    }
++    const from = `FROM reward_ledger l LEFT JOIN users u ON u.id = l.user_id LEFT JOIN users a ON a.id = l.approved_by WHERE ${where.join(" AND ")}`;
++
++    const [total, rows] = await Promise.all([
++      DB.prepare(`SELECT COUNT(*) AS n ${from.replace("LEFT JOIN users a ON a.id = l.approved_by ", "")}`).bind(...args).first(),
++      DB.prepare(
++        `SELECT l.id, l.created_at, l.label, l.tier, l.amount, l.status, u.full_name AS student, a.full_name AS approver
++         ${from} ORDER BY l.created_at DESC, l.id LIMIT ? OFFSET ?`
++      ).bind(...args, PAGE_SIZE, (page - 1) * PAGE_SIZE).all(),
++    ]);
++
++    return c.json({
++      success: true,
++      payouts: rows.results.map((p) => ({
++        id: p.id, date: p.created_at, student: p.student || "Deleted account", label: p.label,
++        tier: p.tier, amount: p.amount, status: p.status, approvedBy: p.approver || null,
++      })),
++      pagination: { page, pages: Math.max(Math.ceil(total.n / PAGE_SIZE), 1), total: total.n },
++    });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load payouts", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route POST /api/admin/incentives/payouts/:id/reverse   { reason }
++export async function reversePayout(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    const reason = cleanReason(body?.reason);
++    if (!reason) return fail(c, 400, REASON_MSG);
++
++    const row = await DB.prepare("SELECT * FROM reward_ledger WHERE id = ? AND type = 'reward'").bind(c.req.param("id")).first();
++    if (!row) return fail(c, 404, "Payout not found.");
++    if (row.status === "reversed") return fail(c, 409, "This reward was already reversed.");
++    if (row.status === "shadow") return fail(c, 400, "This was only recorded in shadow mode. No money moved, so there is nothing to reverse.");
++    if (!row.user_id) return fail(c, 409, "This student's account no longer exists.");
++
++    const student = await DB.prepare("SELECT full_name FROM users WHERE id = ?").bind(row.user_id).first();
++    const ts = new Date().toISOString();
++    const name = await adminDisplayName(DB, admin.id);
++
++    await DB.batch(
++      reversalStatements(DB, row, {
++        adminId: admin.id, adminName: name, reason, ts,
++        audit: { action: "reverse", detail: `${student?.full_name || "Student"}: took back ${naira(row.amount)} (${row.label || row.tier || "reward"}). Reason: ${reason}` },
++      })
++    );
++
++    // Confirm THIS request did it (a second moderator clicking at the same moment loses cleanly).
++    const after = await DB.prepare("SELECT reversed_at, reversed_by FROM reward_ledger WHERE id = ?").bind(row.id).first();
++    if (after?.reversed_at !== ts || after?.reversed_by !== admin.id) {
++      return fail(c, 409, "This reward was already reversed.");
++    }
++    return c.json({ success: true, message: "Reward reversed." });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not reverse the reward", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/admin/incentives/flags?status=open
++export async function getFlags(c) {
++  try {
++    const status = c.req.query("status") || "open";
++    const filter = ["open", "dismissed", "frozen", "reversed"].includes(status) ? status : "open";
++    const { results } = await c.env.DB.prepare(
++      `SELECT f.id, f.exposure, f.signals, f.status, f.created_at, u.full_name AS student
++         FROM incentive_flags f JOIN users u ON u.id = f.user_id
++        WHERE f.status = ? ORDER BY f.created_at DESC LIMIT 100`
++    ).bind(filter).all();
++
++    return c.json({
++      success: true,
++      flags: results.map((f) => {
++        let signals = [];
++        try { signals = JSON.parse(f.signals || "[]"); } catch { /* corrupt signals just show as none */ }
++        return { id: f.id, student: f.student, exposure: f.exposure, signals: Array.isArray(signals) ? signals : [], status: f.status, createdAt: f.created_at };
++      }),
++    });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load flags", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++const REVERSE_CHUNK = 15; // rewards reversed per atomic batch (5 statements each)
++
++// @route POST /api/admin/incentives/flags/:id/resolve   { action: freeze|reverse_all|dismiss, note }
++// (the frontend sends the moderator's written reason as `note`)
++export async function resolveFlag(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    const action = body?.action;
++    if (!["freeze", "reverse_all", "dismiss"].includes(action)) return fail(c, 400, "Action must be freeze, reverse_all or dismiss.");
++    const note = cleanReason(body?.note ?? body?.reason);
++    if (!note) return fail(c, 400, REASON_MSG);
++
++    const flag = await DB.prepare(
++      "SELECT f.id, f.user_id, u.full_name FROM incentive_flags f JOIN users u ON u.id = f.user_id WHERE f.id = ? AND f.status = 'open'"
++    ).bind(c.req.param("id")).first();
++    if (!flag) return fail(c, 404, "This flag was not found or is already resolved.");
++
++    const ts = new Date().toISOString();
++    const name = await adminDisplayName(DB, admin.id);
++    const resolve = (newStatus) =>
++      DB.prepare("UPDATE incentive_flags SET status = ?, resolved_by = ?, resolved_at = ?, note = ?, updated_at = ? WHERE id = ? AND status = 'open'")
++        .bind(newStatus, admin.id, ts, note, ts, flag.id);
++
++    if (action === "dismiss") {
++      await DB.batch([resolve("dismissed"), auditStatement(DB, { adminId: admin.id, adminName: name, action: "flag.dismiss", detail: `${flag.full_name}: flag dismissed. Reason: ${note}`, ts })]);
++      return c.json({ success: true, message: "Flag dismissed." });
++    }
++
++    if (action === "freeze") {
++      await DB.batch([
++        DB.prepare("UPDATE users SET rewards_frozen = 1, updated_at = ? WHERE id = ?").bind(ts, flag.user_id),
++        resolve("frozen"),
++        auditStatement(DB, { adminId: admin.id, adminName: name, action: "flag.freeze", detail: `${flag.full_name}: rewards frozen. Reason: ${note}`, ts }),
++      ]);
++      return c.json({ success: true, message: "Rewards frozen for this student." });
++    }
++
++    // reverse_all: take back every reward that is still pending or cleared.
++    const { results: rows } = await DB.prepare(
++      `SELECT id, user_id, amount, tier, label, resource_id, bounty_id, referral_id FROM reward_ledger
++        WHERE user_id = ? AND type = 'reward' AND status IN ('pending','cleared') ORDER BY created_at`
++    ).bind(flag.user_id).all();
++
++    for (let i = 0; i < rows.length; i += REVERSE_CHUNK) {
++      const statements = rows.slice(i, i + REVERSE_CHUNK).flatMap((row) =>
++        reversalStatements(DB, row, { adminId: admin.id, adminName: name, reason: note, ts })
++      );
++      await DB.batch(statements);
++    }
++
++    const done = await DB.prepare(
++      "SELECT COUNT(*) AS n, COALESCE(SUM(amount), 0) AS total FROM reward_ledger WHERE user_id = ? AND type = 'reward' AND reversed_at = ? AND reversed_by = ?"
++    ).bind(flag.user_id, ts, admin.id).first();
++
++    await DB.batch([
++      resolve("reversed"),
++      auditStatement(DB, { adminId: admin.id, adminName: name, action: "flag.reverse_all", detail: `${flag.full_name}: reversed ${done.n} reward(s) totalling ${naira(done.total)}. Reason: ${note}`, ts }),
++    ]);
++    return c.json({ success: true, message: `Reversed ${done.n} reward(s) totalling ${naira(done.total)}.` });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not resolve the flag", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// ---- Requests ("Wanted" bounties) ------------------------------------------
++const REQUEST_TYPES = ["Past Questions", "Lecture Notes", "Revision Sheet"];
++const REQUEST_LEVELS = ["100 Level", "200 Level", "300 Level", "400 Level", "500 Level", "600 Level"];
++
++// @route GET /api/admin/incentives/requests
++export async function listRequests(c) {
++  try {
++    const now = new Date().toISOString();
++    const { results } = await c.env.DB.prepare(
++      "SELECT id, course, type, level, reward, paid, max_payouts, expires_at, status FROM bounties ORDER BY created_at DESC LIMIT 100"
++    ).all();
++    return c.json({
++      success: true,
++      requests: results.map((b) => ({
++        id: b.id, course: b.course, type: b.type, level: b.level, reward: b.reward, paid: b.paid, maxPayouts: b.max_payouts,
++        expiresAt: b.expires_at, status: b.status === "open" && b.expires_at <= now ? "expired" : b.status,
++      })),
++    });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load requests", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route POST /api/admin/incentives/requests
++// { course, type, level, reward, maxPayouts, expiresAt:"YYYY-MM-DD" }
++// `reason` is OPTIONAL here: the publish form has no reason field (every other write requires one).
++export async function createRequest(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    if (!body) return fail(c, 400, "Invalid request.");
++
++    const course = String(body.course ?? "").trim().toUpperCase();
++    if (!/^[A-Z0-9][A-Z0-9 -]{1,19}$/.test(course)) return fail(c, 400, "Enter a valid course code, e.g. CSC 305.");
++    if (!REQUEST_TYPES.includes(body.type)) return fail(c, 400, "Choose what is wanted: past questions, lecture notes or a revision sheet.");
++    if (!REQUEST_LEVELS.includes(body.level)) return fail(c, 400, "Choose a level.");
++
++    const cfg = await getIncentiveConfig(DB);
++    const max = cfg.rules.maxSinglePayout;
++    if (!Number.isInteger(body.reward) || body.reward < 1 || body.reward > max) {
++      return fail(c, 400, `Reward must be a whole number between ₦1 and ${naira(max)} (your largest single payout).`);
++    }
++    if (!Number.isInteger(body.maxPayouts) || body.maxPayouts < 1 || body.maxPayouts > 3) return fail(c, 400, "Pay between 1 and 3 students.");
++
++    const today = todayInLagosYmd();
++    const limit = new Date(Date.parse(today) + 365 * 86400000).toISOString().slice(0, 10);
++    const expiresAt = endOfLagosDayIso(body.expiresAt);
++    if (!expiresAt) return fail(c, 400, "Pick a valid closing date.");
++    if (body.expiresAt < today) return fail(c, 400, "The closing date can't be in the past.");
++    if (body.expiresAt > limit) return fail(c, 400, "The closing date can be at most a year away.");
++
++    const note = String(body.note ?? "").trim().slice(0, 200);
++    const key = courseKey(course);
++    const now = new Date().toISOString();
++
++    const dup = await DB.prepare(
++      "SELECT id FROM bounties WHERE course_key = ? AND type = ? AND level = ? AND status = 'open' AND expires_at > ? AND paid < max_payouts"
++    ).bind(key, body.type, body.level, now).first();
++    if (dup) return fail(c, 409, "There is already an open request for this.");
++
++    const id = generateId();
++    const name = await adminDisplayName(DB, admin.id);
++    await DB.batch([
++      DB.prepare(
++        `INSERT INTO bounties (id, course, course_key, type, level, reward, max_payouts, paid, note, expires_at, status, created_by, created_at, updated_at)
++         VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 'open', ?, ?, ?)`
++      ).bind(id, course, key, body.type, body.level, body.reward, body.maxPayouts, note, expiresAt, admin.id, now, now),
++      auditStatement(DB, {
++        adminId: admin.id, adminName: name, action: "request.create", ts: now,
++        detail: `${course} ${body.type} (${body.level}), ${naira(body.reward)} × ${body.maxPayouts}, closes ${body.expiresAt}` + (typeof body.reason === "string" && body.reason.trim() ? `. Reason: ${body.reason.trim().slice(0, MAX_REASON)}` : ""),
++      }),
++    ]);
++    return c.json({ success: true, id });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not publish the request", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route POST /api/admin/incentives/requests/:id/close   { reason }
++export async function closeRequest(c) {
++  try {
++    const DB = c.env.DB;
++    const admin = c.get("user");
++    const body = await readBody(c);
++    const reason = cleanReason(body?.reason);
++    if (!reason) return fail(c, 400, REASON_MSG);
++
++    const b = await DB.prepare("SELECT id, course, type, status FROM bounties WHERE id = ?").bind(c.req.param("id")).first();
++    if (!b) return fail(c, 404, "Request not found.");
++    if (b.status !== "open") return fail(c, 409, "This request is already closed.");
++
++    const ts = new Date().toISOString();
++    const name = await adminDisplayName(DB, admin.id);
++    await DB.batch([
++      DB.prepare("UPDATE bounties SET status = 'closed', updated_at = ? WHERE id = ? AND status = 'open'").bind(ts, b.id),
++      auditStatement(DB, { adminId: admin.id, adminName: name, action: "request.close", detail: `${b.course} ${b.type}: closed. Reason: ${reason}`, ts }),
++    ]);
++    return c.json({ success: true });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not close the request", error: sanitizeError(c.env, err) }, 500);
++  }
++}
++
++// @route GET /api/admin/incentives/audit
++export async function getAudit(c) {
++  try {
++    const { results } = await c.env.DB.prepare(
++      "SELECT created_at, admin_name, action, detail FROM incentive_audit ORDER BY created_at DESC, rowid DESC LIMIT 100"
++    ).all();
++    return c.json({ success: true, entries: results.map((e) => ({ date: e.created_at, admin: e.admin_name, action: e.action, detail: e.detail })) });
++  } catch (err) {
++    console.error("adminIncentiveController error:", err?.message);
++    return c.json({ success: false, message: "Could not load the audit log", error: sanitizeError(c.env, err) }, 500);
++  }
++}
+--- /dev/null
++++ b/src/routes/incentiveRoutes.js
+@@ -0,0 +1,14 @@
++import { Hono } from "hono";
++import { getIncentiveStatus, getMyIncentives, getOpenRequests, getLeaderboard } from "../controllers/incentiveController.js";
++import { protect } from "../middleware/protect.js";
++
++const incentiveRoutes = new Hono();
++
++// Student-facing. While the program is off/shadow these answer "not open yet"
++// (config always answers, so the UI can decide whether to show anything).
++incentiveRoutes.get("/config", protect, getIncentiveStatus);
++incentiveRoutes.get("/me", protect, getMyIncentives);
++incentiveRoutes.get("/requests", protect, getOpenRequests);
++incentiveRoutes.get("/leaderboard", protect, getLeaderboard);
++
++export default incentiveRoutes;
+--- /dev/null
++++ b/src/routes/adminIncentiveRoutes.js
+@@ -0,0 +1,26 @@
++import { Hono } from "hono";
++import {
++  getSummary, getFlagCount, setStatus, getConfig, updateConfig, getPayouts, reversePayout,
++  getFlags, resolveFlag, listRequests, createRequest, closeRequest, getAudit,
++} from "../controllers/adminIncentiveController.js";
++import { protect, restrictTo } from "../middleware/protect.js";
++
++const adminIncentiveRoutes = new Hono();
++
++adminIncentiveRoutes.use("*", protect, restrictTo("admin"));
++
++adminIncentiveRoutes.get("/summary", getSummary);
++adminIncentiveRoutes.get("/flag-count", getFlagCount);
++adminIncentiveRoutes.post("/status", setStatus);
++adminIncentiveRoutes.get("/config", getConfig);
++adminIncentiveRoutes.put("/config", updateConfig);
++adminIncentiveRoutes.get("/payouts", getPayouts);
++adminIncentiveRoutes.post("/payouts/:id/reverse", reversePayout);
++adminIncentiveRoutes.get("/flags", getFlags);
++adminIncentiveRoutes.post("/flags/:id/resolve", resolveFlag);
++adminIncentiveRoutes.get("/requests", listRequests);
++adminIncentiveRoutes.post("/requests", createRequest);
++adminIncentiveRoutes.post("/requests/:id/close", closeRequest);
++adminIncentiveRoutes.get("/audit", getAudit);
++
++export default adminIncentiveRoutes;
+--- /dev/null
++++ b/src/services/incentiveConfig.js
+@@ -0,0 +1,82 @@
++import { generateId } from "../utils/id.js";
++
++export const STATUSES = ["off", "shadow", "live", "paused"];
++
++// Rule defaults are deliberately INERT: every payout amount and the budget are
++// zero, so a program that was switched on before anyone configured it pays nothing.
++export const DEFAULT_RULES = {
++  monthlyBudget: 0,
++  weeklyCap: 0,
++  maxSinglePayout: 250,
++  adminDailyLimit: 3000,
++  maxRewardShare: 50,
++  holdDays: 3,
++  ratioAlert: 40,
++  rewards: {
++    pastQuestion: 0,
++    lectureNote: 0,
++    high: 0,
++    rare: 0,
++    firstApproval: 0,
++    referralSignup: 0,
++    referralFirstApproval: 0,
++  },
++};
++
++export const RULE_KEYS = ["monthlyBudget", "weeklyCap", "maxSinglePayout", "adminDailyLimit", "maxRewardShare", "holdDays", "ratioAlert"];
++export const REWARD_KEYS = Object.keys(DEFAULT_RULES.rewards);
++
++const num = (v, fallback) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : fallback);
++
++// Overlay stored (untrusted-shaped) JSON on the defaults, keeping only known keys with sane values.
++export function mergeRules(stored) {
++  const src = stored && typeof stored === "object" ? stored : {};
++  const out = { ...DEFAULT_RULES, rewards: { ...DEFAULT_RULES.rewards } };
++  for (const k of RULE_KEYS) out[k] = num(src[k], DEFAULT_RULES[k]);
++  const rw = src.rewards && typeof src.rewards === "object" ? src.rewards : {};
++  for (const k of REWARD_KEYS) out.rewards[k] = num(rw[k], DEFAULT_RULES.rewards[k]);
++  return out;
++}
++
++// { status, rules, season, updatedAt }. A missing row (e.g. a DB where the
++// migration was run without its seed) behaves exactly like status 'off'.
++export async function getIncentiveConfig(DB) {
++  const row = await DB.prepare("SELECT status, rules, season_name, season_ends_at, updated_at FROM incentive_config WHERE id = 1").first();
++  if (!row) return { status: "off", rules: mergeRules(null), season: null, updatedAt: null };
++  let rules = null;
++  try {
++    rules = JSON.parse(row.rules || "{}");
++  } catch {
++    rules = null; // corrupt JSON must never take the site down; fall back to inert defaults
++  }
++  return {
++    status: STATUSES.includes(row.status) ? row.status : "off",
++    rules: mergeRules(rules),
++    season: row.season_ends_at ? { name: row.season_name || "", endsAt: row.season_ends_at } : null,
++    updatedAt: row.updated_at,
++  };
++}
++
++// Students only ever see the program when an admin has made it live or paused.
++// 'shadow' is invisible to students by design: it only records what WOULD be paid.
++export const isVisibleToStudents = (status) => status === "live" || status === "paused";
++
++// Which ledger statuses count as "paid" in budget and revenue maths. Shadow rows
++// count only while the program IS in shadow mode, so admins see the projected cost
++// without shadow history ever eating a live budget.
++export const paidStatuses = (status) => (status === "shadow" ? ["pending", "cleared", "shadow"] : ["pending", "cleared"]);
++
++// A prepared INSERT for the append-only audit log, for use inside a batch.
++export function auditStatement(DB, { adminId = null, adminName, action, detail = "", ts }) {
++  return DB.prepare(
++    "INSERT INTO incentive_audit (id, admin_id, admin_name, action, detail, created_at) VALUES (?, ?, ?, ?, ?, ?)"
++  ).bind(generateId(), adminId, adminName, action, String(detail).slice(0, 1000), ts);
++}
++
++export async function adminDisplayName(DB, adminId) {
++  const row = await DB.prepare("SELECT full_name FROM users WHERE id = ?").bind(adminId).first();
++  return row?.full_name || "Admin";
++}
++
++// Courses are matched ignoring case, spaces and punctuation: "csc 305" == "CSC-305" == "CSC305".
++export const courseKey = (course) => String(course || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+--- /dev/null
++++ b/src/services/rewardReversal.js
+@@ -0,0 +1,61 @@
++import { generateId } from "../utils/id.js";
++
++// Statements that take ONE reward back, built for use inside a single D1 batch
++// (which SQLite runs as one atomic transaction).
++//
++// Order matters and is what makes this safe against races and double-clicks:
++//   1-2. adjust the student's balance, but ONLY if the ledger row is currently in
++//        the matching state (pending -> reward_pending, cleared -> reward_balance).
++//        These run BEFORE the status flips, so they can read the old state.
++//   3.   flip the row to 'reversed' (conditional on it still being pending/cleared).
++//   4.   write the negative reversal row, but ONLY if step 3 really happened in this
++//        very batch (matched by this request's timestamp + admin).
++//   5.   optional audit row, under the same guard.
++// If the row was already reversed, steps 1-5 are all no-ops (and the unique index on
++// reverses_id is the hard backstop against a second reversal row).
++//
++// reward_balance has no >= 0 check on purpose: if the student already spent the
++// reward, the reversal may drive it negative, which blocks further downloads until
++// they top up (that rule lives in the charge flow).
++export function reversalStatements(DB, row, { adminId, adminName, reason, ts, audit = null }) {
++  const amount = Math.abs(Number(row.amount));
++  const reversedGuard =
++    "EXISTS (SELECT 1 FROM reward_ledger WHERE id = ? AND status = 'reversed' AND reversed_at = ? AND reversed_by = ?)";
++  const guardArgs = [row.id, ts, adminId];
++
++  const statements = [
++    DB.prepare(
++      `UPDATE users SET reward_pending = reward_pending - ?, updated_at = ?
++        WHERE id = ? AND EXISTS (SELECT 1 FROM reward_ledger WHERE id = ? AND status = 'pending')`
++    ).bind(amount, ts, row.user_id, row.id),
++    DB.prepare(
++      `UPDATE users SET reward_balance = reward_balance - ?, updated_at = ?
++        WHERE id = ? AND EXISTS (SELECT 1 FROM reward_ledger WHERE id = ? AND status = 'cleared')`
++    ).bind(amount, ts, row.user_id, row.id),
++    DB.prepare(
++      `UPDATE reward_ledger SET status = 'reversed', reversed_at = ?, reversed_by = ?, reversal_reason = ?
++        WHERE id = ? AND status IN ('pending','cleared')`
++    ).bind(ts, adminId, reason, row.id),
++    DB.prepare(
++      `INSERT INTO reward_ledger
++         (id, user_id, type, amount, status, tier, label, resource_id, bounty_id, referral_id, approved_by, note,
++          reversed_at, reversed_by, reversal_reason, reverses_id, created_at)
++       SELECT ?, ?, 'reversal', ?, 'reversed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
++        WHERE ${reversedGuard}`
++    ).bind(
++      generateId(), row.user_id, -amount, row.tier, `Reversed: ${row.label || "reward"}`.slice(0, 200), row.resource_id,
++      row.bounty_id ?? null, row.referral_id ?? null, adminId, reason, ts, adminId, reason, row.id, ts,
++      ...guardArgs
++    ),
++  ];
++
++  if (audit) {
++    statements.push(
++      DB.prepare(
++        `INSERT INTO incentive_audit (id, admin_id, admin_name, action, detail, created_at)
++         SELECT ?, ?, ?, ?, ?, ? WHERE ${reversedGuard}`
++      ).bind(generateId(), adminId, adminName, audit.action, String(audit.detail).slice(0, 1000), ts, ...guardArgs)
++    );
++  }
++  return statements;
++}
+--- /dev/null
++++ b/src/services/referralService.js
+@@ -0,0 +1,99 @@
++import { generateId } from "../utils/id.js";
++
++// Unambiguous characters only (no 0/O, 1/I): 32 symbols, so a random byte maps with no bias.
++const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
++const CODE_RE = /^[A-Za-z0-9_-]{4,24}$/;
++
++export function normalizeReferralCode(raw) {
++  if (typeof raw !== "string") return null;
++  const trimmed = raw.trim();
++  return CODE_RE.test(trimmed) ? trimmed.toUpperCase() : null;
++}
++
++function randomCode(length = 8) {
++  const bytes = crypto.getRandomValues(new Uint8Array(length));
++  return [...bytes].map((b) => ALPHABET[b % ALPHABET.length]).join("");
++}
++
++// Returns the student's referral code, creating it on first use. The UPDATE is
++// conditional (referral_code IS NULL), so two concurrent first calls can't give
++// one student two codes; a rare UNIQUE collision just retries with a new code.
++export async function ensureReferralCode(DB, userId) {
++  const existing = await DB.prepare("SELECT referral_code FROM users WHERE id = ?").bind(userId).first();
++  if (!existing) return null;
++  if (existing.referral_code) return existing.referral_code;
++
++  for (let attempt = 0; attempt < 5; attempt++) {
++    try {
++      await DB.prepare("UPDATE users SET referral_code = ? WHERE id = ? AND referral_code IS NULL").bind(randomCode(), userId).run();
++    } catch (err) {
++      if (/UNIQUE constraint failed/i.test(String(err?.message))) continue;
++      throw err;
++    }
++    const row = await DB.prepare("SELECT referral_code FROM users WHERE id = ?").bind(userId).first();
++    if (row?.referral_code) return row.referral_code;
++  }
++  return null;
++}
++
++// Called right after a successful signup. BEST EFFORT: an unknown, malformed or
++// ineligible code must never block or fail registration, so this swallows everything.
++// Only an active, verified inviter counts, and nobody can invite themselves.
++export async function captureReferral(DB, { inviteeId, rawCode, ts }) {
++  try {
++    const code = normalizeReferralCode(rawCode);
++    if (!code) return null;
++    const inviter = await DB.prepare(
++      "SELECT id FROM users WHERE referral_code = ? AND is_verified = 1 AND account_status = 'active' AND id != ?"
++    )
++      .bind(code, inviteeId)
++      .first();
++    if (!inviter) return null;
++
++    const id = generateId();
++    await DB.batch([
++      DB.prepare("UPDATE users SET referred_by = ? WHERE id = ?").bind(inviter.id, inviteeId),
++      DB.prepare(
++        "INSERT INTO referrals (id, inviter_id, invitee_id, status, earned, created_at, updated_at) VALUES (?, ?, ?, 'signed_up', 0, ?, ?)"
++      ).bind(id, inviter.id, inviteeId, ts, ts),
++    ]);
++    return id;
++  } catch (err) {
++    console.error("captureReferral failed (ignored):", err?.message);
++    return null;
++  }
++}
++
++// signed_up -> verified, when the invitee confirms their email. Data only; pays nothing.
++export async function markReferralVerified(DB, inviteeId, ts) {
++  try {
++    await DB.prepare("UPDATE referrals SET status = 'verified', updated_at = ? WHERE invitee_id = ? AND status = 'signed_up'")
++      .bind(ts, inviteeId)
++      .run();
++  } catch (err) {
++    console.error("markReferralVerified failed (ignored):", err?.message);
++  }
++}
++
++// Statements for the account/resource deletion cascades (see userSettingsController
++// and adminResourceController). The new tables reference users/resources, so without
++// these a deletion would start failing with a foreign-key error once rows exist.
++export function incentiveCascadeForUser(DB, userId) {
++  return {
++    // Run BEFORE the user's resources are deleted: keep the ledger row, detach the resource.
++    beforeResources: [
++      DB.prepare("UPDATE reward_ledger SET resource_id = NULL WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
++    ],
++    // Run BEFORE the user row is deleted.
++    beforeUser: [
++      DB.prepare("UPDATE reward_ledger SET user_id = NULL WHERE user_id = ?").bind(userId), // financial history outlives the account
++      DB.prepare("DELETE FROM referrals WHERE inviter_id = ? OR invitee_id = ?").bind(userId, userId),
++      DB.prepare("DELETE FROM incentive_flags WHERE user_id = ?").bind(userId),
++      DB.prepare("UPDATE users SET referred_by = NULL WHERE referred_by = ?").bind(userId),
++    ],
++  };
++}
++
++export function incentiveCascadeForResource(DB, resourceId) {
++  return [DB.prepare("UPDATE reward_ledger SET resource_id = NULL WHERE resource_id = ?").bind(resourceId)];
++}
+--- /dev/null
++++ b/src/services/bountyService.js
+@@ -0,0 +1,19 @@
++import { courseKey } from "./incentiveConfig.js";
++
++// A student who arrives from a "Wanted" request sends its id with the upload permit.
++// Returns the bounty id only if it is genuinely usable: open, unexpired, not fully
++// paid out, and for the same course as the upload (compared ignoring case/spacing).
++// Anything else returns null and the upload simply proceeds as a normal upload; a stale
++// or tampered id must never block someone from contributing. Nothing is paid here:
++// payment happens at approval, which re-checks all of this.
++export async function resolveBountyForUpload(DB, rawId, course) {
++  if (typeof rawId !== "string") return null;
++  const id = rawId.trim().slice(0, 64);
++  if (!id) return null;
++  const row = await DB.prepare(
++    "SELECT id FROM bounties WHERE id = ? AND status = 'open' AND expires_at > ? AND paid < max_payouts AND course_key = ?"
++  )
++    .bind(id, new Date().toISOString(), courseKey(course))
++    .first();
++  return row ? row.id : null;
++}
+--- /dev/null
++++ b/src/services/uploadRewards.js
+@@ -0,0 +1,55 @@
++import { getIncentiveConfig, isVisibleToStudents } from "./incentiveConfig.js";
++
++// The reward chip on a student's "My uploads" cards: { amount, status }.
++//   pending upload  -> { amount: <most it could earn, standard tier or its request's reward> }  ("Up to ...")
++//   approved upload -> what was actually paid, with status pending | cleared | reversed
++//   rejected upload -> no chip
++// Returns an empty Map unless the program is live or paused, so while it is off/shadow
++// "My uploads" is exactly what it always was.
++export async function rewardChipsForUploads(DB, userId, uploads) {
++  const chips = new Map();
++  if (!uploads.length) return chips;
++  const cfg = await getIncentiveConfig(DB);
++  if (!isVisibleToStudents(cfg.status)) return chips;
++
++  const ids = uploads.map((u) => u.id);
++  const marks = ids.map(() => "?").join(",");
++  const { results: paid } = await DB.prepare(
++    `SELECT resource_id, amount, status FROM reward_ledger
++      WHERE user_id = ? AND type = 'reward' AND status != 'shadow' AND resource_id IN (${marks})`
++  ).bind(userId, ...ids).all();
++
++  const byResource = new Map();
++  for (const row of paid) {
++    if (!byResource.has(row.resource_id)) byResource.set(row.resource_id, []);
++    byResource.get(row.resource_id).push(row);
++  }
++
++  const bountyIds = [...new Set(uploads.filter((u) => u.status === "pending" && u.bounty_id).map((u) => u.bounty_id))];
++  const bountyReward = new Map();
++  if (bountyIds.length) {
++    const { results } = await DB.prepare(
++      `SELECT id, reward FROM bounties
++        WHERE id IN (${bountyIds.map(() => "?").join(",")}) AND status = 'open' AND expires_at > ? AND paid < max_payouts`
++    ).bind(...bountyIds, new Date().toISOString()).all();
++    for (const b of results) bountyReward.set(b.id, b.reward);
++  }
++
++  for (const u of uploads) {
++    if (u.status === "rejected") continue;
++    const rows = byResource.get(u.id);
++    if (rows?.length) {
++      const live = rows.filter((r) => r.status !== "reversed");
++      if (live.length) {
++        chips.set(u.id, { amount: live.reduce((s, r) => s + r.amount, 0), status: live.some((r) => r.status === "pending") ? "pending" : "cleared" });
++      } else {
++        chips.set(u.id, { amount: rows.reduce((s, r) => s + r.amount, 0), status: "reversed" });
++      }
++    } else if (u.status === "pending") {
++      const standard = u.type === "Past Question" ? cfg.rules.rewards.pastQuestion : u.type === "Lecture Note" ? cfg.rules.rewards.lectureNote : 0;
++      const potential = Math.max(standard, bountyReward.get(u.bounty_id) || 0);
++      if (potential > 0) chips.set(u.id, { amount: potential });
++    }
++  }
++  return chips;
++}
+--- /dev/null
++++ b/src/utils/ipHash.js
+@@ -0,0 +1,10 @@
++// Salted SHA-256 of an IP address. Stored at signup ONLY so referral rings
++// (many accounts from one connection inviting each other) can be detected.
++// The raw IP is never stored, and the salt is the server secret, so the hash
++// can't be reversed or matched against another system's data.
++export async function hashIp(env, ip) {
++  if (!ip || typeof ip !== "string") return null;
++  const data = new TextEncoder().encode(`${env.JWT_SECRET}:ip:${ip.trim()}`);
++  const digest = await crypto.subtle.digest("SHA-256", data);
++  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
++}
+--- /dev/null
++++ b/src/db/migrations/004_incentives.sql
+@@ -0,0 +1,137 @@
++-- ============================================================================
++-- Save point 4 — incentive program data model (program ships switched OFF)
++-- Run ONCE against the existing production database (after 001, 002, 003):
++--   npx wrangler d1 execute sharef-db --remote --file=./src/db/migrations/004_incentives.sql
++-- Then (optional, separate file so a trigger-parsing hiccup can never block this one):
++--   npx wrangler d1 execute sharef-db --remote --file=./src/db/migrations/004b_incentive_audit_triggers.sql
++-- Deploy this BEFORE (or together with) the new code. It is purely additive:
++-- every new column has a default, nothing existing is altered or dropped.
++-- ============================================================================
++
++ALTER TABLE users ADD COLUMN reward_balance REAL NOT NULL DEFAULT 0;
++ALTER TABLE users ADD COLUMN reward_pending REAL NOT NULL DEFAULT 0 CHECK (reward_pending >= 0);
++ALTER TABLE users ADD COLUMN rewards_frozen INTEGER NOT NULL DEFAULT 0;
++ALTER TABLE users ADD COLUMN referral_code TEXT;
++ALTER TABLE users ADD COLUMN referred_by TEXT;
++ALTER TABLE users ADD COLUMN signup_ip_hash TEXT;
++CREATE UNIQUE INDEX IF NOT EXISTS idx_users_referral_code ON users (referral_code) WHERE referral_code IS NOT NULL;
++CREATE INDEX IF NOT EXISTS idx_users_signup_ip_hash ON users (signup_ip_hash) WHERE signup_ip_hash IS NOT NULL;
++
++ALTER TABLE resources ADD COLUMN file_hash TEXT;
++ALTER TABLE resources ADD COLUMN bounty_id TEXT;
++CREATE INDEX IF NOT EXISTS idx_resources_file_hash ON resources (file_hash) WHERE file_hash IS NOT NULL;
++
++ALTER TABLE transactions ADD COLUMN from_rewards REAL NOT NULL DEFAULT 0;
++
++-- ----------------------------------------------------------------------------
++-- Incentive program (see BACKEND_INTEGRATION.md in the update package)
++--   status 'off' (the default) = nothing observable changes for students or moderators.
++-- ----------------------------------------------------------------------------
++
++-- Single-row settings table (id is forced to 1). `rules` is a JSON object of the
++-- numeric limits and reward amounts; the app merges it over safe defaults.
++CREATE TABLE IF NOT EXISTS incentive_config (
++  id               INTEGER PRIMARY KEY CHECK (id = 1),
++  status           TEXT NOT NULL DEFAULT 'off' CHECK (status IN ('off','shadow','live','paused')),
++  rules            TEXT NOT NULL DEFAULT '{}',
++  season_name      TEXT,
++  season_ends_at   TEXT,
++  updated_by       TEXT,
++  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++INSERT OR IGNORE INTO incentive_config (id, status, rules) VALUES (1, 'off', '{}');
++
++-- Requests ("Wanted") that pay a fixed reward for a specific missing resource.
++CREATE TABLE IF NOT EXISTS bounties (
++  id            TEXT PRIMARY KEY,
++  course        TEXT NOT NULL,                    -- as displayed, e.g. 'CSC 305'
++  course_key    TEXT NOT NULL,                    -- normalised for matching: upper-case, letters+digits only ('CSC305')
++  type          TEXT NOT NULL CHECK (type IN ('Past Questions','Lecture Notes','Revision Sheet')),
++  level         TEXT NOT NULL,                    -- '300 Level'
++  reward        REAL NOT NULL CHECK (reward > 0),
++  max_payouts   INTEGER NOT NULL DEFAULT 1 CHECK (max_payouts BETWEEN 1 AND 3),
++  paid          INTEGER NOT NULL DEFAULT 0,
++  note          TEXT NOT NULL DEFAULT '',
++  expires_at    TEXT NOT NULL,                    -- ISO8601 (end of the chosen day, Africa/Lagos)
++  status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','fulfilled')),  -- 'expired' is derived from expires_at
++  created_by    TEXT,                             -- admin id (no FK: an admin deleting their account must not fail)
++  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS idx_bounties_status_expires ON bounties (status, expires_at);
++CREATE INDEX IF NOT EXISTS idx_bounties_course_key ON bounties (course_key);
++
++-- Referral relationships. One inviter per invitee. Statuses move signed_up -> verified -> contributed.
++CREATE TABLE IF NOT EXISTS referrals (
++  id          TEXT PRIMARY KEY,
++  inviter_id  TEXT NOT NULL REFERENCES users(id),
++  invitee_id  TEXT NOT NULL UNIQUE REFERENCES users(id),
++  status      TEXT NOT NULL DEFAULT 'signed_up' CHECK (status IN ('signed_up','verified','contributed')),
++  earned      REAL NOT NULL DEFAULT 0,
++  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS idx_referrals_inviter ON referrals (inviter_id, created_at DESC);
++
++-- Every reward and every reversal. Reversals are separate NEGATIVE rows so history is never rewritten.
++-- user_id / resource_id are nullable for the same reason as transactions: financial history
++-- must outlive a deleted account or resource (see deleteMyAccount / permanentlyDeleteResource).
++CREATE TABLE IF NOT EXISTS reward_ledger (
++  id               TEXT PRIMARY KEY,
++  user_id          TEXT REFERENCES users(id),
++  type             TEXT NOT NULL CHECK (type IN ('reward','reversal')),
++  amount           REAL NOT NULL,                 -- reversals are negative
++  status           TEXT NOT NULL CHECK (status IN ('pending','cleared','reversed','shadow')),
++  tier             TEXT CHECK (tier IS NULL OR tier IN ('bounty','standard','high','rare','first','referral','challenge')),
++  label            TEXT NOT NULL DEFAULT '',
++  resource_id      TEXT REFERENCES resources(id),
++  bounty_id        TEXT,
++  referral_id      TEXT,
++  approved_by      TEXT,                          -- admin id (no FK)
++  note             TEXT NOT NULL DEFAULT '',
++  clears_at        TEXT,                          -- when a pending reward becomes spendable
++  reversed_at      TEXT,
++  reversed_by      TEXT,
++  reversal_reason  TEXT NOT NULL DEFAULT '',
++  reverses_id      TEXT,                          -- on a reversal row: the reward it cancels
++  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS idx_reward_ledger_user_created ON reward_ledger (user_id, created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_reward_ledger_status_clears ON reward_ledger (status, clears_at);
++CREATE INDEX IF NOT EXISTS idx_reward_ledger_created ON reward_ledger (created_at);
++CREATE INDEX IF NOT EXISTS idx_reward_ledger_approver ON reward_ledger (approved_by, created_at);
++-- Idempotency: the same student can never be paid twice for the same resource and tier,
++-- however many times an approval is retried, re-approved, or raced.
++CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_ledger_once
++  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL;
++-- A reward can be reversed at most once.
++CREATE UNIQUE INDEX IF NOT EXISTS idx_reward_ledger_one_reversal
++  ON reward_ledger (reverses_id) WHERE reverses_id IS NOT NULL;
++
++-- Fraud signals raised by the nightly job (Phase 3) and resolved by a moderator.
++CREATE TABLE IF NOT EXISTS incentive_flags (
++  id           TEXT PRIMARY KEY,
++  user_id      TEXT NOT NULL REFERENCES users(id),
++  signals      TEXT NOT NULL DEFAULT '[]',        -- JSON array of plain-English lines
++  exposure     REAL NOT NULL DEFAULT 0,
++  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','dismissed','frozen','reversed')),
++  note         TEXT NOT NULL DEFAULT '',
++  resolved_by  TEXT,
++  resolved_at  TEXT,
++  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS idx_incentive_flags_status ON incentive_flags (status, created_at DESC);
++CREATE INDEX IF NOT EXISTS idx_incentive_flags_user ON incentive_flags (user_id);
++
++-- Append-only record of every consequential admin action. admin_name is a snapshot so
++-- the log stays readable after an account is deleted; admin_id is NULL for system events.
++CREATE TABLE IF NOT EXISTS incentive_audit (
++  id          TEXT PRIMARY KEY,
++  admin_id    TEXT,
++  admin_name  TEXT NOT NULL,
++  action      TEXT NOT NULL,
++  detail      TEXT NOT NULL DEFAULT '',
++  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS idx_incentive_audit_created ON incentive_audit (created_at DESC);
+--- /dev/null
++++ b/src/db/migrations/004b_incentive_audit_triggers.sql
+@@ -0,0 +1,5 @@
++-- Makes the audit log tamper-evident: rows can be added but never changed or removed.
++CREATE TRIGGER IF NOT EXISTS incentive_audit_no_update BEFORE UPDATE ON incentive_audit
++BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;
++CREATE TRIGGER IF NOT EXISTS incentive_audit_no_delete BEFORE DELETE ON incentive_audit
++BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;
+--- /dev/null
++++ b/test/incentiveTestLib.js
+@@ -0,0 +1,72 @@
++// Shared helpers for the phase6b incentive tests: a fake request context (so controllers run without
++// the Hono router), seed helpers, and check()/summary(). Used by test/phase6b-incentives-*.test.js.
++import fs from "node:fs";
++import { createMockD1 } from "./mockD1.js";
++
++export const schemaSql = fs.readFileSync(new URL("../src/db/schema.sql", import.meta.url), "utf8");
++let passed = 0, failed = 0;
++export const check = (label, cond, extra = "") => { console.log(cond ? "OK  -" : "FAIL-", label, cond ? "" : extra); cond ? passed++ : failed++; };
++export const summary = () => { console.log(`\n${passed} passed, ${failed} failed`); process.exit(failed ? 1 : 0); };
++export const iso = (daysAgo = 0) => new Date(Date.now() - daysAgo * 864e5).toISOString();
++
++export function freshEnv(extra = {}) {
++  const DB = createMockD1(schemaSql);
++  return { DB, env: { DB, JWT_SECRET: "test-secret", CLOUDINARY_CLOUD_NAME: "cloud", CLOUDINARY_API_KEY: "k", CLOUDINARY_API_SECRET: "s", ...extra } };
++}
++export function ctx(env, { user, query = {}, params = {}, body, headers = {} } = {}) {
++  const waits = [];
++  const h = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]));
++  return {
++    env, waits,
++    get: (k) => (k === "user" ? user : undefined),
++    req: {
++      url: "https://api.example.workers.dev/api/x",
++      query: (k) => query[k], param: (k) => params[k], header: (k) => h[k.toLowerCase()],
++      json: async () => { if (body === undefined) throw new Error("no body"); return body; },
++      valid: () => body,
++    },
++    json: (b, status = 200) => ({ status, body: b }),
++    executionCtx: { waitUntil: (p) => { waits.push(Promise.resolve(p).catch(() => {})); } },
++  };
++}
++export const raw = (DB) => DB._raw;
++export const one = (DB, sql, ...a) => DB._raw.prepare(sql).get(...a);
++export const all = (DB, sql, ...a) => DB._raw.prepare(sql).all(...a);
++export const n = (DB, sql, ...a) => DB._raw.prepare(sql).get(...a).n;
++
++export const LIVE_RULES = {
++  monthlyBudget: 20000, weeklyCap: 300, maxSinglePayout: 250, adminDailyLimit: 3000, maxRewardShare: 50, holdDays: 3, ratioAlert: 40,
++  rewards: { pastQuestion: 100, lectureNote: 60, high: 150, rare: 200, firstApproval: 50, referralSignup: 0, referralFirstApproval: 50 },
++};
++export function setCfg(DB, status, rules = LIVE_RULES) {
++  DB._raw.prepare("UPDATE incentive_config SET status = ?, rules = ? WHERE id = 1").run(status, typeof rules === "string" ? rules : JSON.stringify(rules));
++}
++export function seedUser(DB, id, o = {}) {
++  const { name = `User ${id}`, role = "student", department = "Computer Science", level = "300", wallet = 0, rb = 0, rp = 0, frozen = 0,
++          status = "active", verified = 1, ip = null, created = iso(60), code = null, referredBy = null } = o;
++  DB._raw.prepare(`INSERT INTO users (id,full_name,email,password,role,department,level,wallet_balance,reward_balance,reward_pending,rewards_frozen,
++      account_status,is_verified,signup_ip_hash,created_at,preferences,referral_code,referred_by) VALUES (?,?,?,'h',?,?,?,?,?,?,?,?,?,?,?,'{}',?,?)`)
++    .run(id, name, `${id}@x.com`, role, department, level, wallet, rb, rp, frozen, status, verified, ip, created, code, referredBy);
++}
++export function seedResource(DB, o) {
++  const { id, status = "approved", type = "Past Question", uploader = "uploader", reviewedBy = null, reviewedAt = null, bountyId = null,
++          course = "CSC 301", createdAt = iso(1), hash = null } = o;
++  DB._raw.prepare(`INSERT INTO resources (id,title,type,department,course,level,semester,session,uploader_id,file_name,file_url,cloudinary_public_id,
++      file_size_bytes,file_extension,pages,status,reviewed_by,reviewed_at,bounty_id,file_hash,created_at,updated_at)
++      VALUES (?,?,?,'Computer Science',?,'300','First','2024/2025',?,'f.pdf','https://x/f.pdf','pub',1000,'pdf',5,?,?,?,?,?,?,?)`)
++    .run(id, "T " + id, type, course, uploader, status, reviewedBy, reviewedAt, bountyId, hash, createdAt, createdAt);
++}
++let lid = 0;
++export function seedLedger(DB, o) {
++  const { id = "L" + ++lid, user = null, amount, status = "cleared", tier = "standard", label = "Reward", resource = null, approver = "admin1",
++          createdAt = iso(0), type = "reward", reverses = null } = o;
++  DB._raw.prepare(`INSERT INTO reward_ledger (id,user_id,type,amount,status,tier,label,resource_id,approved_by,created_at,reverses_id)
++      VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, user, type, amount, status, tier, label, resource, approver, createdAt, reverses);
++  return id;
++}
++export function seedBounty(DB, o = {}) {
++  const { id = "B" + ++lid, course = "CSC 305", type = "Past Questions", level = "300 Level", reward = 100, max = 1, paid = 0, status = "open", expires = iso(-7), created = iso(1) } = o;
++  DB._raw.prepare(`INSERT INTO bounties (id,course,course_key,type,level,reward,max_payouts,paid,note,expires_at,status,created_at,updated_at)
++      VALUES (?,?,?,?,?,?,?,?,'',?,?,?,?)`).run(id, course, course.toUpperCase().replace(/[^A-Z0-9]/g, ""), type, level, reward, max, paid, expires, status, created, created);
++  return id;
++}
+--- /dev/null
++++ b/test/phase6b-incentives-student.test.js
+@@ -0,0 +1,149 @@
++// Phase 6b (update package, Phase 2): student-facing /incentives endpoints and program-off isolation
++// Controller-level tests: real controllers + real schema.sql in SQLite, with a fake request context.
++// Run: node --experimental-sqlite test/phase6b-incentives-student.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, seedBounty, LIVE_RULES } from "./incentiveTestLib.js";
++import { getIncentiveStatus, getMyIncentives, getOpenRequests, getLeaderboard } from "../src/controllers/incentiveController.js";
++import { startOfWeekInLagos } from "../src/utils/lagosDay.js";
++import { ensureReferralCode } from "../src/services/referralService.js";
++
++const as = (id) => ({ id, role: "student" });
++
++// ================= isolation: 'off' (the default) and 'shadow' must look like the feature doesn't exist
++{
++  const { env, DB } = freshEnv();
++  seedUser(DB, "me");
++  check("fresh DB defaults to status off (seeded config row)", one(DB, "SELECT status FROM incentive_config").status === "off");
++
++  let r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("off: config answers {enabled:false,status:'off'} and leaks no rules", r.status === 200 && r.body.enabled === false && r.body.status === "off" && Object.keys(r.body).sort().join() === "enabled,status,success");
++  for (const [name, fn] of [["me", getMyIncentives], ["requests", getOpenRequests], ["leaderboard", getLeaderboard]]) {
++    r = await fn(ctx(env, { user: as("me") }));
++    check(`off: /${name} → 403 'not open yet'`, r.status === 403 && r.body.success === false);
++  }
++  check("off: no referral code was created as a side effect", one(DB, "SELECT referral_code FROM users WHERE id='me'").referral_code === null);
++
++  setCfg(DB, "shadow");
++  r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("shadow: students still see enabled:false (shadow is invisible)", r.body.enabled === false && r.body.status === "off");
++  r = await getMyIncentives(ctx(env, { user: as("me") }));
++  check("shadow: /me → 403", r.status === 403);
++
++  DB._raw.prepare("DELETE FROM incentive_config").run();
++  r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("missing config row behaves like off (no crash)", r.status === 200 && r.body.enabled === false);
++  DB._raw.prepare("INSERT INTO incentive_config (id,status,rules) VALUES (1,'live','{not json')").run();
++  r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("corrupt rules JSON → safe inert defaults, not a 500", r.status === 200 && r.body.enabled === true && r.body.rewards.pastQuestion === 0 && r.body.weeklyCap === 0);
++}
++
++// ================= live: config + me
++{
++  const { env, DB } = freshEnv();
++  for (const id of ["me", "a", "b", "uploader"]) seedUser(DB, id);
++  DB._raw.prepare("UPDATE users SET full_name='Peace Adeyemi' WHERE id='a'").run();
++  DB._raw.prepare("UPDATE users SET full_name='Tunde Bakare' WHERE id='b'").run();
++  DB._raw.prepare("UPDATE users SET wallet_balance=700, reward_balance=160, reward_pending=100 WHERE id='me'").run();
++  setCfg(DB, "live");
++
++  let r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("live: config exposes only student-relevant fields", r.body.enabled && r.body.status === "live" && r.body.holdDays === 3 && r.body.weeklyCap === 300 && r.body.maxRewardShare === 50
++    && Object.keys(r.body.rewards).sort().join() === "firstApproval,lectureNote,pastQuestion,referralFirstApproval" && r.body.rewards.pastQuestion === 100, JSON.stringify(r.body));
++  check("live: internal limits (monthly budget, tiers high/rare, admin limit) are NOT exposed", !("monthlyBudget" in r.body) && !("high" in r.body.rewards) && !("adminDailyLimit" in r.body));
++
++  seedLedger(DB, { user: "me", amount: 100, status: "pending", label: "CSC 301 approved", createdAt: iso(0) });
++  seedLedger(DB, { user: "me", amount: 60, status: "cleared", createdAt: iso(2) });
++  seedLedger(DB, { user: "me", amount: 50, status: "reversed", createdAt: iso(1) });          // reversed: not counted toward the cap
++  seedLedger(DB, { user: "me", amount: 40, status: "cleared", createdAt: iso(10) });          // outside the rolling 7 days
++  seedLedger(DB, { user: "me", amount: 999, status: "shadow", createdAt: iso(0) });           // admin what-if data: must stay hidden
++  seedLedger(DB, { user: "me", amount: -50, status: "reversed", type: "reversal", label: "Reversed: x", createdAt: iso(0) });
++  DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,earned,created_at,updated_at) VALUES ('r1','me','a','verified',50,?,?),('r2','me','b','signed_up',0,?,?)").run(iso(3), iso(3), iso(2), iso(2));
++
++  r = await getMyIncentives(ctx(env, { user: as("me") }));
++  const m = r.body;
++  check("me: balances map to funded/reward/pending", m.balance.funded === 700 && m.balance.reward === 160 && m.balance.pending === 100, JSON.stringify(m.balance));
++  check("me: weekEarned = rolling 7 days of pending+cleared only (160), weekCap from rules", m.weekEarned === 160 && m.weekCap === 300, `earned=${m.weekEarned}`);
++  check("me: ledger hides the shadow row (5 of 6 rows shown)", m.ledger.length === 5 && !m.ledger.some((l) => l.amount === 999));
++  check("me: reversal appears as a negative 'reversed' row", m.ledger.some((l) => l.amount === -50 && l.status === "reversed"));
++  check("me: ledger is ordered newest first", m.ledger.every((l, i) => i === 0 || m.ledger[i - 1].date >= l.date));
++  check("me: ledger rows have id/date/label/amount/status", ["id", "date", "label", "amount", "status"].every((k) => m.ledger[0][k] !== undefined));
++  check("me: referrals expose FIRST NAME only (no surnames)", m.referrals.map((x) => x.name).sort().join() === "Peace,Tunde" && !JSON.stringify(m.referrals).includes("Adeyemi") && !JSON.stringify(m.referrals).includes("Bakare"));
++  check("me: referral statuses/earned carried through", m.referrals.find((x) => x.name === "Peace").status === "verified" && m.referrals.find((x) => x.name === "Peace").earned === 50);
++  check("me: frozen false by default", m.frozen === false);
++  check("me: referral code is 8 unambiguous chars and persisted", /^[A-HJ-NP-Z2-9]{8}$/.test(m.referralCode) && one(DB, "SELECT referral_code c FROM users WHERE id='me'").c === m.referralCode);
++  const again = await getMyIncentives(ctx(env, { user: as("me") }));
++  check("me: referral code is stable across calls", again.body.referralCode === m.referralCode);
++
++  DB._raw.prepare("UPDATE users SET rewards_frozen=1 WHERE id='me'").run();
++  check("me: frozen reflected", (await getMyIncentives(ctx(env, { user: as("me") }))).body.frozen === true);
++
++  // 35 ledger rows → capped at 30 (newest first)
++  seedUser(DB, "many");
++  for (let i = 0; i < 35; i++) seedLedger(DB, { user: "many", amount: i + 1, createdAt: iso(i / 100) });
++  const many = (await getMyIncentives(ctx(env, { user: as("many") }))).body;
++  check("me: ledger capped at 30 rows, newest first", many.ledger.length === 30 && many.ledger[0].amount === 1);
++
++  // codes: stable under concurrency, unique across users
++  seedUser(DB, "c1");
++  const codes = await Promise.all([1, 2, 3, 4, 5].map(() => ensureReferralCode(DB, "c1")));
++  check("referral code: 5 concurrent first calls all return the SAME code", new Set(codes).size === 1 && codes[0]);
++  const ids = Array.from({ length: 40 }, (_, i) => "bulk" + i);
++  ids.forEach((id) => seedUser(DB, id));
++  const bulk = await Promise.all(ids.map((id) => ensureReferralCode(DB, id)));
++  check("referral code: 40 users get 40 distinct codes", new Set(bulk).size === 40);
++  check("referral code: unknown user → null (no crash)", (await ensureReferralCode(DB, "ghost")) === null);
++
++  // paused still serves students
++  setCfg(DB, "paused");
++  r = await getIncentiveStatus(ctx(env, { user: as("me") }));
++  check("paused: config enabled with status 'paused'", r.body.enabled === true && r.body.status === "paused");
++  check("paused: /me still works (students keep seeing their balance)", (await getMyIncentives(ctx(env, { user: as("me") }))).status === 200);
++}
++
++// ================= requests ("Wanted")
++{
++  const { env, DB } = freshEnv();
++  seedUser(DB, "me"); setCfg(DB, "live");
++  seedBounty(DB, { id: "open-lo", reward: 60, course: "MTH 101" });
++  seedBounty(DB, { id: "open-hi", reward: 200, course: "CSC 305" });
++  seedBounty(DB, { id: "expired", expires: iso(1) });
++  seedBounty(DB, { id: "closed", status: "closed" });
++  seedBounty(DB, { id: "full", max: 2, paid: 2 });
++  seedBounty(DB, { id: "partly", max: 3, paid: 2, reward: 80, course: "PHY 102" });
++  const r = await getOpenRequests(ctx(env, { user: as("me") }));
++  check("requests: only open, unexpired, not-fully-paid; biggest reward first", r.body.requests.map((x) => x.id).join() === "open-hi,partly,open-lo", r.body.requests.map((x) => x.id).join());
++  check("requests: item shape id/course/type/level/reward/note", ["id", "course", "type", "level", "reward", "note"].every((k) => r.body.requests[0][k] !== undefined));
++}
++
++// ================= leaderboard
++{
++  const { env, DB } = freshEnv();
++  seedUser(DB, "uploader");
++  const users = { me: "Ngozi Eze", a: "Chidinma Okafor", b: "Madonna", c: "Femi Adebayo", d: "Banned Person" };
++  for (const [id, name] of Object.entries(users)) seedUser(DB, id, { name, status: id === "d" ? "suspended" : "active" });
++  setCfg(DB, "live");
++  const weekStart = startOfWeekInLagos();
++  const thisWeek = (mins) => new Date(Math.max(weekStart.getTime() + 1000, Date.now() - mins * 60000)).toISOString();
++  let k = 0;
++  const approve = (uid, when) => seedResource(DB, { id: "r" + ++k, uploader: uid, status: "approved", reviewedAt: when });
++  [thisWeek(50), thisWeek(40), thisWeek(30)].forEach((w) => approve("a", w));          // a: 3 (earliest)
++  [thisWeek(20), thisWeek(15), thisWeek(10)].forEach((w) => approve("c", w));          // c: 3 (later → ranks below a)
++  [thisWeek(9), thisWeek(8)].forEach((w) => approve("b", w));                          // b: 2
++  approve("me", thisWeek(5));                                                          // me: 1
++  approve("c", new Date(weekStart.getTime() - 3600e3).toISOString());                  // last week: not counted
++  for (let i = 0; i < 5; i++) approve("d", thisWeek(3));                               // suspended: excluded
++  seedResource(DB, { id: "pend", uploader: "me", status: "pending" });                 // pending: not counted
++
++  const r = await getLeaderboard(ctx(env, { user: as("me") }));
++  const L = r.body.leaders;
++  check("leaderboard: ranks by approved this week; ties broken by who got there first (a before c)", L.map((x) => x.name).join("|") === "Chidinma O.|Femi A.|Madonna|Ngozi E.", L.map((x) => x.name).join("|"));
++  check("leaderboard: counts are this-week only (last week's, pending, suspended excluded)", L.map((x) => x.approved).join() === "3,3,2,1");
++  check("leaderboard: names are 'First L.' (no surname exposed), single names intact", !JSON.stringify(L).includes("Okafor") && !JSON.stringify(L).includes("Adebayo") && L.some((x) => x.name === "Madonna"));
++  check("leaderboard: isMe flags only the caller; rank is 1-based", L.filter((x) => x.isMe).length === 1 && L.find((x) => x.isMe).name === "Ngozi E." && L[0].rank === 1);
++  check("leaderboard: nothing paid is needed to appear (works with an empty ledger)", n(DB, "SELECT COUNT(*) AS n FROM reward_ledger") === 0);
++
++  // limit 10
++  for (let i = 0; i < 14; i++) { seedUser(DB, "x" + i, { name: `Xavier Z${i}` }); approve("x" + i, thisWeek(1)); }
++  check("leaderboard: capped at 10 entries", (await getLeaderboard(ctx(env, { user: as("me") }))).body.leaders.length === 10);
++}
++
++summary();
+--- /dev/null
++++ b/test/phase6b-incentives-admin.test.js
+@@ -0,0 +1,310 @@
++// Phase 6b (update package, Phase 2): admin /admin/incentives endpoints (summary, status, rules, payouts, reversal, flags, requests, audit)
++// Controller-level tests: real controllers + real schema.sql in SQLite, with a fake request context.
++// Run: node --experimental-sqlite test/phase6b-incentives-admin.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, seedBounty, LIVE_RULES } from "./incentiveTestLib.js";
++import * as A from "../src/controllers/adminIncentiveController.js";
++import { reversalStatements } from "../src/services/rewardReversal.js";
++import { startOfMonthInLagos, todayInLagosYmd } from "../src/utils/lagosDay.js";
++
++const admin = { id: "admin1", role: "admin" };
++const call = (fn, env, o = {}) => fn(ctx(env, { user: admin, ...o }));
++const world = () => { const w = freshEnv(); seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" }); seedUser(w.DB, "uploader"); return w; };
++const monthStart = startOfMonthInLagos();
++const prevMonth = new Date(monthStart.getTime() - 86400000).toISOString();
++const auditRows = (DB) => all(DB, "SELECT * FROM incentive_audit ORDER BY created_at, rowid");
++
++// ======================= SUMMARY
++{
++  const { env, DB } = world();
++  let r = await call(A.getSummary, env);
++  check("summary(off, empty DB): all zeros, no crash", r.body.success && r.body.status === "off" && r.body.budget.paidThisMonth === 0 && r.body.outstanding === 0 && r.body.flagsOpen === 0 && r.body.admins.length === 0);
++
++  setCfg(DB, "live");
++  ["u1", "u2", "stud"].forEach((id) => seedUser(DB, id));
++  DB._raw.prepare("UPDATE users SET reward_balance=300, reward_pending=40 WHERE id='u1'").run();
++  DB._raw.prepare("UPDATE users SET reward_balance=-80 WHERE id='u2'").run();
++  seedLedger(DB, { user: "stud", amount: 100, status: "pending" });
++  seedLedger(DB, { user: "stud", amount: 200, status: "cleared" });
++  seedLedger(DB, { user: "stud", amount: 50, status: "reversed" });          // returned → not spend
++  seedLedger(DB, { user: "stud", amount: 70, status: "shadow" });            // projection → not spend while live
++  seedLedger(DB, { user: "stud", amount: 500, status: "cleared", createdAt: prevMonth }); // last month
++  const tx = (id, type, amount, status, fromRewards = 0, at = iso(0)) =>
++    DB._raw.prepare("INSERT INTO transactions (id,user_id,type,amount,status,from_rewards,description,created_at,updated_at) VALUES (?,?,?,?,?,?,'',?,?)").run(id, "stud", type, amount, status, fromRewards, at, at);
++  tx("d1", "deposit", 5000, "successful"); tx("d2", "deposit", 999, "pending"); tx("d3", "deposit", 777, "successful", 0, prevMonth);
++  tx("p1", "purchase", 380, "successful", 120); tx("p2", "purchase", 380, "failed", 50);
++  for (let i = 0; i < 4; i++) seedResource(DB, { id: "ap" + i, status: "approved", reviewedBy: "admin1", reviewedAt: iso(0) });
++  seedResource(DB, { id: "old", status: "approved", reviewedBy: "admin1", reviewedAt: prevMonth });
++  DB._raw.prepare("INSERT INTO incentive_flags (id,user_id,status,created_at,updated_at) VALUES ('f1','stud','open',?,?),('f2','stud','open',?,?),('f3','stud','dismissed',?,?)").run(...Array(6).fill(iso(0)));
++
++  r = (await call(A.getSummary, env)).body;
++  check("summary(live): paid this month counts pending+cleared only (300), not reversed/shadow/last month", r.budget.paidThisMonth === 300 && r.budget.monthlyCap === 20000 && r.budget.shadow === false, JSON.stringify(r.budget));
++  check("summary: owed to students = positive balances + pending (340); negative balance is not netted off", r.outstanding === 340, `outstanding=${r.outstanding}`);
++  check("summary: redeemed = rewards used on SUCCESSFUL purchases this month (120)", r.redeemed === 120);
++  check("summary: funded revenue = successful deposits this month only (5000)", r.fundedRevenue === 5000);
++  check("summary: approved this month = 4 (last month's excluded)", r.approvedCount === 4);
++  check("summary: open flags = 2 (dismissed excluded)", r.flagsOpen === 2);
++  check("summary: config exposes ratioAlert + maxSinglePayout for the UI", r.config.ratioAlert === 40 && r.config.maxSinglePayout === 250);
++  check("summary: no spurious alerts when budget and cap are set", r.alerts.length === 0);
++  check("summary: moderator table row for the one admin", r.admins.length === 1 && r.admins[0].name === "Admin One" && r.admins[0].approvals === 4 && r.admins[0].paid === 300 && r.admins[0].highRare === 0 && r.admins[0].flagged === null, JSON.stringify(r.admins));
++
++  setCfg(DB, "shadow");
++  r = (await call(A.getSummary, env)).body;
++  check("summary(shadow): projected shadow rows ARE counted (370) and flagged as shadow", r.budget.paidThisMonth === 370 && r.budget.shadow === true);
++  setCfg(DB, "live", { ...LIVE_RULES, monthlyBudget: 0, weeklyCap: 0 });
++  r = (await call(A.getSummary, env)).body;
++  check("summary: live with no budget/cap raises alerts", r.alerts.some((a) => a.level === "bad" && /budget/i.test(a.text)) && r.alerts.some((a) => /weekly/i.test(a.text)));
++  DB._raw.prepare("DELETE FROM incentive_config").run();
++  check("summary: missing config row → treated as off, no crash", (await call(A.getSummary, env)).body.status === "off");
++}
++
++// moderator heuristics
++{
++  const { env, DB } = world();
++  setCfg(DB, "live");
++  ["adminA", "adminB", "adminC"].forEach((id, i) => seedUser(DB, id, { name: "Mod " + "ABC"[i], role: "admin" }));
++  let k = 0;
++  const mk = (admin, tier, amount, payee) => {
++    const rid = "r" + ++k; seedUser(DB, "s" + k, { name: "S" + k });
++    seedResource(DB, { id: rid, status: "approved", reviewedBy: admin, reviewedAt: iso(0) });
++    seedLedger(DB, { user: payee || "s" + k, amount, tier, resource: rid, approver: admin });
++  };
++  for (let i = 0; i < 20; i++) mk("adminA", "standard", 100);                // A: 20 approvals × ₦100
++  for (let i = 0; i < 3; i++) mk("adminB", i === 0 ? "high" : "rare", 500);  // B: 3 approvals × ₦500 → far above average
++  seedUser(DB, "fav");
++  for (let i = 0; i < 5; i++) mk("adminC", "standard", 100, "fav");          // C: pays one student five times
++  const rows = Object.fromEntries((await call(A.getSummary, env)).body.admins.map((a) => [a.name, a]));
++  check("heuristic: pays far above average → flagged", rows["Mod B"].flagged === "Pays far above average", JSON.stringify(rows["Mod B"]));
++  check("heuristic: same student paid ≥5 times → flagged", rows["Mod C"].flagged === "Pays the same student repeatedly", JSON.stringify(rows["Mod C"]));
++  check("heuristic: normal moderator not flagged", rows["Mod A"].flagged === null);
++  check("heuristic: high/rare tiers counted per moderator", rows["Mod B"].highRare === 3 && rows["Mod A"].highRare === 0);
++}
++
++// ======================= STATUS
++{
++  const { env, DB } = world();
++  const st = (body) => call(A.setStatus, env, { body });
++  check("status: invalid value → 400", (await st({ status: "banana", reason: "because" })).status === 400);
++  check("status: missing/short reason → 400", (await st({ status: "shadow", reason: "hi" })).status === 400 && (await st({ status: "shadow" })).status === 400);
++  check("status: unparseable body → 400, not a crash", (await call(A.setStatus, env, {})).status === 400);
++  let r = await st({ status: "live", reason: "launching now" });
++  check("status: cannot go live with no monthly budget", r.status === 400 && /budget/i.test(r.body.message));
++  check("status: same status → 400", (await st({ status: "off", reason: "no change" })).status === 400);
++  r = await st({ status: "shadow", reason: "Learning the cost" });
++  check("status: off → shadow works", r.status === 200 && one(DB, "SELECT status FROM incentive_config").status === "shadow");
++  const a = auditRows(DB);
++  check("status: audit row written with admin name, action and reason", a.length === 1 && a[0].admin_name === "Admin One" && a[0].action === "status" && /off → shadow/.test(a[0].detail) && /Learning the cost/.test(a[0].detail), JSON.stringify(a));
++  setCfg(DB, "shadow");
++  check("status: shadow → live OK once a budget exists", (await st({ status: "live", reason: "Go live" })).status === 200 && one(DB, "SELECT status FROM incentive_config").status === "live");
++  DB._raw.prepare("DELETE FROM incentive_config").run();
++  check("status: works even if the config row was never seeded (upsert)", (await st({ status: "shadow", reason: "reseed row" })).status === 200 && one(DB, "SELECT status FROM incentive_config").status === "shadow");
++}
++
++// ======================= CONFIG
++{
++  const { env, DB } = world();
++  const put = (rules, reason = "tuning the rules") => call(A.updateConfig, env, { body: { rules, reason } });
++  const good = () => JSON.parse(JSON.stringify(LIVE_RULES));
++  let r = await call(A.getConfig, env);
++  check("config GET: flat shape with status + defaults", r.body.success && r.body.status === "off" && r.body.monthlyBudget === 0 && r.body.rewards.pastQuestion === 0 && r.body.maxSinglePayout === 250);
++
++  check("config PUT: reason required", (await call(A.updateConfig, env, { body: { rules: good() } })).status === 400);
++  check("config PUT: rules object required", (await call(A.updateConfig, env, { body: { reason: "valid reason" } })).status === 400);
++  let bad = good(); bad.weeklyCap = null;
++  r = await put(bad);
++  check("config PUT: cleared (null) field → 400 naming the field", r.status === 400 && /Weekly earning cap/.test(r.body.message), r.body.message);
++  bad = good(); bad.monthlyBudget = -5; check("config PUT: negative → 400", (await put(bad)).status === 400);
++  bad = good(); bad.rewards.pastQuestion = 99.5; check("config PUT: fractional naira → 400", (await put(bad)).status === 400);
++  bad = good(); bad.holdDays = 31; check("config PUT: hold period > 30 days → 400", (await put(bad)).status === 400);
++  bad = good(); bad.maxRewardShare = 101; check("config PUT: reward share > 100% → 400", (await put(bad)).status === 400);
++  bad = good(); delete bad.rewards.rare; check("config PUT: missing reward key → 400", (await put(bad)).status === 400);
++  bad = good(); bad.monthlyBudget = "20000"; check("config PUT: numeric strings rejected (must be numbers)", (await put(bad)).status === 400);
++  check("config PUT: rejected requests wrote nothing (config + audit untouched)", one(DB, "SELECT rules FROM incentive_config").rules === "{}" && auditRows(DB).length === 0);
++
++  r = await put(good(), "Recommended launch values");
++  check("config PUT: valid rules saved and returned flat", r.status === 200 && r.body.success && r.body.monthlyBudget === 20000 && r.body.rewards.pastQuestion === 100 && !r.body.clamped);
++  let a = auditRows(DB);
++  check("config PUT: audit lists the changes AND the reason", a.length === 1 && a[0].action === "rules" && /monthlyBudget 0→20000/.test(a[0].detail) && /Recommended launch values/.test(a[0].detail), a[0]?.detail);
++  r = await put(good(), "Saving the same values again");
++  check("config PUT: identical values → success, flagged unchanged, NO audit noise", r.body.unchanged === true && auditRows(DB).length === 1);
++
++  const over = good(); over.rewards.pastQuestion = 300; over.rewards.rare = 999;
++  r = await put(over, "Trying to exceed the ceiling");
++  check("config PUT: tiers above the largest single payout are CAPPED to it (250)", r.status === 200 && r.body.rewards.pastQuestion === 250 && r.body.rewards.rare === 250 && r.body.clamped.length === 2, JSON.stringify(r.body.clamped));
++  check("config PUT: capping is recorded in the audit log", /Capped at the largest single payout/.test(auditRows(DB).at(-1).detail));
++  check("config GET: persisted values are what was clamped", (await call(A.getConfig, env)).body.rewards.rare === 250);
++}
++
++// ======================= PAYOUTS
++{
++  const { env, DB } = world();
++  seedUser(DB, "ada", { name: "Ada Obi" }); seedUser(DB, "bayo", { name: "Bayo Lawal" });
++  for (let i = 0; i < 45; i++) seedLedger(DB, { user: i % 2 ? "ada" : "bayo", amount: 100, status: i < 5 ? "pending" : "cleared", label: i === 7 ? "100% bonus_special" : `CSC ${i}`, createdAt: iso(i / 100) });
++  seedLedger(DB, { user: "ada", amount: -100, status: "reversed", type: "reversal", label: "Reversed: x" });
++  seedLedger(DB, { user: null, amount: 60, status: "cleared", label: "orphan reward" });
++  let r = (await call(A.getPayouts, env, { query: {} })).body;
++  check("payouts: 20 per page; reversal-type rows excluded from the list", r.payouts.length === 20 && r.pagination.total === 46 && r.pagination.pages === 3 && !r.payouts.some((p) => p.amount < 0));
++  check("payouts: row shape id/date/student/label/tier/amount/status/approvedBy", ["id", "date", "student", "label", "tier", "amount", "status", "approvedBy"].every((k) => k in r.payouts[0]) && r.payouts[0].approvedBy === "Admin One");
++  r = (await call(A.getPayouts, env, { query: { page: "3" } })).body;
++  check("payouts: last page has the remainder (6)", r.payouts.length === 6 && r.pagination.page === 3);
++  r = (await call(A.getPayouts, env, { query: { status: "pending" } })).body;
++  check("payouts: status filter", r.pagination.total === 5 && r.payouts.every((p) => p.status === "pending"));
++  r = (await call(A.getPayouts, env, { query: { q: "ada" } })).body;
++  check("payouts: search by student name", r.payouts.length > 0 && r.payouts.every((p) => p.student === "Ada Obi"));
++  r = (await call(A.getPayouts, env, { query: { q: "orphan" } })).body;
++  check("payouts: reward of a deleted account shows 'Deleted account'", r.payouts.length === 1 && r.payouts[0].student === "Deleted account");
++  r = (await call(A.getPayouts, env, { query: { q: "%" } })).body;
++  check("payouts: '%' in search is literal (matches only the label containing it, not everything)", r.pagination.total === 1 && /100%/.test(r.payouts[0].label), JSON.stringify(r.pagination));
++  r = (await call(A.getPayouts, env, { query: { page: "-4", status: "garbage" } })).body;
++  check("payouts: junk page/status handled gracefully", r.success && r.pagination.page === 1 && r.pagination.total === 46);
++}
++
++// ======================= REVERSAL
++{
++  const { env, DB } = world();
++  seedUser(DB, "stud", { name: "Stud Ent", rb: 200, rp: 100 });
++  const P = seedLedger(DB, { id: "P", user: "stud", amount: 100, status: "pending", label: "CSC 301", tier: "standard" });
++  const C = seedLedger(DB, { id: "C", user: "stud", amount: 150, status: "cleared", label: "Notes", tier: "high" });
++  const bal = () => one(DB, "SELECT reward_balance rb, reward_pending rp FROM users WHERE id='stud'");
++  const rev = (id, reason = "Duplicate upload found") => call(A.reversePayout, env, { params: { id }, body: { reason } });
++
++  check("reverse: reason required (>=5 chars)", (await rev(P, "no")).status === 400 && bal().rp === 100);
++  check("reverse: unknown id → 404", (await rev("nope")).status === 404);
++  let r = await rev(P);
++  check("reverse(pending): success; pending balance reduced, spendable untouched", r.status === 200 && bal().rp === 0 && bal().rb === 200, JSON.stringify(bal()));
++  const orig = one(DB, "SELECT * FROM reward_ledger WHERE id='P'");
++  check("reverse: original marked reversed with who/when/why", orig.status === "reversed" && orig.reversed_by === "admin1" && orig.reversal_reason === "Duplicate upload found" && !!orig.reversed_at);
++  const negRow = one(DB, "SELECT * FROM reward_ledger WHERE reverses_id='P'");
++  check("reverse: a separate NEGATIVE reversal row is written (history never rewritten)", negRow && negRow.type === "reversal" && negRow.amount === -100 && negRow.user_id === "stud" && negRow.status === "reversed" && /Reversed: CSC 301/.test(negRow.label));
++  check("reverse: audit entry names admin, student, amount and reason", /Stud Ent: took back ₦100/.test(auditRows(DB).at(-1).detail) && /Duplicate upload/.test(auditRows(DB).at(-1).detail) && auditRows(DB).at(-1).action === "reverse");
++
++  r = await rev(P);
++  check("reverse: second attempt → 409 and NOTHING changes (no double deduction, one reversal row)", r.status === 409 && bal().rp === 0 && n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE reverses_id='P'") === 1);
++
++  r = await rev(C);
++  check("reverse(cleared): spendable balance reduced (200→50)", r.status === 200 && bal().rb === 50 && bal().rp === 0);
++
++  // student already spent it: balance may go negative (blocks future downloads), not an error
++  const C2 = seedLedger(DB, { user: "stud", amount: 300, status: "cleared" });
++  r = await rev(C2);
++  check("reverse: if the reward was already spent the balance goes NEGATIVE (allowed by design)", r.status === 200 && bal().rb === -250, JSON.stringify(bal()));
++
++  // shadow + deleted account
++  const S = seedLedger(DB, { user: "stud", amount: 80, status: "shadow" });
++  r = await rev(S);
++  check("reverse: shadow rows can't be reversed (no money ever moved)", r.status === 400 && one(DB, "SELECT status FROM reward_ledger WHERE id=?", S).status === "shadow");
++  const D = seedLedger(DB, { user: null, amount: 80, status: "cleared" });
++  r = await rev(D);
++  check("reverse: deleted student's reward → 409, untouched", r.status === 409 && one(DB, "SELECT status FROM reward_ledger WHERE id=?", D).status === "cleared");
++
++  // the real race: two moderators both read the row while it was still 'pending'
++  seedUser(DB, "racer", { rp: 100 });
++  seedLedger(DB, { id: "R", user: "racer", amount: 100, status: "pending", label: "race" });
++  const snapshot = one(DB, "SELECT * FROM reward_ledger WHERE id='R'");
++  const opts = (ts, who) => ({ adminId: "admin1", adminName: who, reason: "race test", ts, audit: { action: "reverse", detail: "race " + who } });
++  await DB.batch(reversalStatements(DB, snapshot, opts(new Date().toISOString(), "first")));
++  let threw = false;
++  try { await DB.batch(reversalStatements(DB, snapshot, opts(new Date(Date.now() + 7).toISOString(), "second"))); } catch { threw = true; }
++  check("race: second moderator's stale-snapshot batch is a harmless no-op (no throw)", threw === false);
++  check("race: balance deducted exactly once; exactly one reversal row; exactly one audit row", one(DB, "SELECT reward_pending p FROM users WHERE id='racer'").p === 0 && n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE reverses_id='R'") === 1 && n(DB, "SELECT COUNT(*) AS n FROM incentive_audit WHERE detail LIKE 'race %'") === 1);
++  // and the hard backstop independent of the guards
++  let dupBlocked = false;
++  try { DB._raw.prepare("INSERT INTO reward_ledger (id,user_id,type,amount,status,reverses_id,created_at) VALUES ('dup','racer','reversal',-100,'reversed','R',?)").run(iso(0)); } catch { dupBlocked = true; }
++  check("backstop: unique index forbids a second reversal row for the same reward", dupBlocked);
++}
++
++// ======================= FLAGS
++{
++  const { env, DB } = world();
++  seedUser(DB, "bad", { name: "Bad Actor", rb: 400, rp: 600 }); seedUser(DB, "meh", { name: "Mild Case" }); seedUser(DB, "fz", { name: "Freeze Me" });
++  const flag = (id, user, signals, exposure = 500, status = "open") =>
++    DB._raw.prepare("INSERT INTO incentive_flags (id,user_id,signals,exposure,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?)").run(id, user, signals, exposure, status, iso(0), iso(0));
++  flag("F1", "bad", JSON.stringify(["5 uploads rejected this week", "Shares a connection with 3 accounts"]), 1000);
++  flag("F2", "meh", "{corrupt", 50); flag("F3", "fz", "[]", 10); flag("F4", "meh", "[]", 5, "dismissed");
++  let r = (await call(A.getFlags, env, { query: {} })).body;
++  check("flags: default lists OPEN flags only, with student name + parsed signals", r.flags.length === 3 && !r.flags.some((f) => f.id === "F4") && r.flags.find((f) => f.id === "F1").signals.length === 2 && r.flags.find((f) => f.id === "F1").student === "Bad Actor");
++  check("flags: corrupt signals JSON degrades to an empty list (no 500)", r.flags.find((f) => f.id === "F2").signals.length === 0);
++  check("flags: status filter works", (await call(A.getFlags, env, { query: { status: "dismissed" } })).body.flags.length === 1);
++  check("flag-count: open flags only", (await call(A.getFlagCount, env)).body.flagsOpen === 3);
++
++  const res = (id, action, note = "Reviewed the evidence") => call(A.resolveFlag, env, { params: { id }, body: { action, note } });
++  check("resolve: invalid action → 400", (await res("F1", "nuke")).status === 400);
++  check("resolve: note (reason) required → 400", (await res("F1", "dismiss", "x")).status === 400);
++  check("resolve: unknown flag → 404", (await res("zzz", "dismiss")).status === 404);
++
++  let rr = await res("F2", "dismiss");
++  check("resolve(dismiss): flag closed, audited, user untouched", rr.status === 200 && one(DB, "SELECT status FROM incentive_flags WHERE id='F2'").status === "dismissed" && one(DB, "SELECT rewards_frozen f FROM users WHERE id='meh'").f === 0 && auditRows(DB).at(-1).action === "flag.dismiss");
++  rr = await res("F3", "freeze");
++  check("resolve(freeze): student's rewards frozen + flag 'frozen' + audited", rr.status === 200 && one(DB, "SELECT rewards_frozen f FROM users WHERE id='fz'").f === 1 && one(DB, "SELECT status FROM incentive_flags WHERE id='F3'").status === "frozen" && auditRows(DB).at(-1).action === "flag.freeze");
++  rr = await res("F3", "dismiss");
++  check("resolve: an already-resolved flag → 404 (can't be resolved twice)", rr.status === 404);
++
++  // reverse_all across more rows than one chunk (15) to exercise chunking
++  for (let i = 0; i < 12; i++) seedLedger(DB, { user: "bad", amount: 50, status: "pending", resource: null, label: "p" + i });
++  for (let i = 0; i < 8; i++) seedLedger(DB, { user: "bad", amount: 50, status: "cleared", label: "c" + i });
++  seedLedger(DB, { id: "BAD-SHADOW", user: "bad", amount: 77, status: "shadow" });
++  seedLedger(DB, { id: "BAD-ALREADY", user: "bad", amount: 33, status: "reversed" });
++  rr = await res("F1", "reverse_all", "Confirmed ring of fake accounts");
++  const bad = one(DB, "SELECT reward_balance rb, reward_pending rp FROM users WHERE id='bad'");
++  check("resolve(reverse_all): all 20 live rewards reversed across chunks; message reports count + total", rr.status === 200 && /Reversed 20 reward\(s\) totalling/.test(rr.body.message) && /1,000/.test(rr.body.message), rr.body.message);
++  check("resolve(reverse_all): pending 600→0 and spendable 400→0 exactly", bad.rp === 0 && bad.rb === 0, JSON.stringify(bad));
++  check("resolve(reverse_all): shadow + already-reversed rows left alone; 20 negative rows written", one(DB, "SELECT status FROM reward_ledger WHERE id='BAD-SHADOW'").status === "shadow" && n(DB, "SELECT COUNT(*) AS n FROM reward_ledger WHERE user_id='bad' AND type='reversal'") === 20);
++  check("resolve(reverse_all): flag 'reversed' + ONE summary audit row", one(DB, "SELECT status FROM incentive_flags WHERE id='F1'").status === "reversed" && /reversed 20 reward/.test(auditRows(DB).at(-1).detail) && auditRows(DB).filter((a) => a.action === "flag.reverse_all").length === 1);
++  rr = await call(A.resolveFlag, env, { params: { id: "F1" }, body: { action: "reverse_all", reason: "using reason field" } });
++  check("resolve: a second reverse_all on a closed flag is rejected", rr.status === 404);
++  flag("F5", "meh", "[]");
++  rr = await call(A.resolveFlag, env, { params: { id: "F5" }, body: { action: "dismiss", reason: "accepts `reason` as a fallback" } });
++  check("resolve: accepts `reason` as a fallback for `note`", rr.status === 200);
++  flag("F6", "meh", "[]");
++  rr = await res("F6", "reverse_all", "nothing to take back");
++  check("resolve(reverse_all) with nothing to reverse still closes the flag cleanly", rr.status === 200 && /Reversed 0/.test(rr.body.message) && one(DB, "SELECT status FROM incentive_flags WHERE id='F6'").status === "reversed");
++}
++
++// ======================= REQUESTS
++{
++  const { env, DB } = world();
++  setCfg(DB, "live");
++  const tomorrow = new Date(Date.parse(todayInLagosYmd()) + 86400000).toISOString().slice(0, 10);
++  const yesterday = new Date(Date.parse(todayInLagosYmd()) - 86400000).toISOString().slice(0, 10);
++  const farOff = new Date(Date.parse(todayInLagosYmd()) + 400 * 86400000).toISOString().slice(0, 10);
++  const ok = () => ({ course: "csc 305", type: "Past Questions", level: "300 Level", reward: 100, maxPayouts: 2, expiresAt: tomorrow });
++  const mk = (over = {}) => call(A.createRequest, env, { body: { ...ok(), ...over } });
++
++  let r = await mk();
++  check("request: valid → created (no reason needed: the form has none)", r.status === 200 && r.body.success && !!r.body.id);
++  const row = one(DB, "SELECT * FROM bounties WHERE id=?", r.body.id);
++  check("request: course normalised (upper-case) + matching key; max payouts and reward stored", row.course === "CSC 305" && row.course_key === "CSC305" && row.reward === 100 && row.max_payouts === 2 && row.status === "open" && row.created_by === "admin1");
++  check("request: closes at END of the chosen Lagos day", row.expires_at > new Date().toISOString() && /T22:59:59\.999Z$/.test(row.expires_at), row.expires_at);
++  check("request: audit entry written", auditRows(DB).at(-1).action === "request.create" && /CSC 305 Past Questions/.test(auditRows(DB).at(-1).detail));
++
++  check("request: duplicate open request → 409", (await mk({ course: "CSC-305" })).status === 409);
++  check("request: bad course → 400", (await mk({ course: "!!" })).status === 400 && (await mk({ course: "" })).status === 400);
++  check("request: bad type / level → 400", (await mk({ type: "Gossip" })).status === 400 && (await mk({ level: "900 Level" })).status === 400);
++  check("request: reward above the largest single payout (250) → 400; fractional/zero → 400", (await mk({ course: "AAA 1", reward: 251 })).status === 400 && (await mk({ course: "AAA 2", reward: 0 })).status === 400 && (await mk({ course: "AAA 3", reward: 10.5 })).status === 400);
++  check("request: maxPayouts must be 1–3", (await mk({ course: "BBB 1", maxPayouts: 0 })).status === 400 && (await mk({ course: "BBB 2", maxPayouts: 4 })).status === 400);
++  check("request: closing date must be a real date, not past, within a year", (await mk({ course: "CCC 1", expiresAt: "2026-02-31" })).status === 400 && (await mk({ course: "CCC 2", expiresAt: yesterday })).status === 400 && (await mk({ course: "CCC 3", expiresAt: farOff })).status === 400 && (await mk({ course: "CCC 4", expiresAt: "soon" })).status === 400);
++
++  const list = (await call(A.listRequests, env)).body.requests;
++  check("request list: shape id/course/type/level/reward/paid/maxPayouts/expiresAt/status", ["id", "course", "type", "level", "reward", "paid", "maxPayouts", "expiresAt", "status"].every((k) => k in list[0]));
++  seedBounty(DB, { id: "stale", course: "OLD 101", expires: iso(1) });
++  check("request list: lapsed open request is reported as 'expired'", (await call(A.listRequests, env)).body.requests.find((b) => b.id === "stale").status === "expired");
++
++  const cl = (id, reason = "No longer needed") => call(A.closeRequest, env, { params: { id }, body: { reason } });
++  check("close: reason required; unknown → 404", (await cl(r.body.id, "x")).status === 400 && (await cl("nope")).status === 404);
++  check("close: closes it, audits it", (await cl(r.body.id)).status === 200 && one(DB, "SELECT status FROM bounties WHERE id=?", r.body.id).status === "closed" && auditRows(DB).at(-1).action === "request.close");
++  check("close: already closed → 409", (await cl(r.body.id)).status === 409);
++  check("request: after closing, the same course can be requested again", (await mk()).status === 200);
++}
++
++// ======================= AUDIT
++{
++  const { env, DB } = world();
++  for (let i = 0; i < 105; i++) DB._raw.prepare("INSERT INTO incentive_audit (id,admin_name,action,detail,created_at) VALUES (?,?,?,?,?)").run("a" + i, "Admin One", "rules", "entry " + i, iso(i / 1000));
++  const e = (await call(A.getAudit, env)).body.entries;
++  check("audit: newest first, capped at 100, shape date/admin/action/detail", e.length === 100 && e[0].detail === "entry 0" && e[1].detail === "entry 1" && ["date", "admin", "action", "detail"].every((k) => k in e[0]));
++  let blocked = 0;
++  try { DB._raw.prepare("UPDATE incentive_audit SET detail='tampered'").run(); } catch { blocked++; }
++  try { DB._raw.prepare("DELETE FROM incentive_audit").run(); } catch { blocked++; }
++  check("audit: log is append-only (UPDATE and DELETE both refused)", blocked === 2);
++}
++
++summary();
+--- /dev/null
++++ b/test/phase6b-incentives-hooks.test.js
+@@ -0,0 +1,241 @@
++// Phase 6b (update package, Phase 2): hooks into existing flows (upload bounty, moderation, my-uploads, signup/referral, deletion cascades)
++// Controller-level tests: real controllers + real schema.sql in SQLite, with a fake request context.
++// Run: node --experimental-sqlite test/phase6b-incentives-hooks.test.js
++import { check, summary, freshEnv, ctx, one, all, n, iso, setCfg, seedUser, seedResource, seedLedger, seedBounty, LIVE_RULES } from "./incentiveTestLib.js";
++import { resolveBountyForUpload } from "../src/services/bountyService.js";
++import { requestUploadPermit, completeUpload } from "../src/controllers/uploadController.js";
++import { getModerationQueue, parseApprovalReview, approveResourceById } from "../src/controllers/moderationController.js";
++import { getMyUploads } from "../src/controllers/resourceController.js";
++import { register, verifyOTP } from "../src/controllers/authController.js";
++import { deleteMyAccount } from "../src/controllers/userSettingsController.js";
++import { permanentlyDeleteResource } from "../src/controllers/adminResourceController.js";
++import { captureReferral, markReferralVerified } from "../src/services/referralService.js";
++import { hashOtp } from "../src/utils/otp.js";
++
++// Network stub: Cloudinary range check (206 + a PDF header), everything else (destroy, email) succeeds.
++globalThis.fetch = async (_url, init = {}) => {
++  if (init.headers && init.headers.Range) {
++    return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]), { status: 206, headers: { "content-range": "bytes 0-7/12345" } });
++  }
++  return new Response(JSON.stringify({ result: "ok" }), { status: 200, headers: { "content-type": "application/json" } });
++};
++const admin = { id: "admin1", role: "admin" };
++const world = () => { const w = freshEnv(); seedUser(w.DB, "admin1", { name: "Admin One", role: "admin" }); seedUser(w.DB, "uploader"); return w; };
++
++// ============ resolveBountyForUpload
++{
++  const { DB } = world();
++  const ok = seedBounty(DB, { id: "ok", course: "CSC 305" });
++  seedBounty(DB, { id: "exp", course: "CSC 305", expires: iso(1) }); seedBounty(DB, { id: "clo", course: "CSC 305", status: "closed" }); seedBounty(DB, { id: "ful", course: "CSC 305", max: 1, paid: 1 });
++  check("bounty: valid id + same course → accepted", (await resolveBountyForUpload(DB, "ok", "CSC 305")) === "ok");
++  check("bounty: course matched ignoring case/spacing/punctuation", (await resolveBountyForUpload(DB, "ok", "csc305")) === "ok" && (await resolveBountyForUpload(DB, " ok ", "Csc-305")) === "ok");
++  check("bounty: wrong course → null", (await resolveBountyForUpload(DB, "ok", "MTH 101")) === null);
++  check("bounty: expired / closed / fully-paid → null", [(await resolveBountyForUpload(DB, "exp", "CSC 305")), (await resolveBountyForUpload(DB, "clo", "CSC 305")), (await resolveBountyForUpload(DB, "ful", "CSC 305"))].every((x) => x === null));
++  check("bounty: junk (missing, number, object, huge string) → null, never throws", [undefined, null, 7, {}, "", "x".repeat(500)].every((v) => true) && (await Promise.all([undefined, null, 7, {}, "", "x".repeat(500)].map((v) => resolveBountyForUpload(DB, v, "CSC 305")))).every((x) => x === null));
++}
++
++// ============ upload permit + complete (executes the modified INSERT for real)
++{
++  const { env, DB } = world();
++  seedBounty(DB, { id: "BNT", course: "CSC 305" });
++  const meta = { title: "CSC 305 Past Questions", type: "Past Question", department: "Computer Science", course: "CSC 305", level: "300", semester: "First", session: "2024/2025", description: "d" };
++  const permit = async (extra = {}, userId = "uploader") => requestUploadPermit(ctx(env, { user: { id: userId, role: "student" }, body: { fileName: "pq.pdf", fileSize: 12345, ...meta, ...extra } }));
++  const complete = async (intentId, userId = "uploader") => completeUpload(ctx(env, { user: { id: userId, role: "student" }, body: { intentId } }));
++
++  let r = await permit({ bountyId: "BNT" });
++  check("permit: with a valid request id → 200 and the id is kept on the upload intent", r.status === 200 && r.body.success && JSON.parse(one(DB, "SELECT metadata FROM upload_intents WHERE id=?", r.body.intentId).metadata).bountyId === "BNT");
++  let c1 = await complete(r.body.intentId);
++  const res1 = one(DB, "SELECT bounty_id, status, uploader_id, pages FROM resources WHERE id=?", r.body.intentId);
++  check("complete: resource row inserted (modified INSERT works) with bounty_id set", (c1.status === 201 || c1.status === 200) && c1.body.success !== false && res1 && res1.bounty_id === "BNT" && res1.status === "pending" && res1.uploader_id === "uploader", JSON.stringify([c1.status, c1.body, res1]));
++  check("complete: still creates the admin notification and clears the intent", n(DB, "SELECT COUNT(*) AS n FROM notifications WHERE resource_id=? AND type='new_upload'", r.body.intentId) === 1 && n(DB, "SELECT COUNT(*) AS n FROM upload_intents WHERE id=?", r.body.intentId) === 0);
++  const again = await complete(r.body.intentId);
++  check("complete: double-submit is still idempotent (200, one resource)", again.status === 200 && n(DB, "SELECT COUNT(*) AS n FROM resources WHERE id=?", r.body.intentId) === 1);
++
++  r = await permit({ bountyId: "BNT", course: "MTH 101" });
++  check("permit: request id for a DIFFERENT course is silently dropped (upload still proceeds)", r.status === 200 && !("bountyId" in JSON.parse(one(DB, "SELECT metadata FROM upload_intents WHERE id=?", r.body.intentId).metadata)));
++  r = await permit({ bountyId: "does-not-exist" });
++  check("permit: unknown request id silently dropped", r.status === 200 && !("bountyId" in JSON.parse(one(DB, "SELECT metadata FROM upload_intents WHERE id=?", r.body.intentId).metadata)));
++  await complete(r.body.intentId);
++  check("complete: a normal upload gets bounty_id NULL", one(DB, "SELECT bounty_id b FROM resources WHERE id=?", r.body.intentId).b === null);
++  r = await permit({ bountyId: { evil: true } });
++  check("permit: non-string bountyId can't break the upload", r.status === 200);
++  r = await permit();
++  check("permit: no bountyId at all — existing behaviour unchanged", r.status === 200 && r.body.upload && r.body.intentId);
++}
++
++// ============ moderation queue / parse / approve
++{
++  const { env, DB } = world();
++  const mkUser = (id, o = {}) => seedUser(DB, id, o);
++  mkUser("clean"); mkUser("flagged"); mkUser("rej3"); mkUser("rej1"); mkUser("old-rej"); mkUser("newbie", { created: iso(2) });
++  mkUser("tw1", { ip: "iphash-shared" }); mkUser("tw2", { ip: "iphash-shared" }); mkUser("solo", { ip: "iphash-solo" });
++  DB._raw.prepare("INSERT INTO incentive_flags (id,user_id,status,created_at,updated_at) VALUES ('fl','flagged','open',?,?)").run(iso(0), iso(0));
++  let k = 0;
++  const rejected = (uid, daysAgo) => seedResource(DB, { id: "rj" + ++k, uploader: uid, status: "rejected", reviewedAt: iso(daysAgo) });
++  [1, 2, 3].forEach((d) => rejected("rej3", d)); rejected("rej1", 5); rejected("old-rej", 20);
++  seedBounty(DB, { id: "BOK", reward: 120 }); seedBounty(DB, { id: "BCL", status: "closed" }); seedBounty(DB, { id: "BEX", expires: iso(1) }); seedBounty(DB, { id: "BFU", max: 1, paid: 1 });
++  const pend = (id, uploader, bountyId = null, createdAt = iso(0.5)) => seedResource(DB, { id, status: "pending", uploader, bountyId, createdAt });
++  pend("q-clean", "clean"); pend("q-flag", "flagged"); pend("q-rej3", "rej3"); pend("q-rej1", "rej1"); pend("q-oldrej", "old-rej"); pend("q-new", "newbie");
++  pend("q-tw1", "tw1"); pend("q-solo", "solo"); pend("q-bok", "clean", "BOK"); pend("q-bcl", "clean", "BCL"); pend("q-bex", "clean", "BEX"); pend("q-bfu", "clean", "BFU");
++
++  const queue = async () => { const r = await getModerationQueue(ctx(env, { user: admin, query: { limit: "50" } })); return Object.fromEntries(r.body.queue.map((q) => [q.id, q])); };
++  const BASE = "course,dept,id,isAged,level,semester,session,size,title,type,uploadDate,uploader";
++
++  let q = await queue();
++  check("queue(off): items carry EXACTLY the original fields — no bounty/uploaderRisk keys leak", Object.values(q).every((i) => Object.keys(i).sort().join() === BASE) && Object.keys(q).length === 12);
++  setCfg(DB, "shadow");
++  q = await queue();
++  check("queue(shadow): reward context appears", Object.values(q).every((i) => i.uploaderRisk && Array.isArray(i.uploaderRisk.notes)));
++  check("queue: clean old account → low, no notes", q["q-clean"].uploaderRisk.level === "low" && q["q-clean"].uploaderRisk.notes.length === 0);
++  check("queue: open reward flag → HIGH", q["q-flag"].uploaderRisk.level === "high" && q["q-flag"].uploaderRisk.notes.some((x) => /open reward flag/i.test(x)));
++  check("queue: 3 rejections in 14 days → HIGH with a count", q["q-rej3"].uploaderRisk.level === "high" && q["q-rej3"].uploaderRisk.notes.some((x) => /3 uploads rejected/.test(x)));
++  check("queue: 1 recent rejection → medium", q["q-rej1"].uploaderRisk.level === "medium");
++  check("queue: a rejection older than 14 days is ignored → low", q["q-oldrej"].uploaderRisk.level === "low");
++  check("queue: account under 7 days old → medium, says how old", q["q-new"].uploaderRisk.level === "medium" && q["q-new"].uploaderRisk.notes.some((x) => /2 day/.test(x)));
++  check("queue: shares a signup connection with another account → medium; unique connection → low", q["q-tw1"].uploaderRisk.level === "medium" && q["q-solo"].uploaderRisk.level === "low");
++  check("queue: a payable request is surfaced as bounty {id,reward}", q["q-bok"].bounty && q["q-bok"].bounty.id === "BOK" && q["q-bok"].bounty.reward === 120);
++  check("queue: closed / expired / fully-paid requests are NOT surfaced", !q["q-bcl"].bounty && !q["q-bex"].bounty && !q["q-bfu"].bounty && !q["q-clean"].bounty);
++  check("queue: pagination/total unaffected by the extra context", (await getModerationQueue(ctx(env, { user: admin, query: { limit: "5", page: "2" } }))).body.queue.length === 5);
++
++  // parseApprovalReview
++  const P = parseApprovalReview;
++  const legacy = P({ pages: 12, snippet: "hello" });
++  check("parse: the EXISTING approve body {pages,snippet} is still valid and unchanged in meaning", !legacy.error && legacy.pages === 12 && legacy.snippet === "hello" && legacy.rewardTier === undefined && legacy.fileHash === null);
++  check("parse: pages still required", !!P({ snippet: "x" }).error && !!P({ pages: 0 }).error);
++  check("parse: valid reward tiers accepted", ["bounty", "standard", "none"].every((t) => P({ pages: 3, rewardTier: t }).rewardTier === t));
++  check("parse: unknown tier → clear error", /valid reward/i.test(P({ pages: 3, rewardTier: "mega" }).error));
++  check("parse: high/rare need a reason (≥5 chars)", !!P({ pages: 3, rewardTier: "high" }).error && !!P({ pages: 3, rewardTier: "rare", rewardNote: "abc" }).error && !P({ pages: 3, rewardTier: "rare", rewardNote: "Not on Sharef yet" }).error);
++  check("parse: reward note sanitised and trimmed", P({ pages: 3, rewardTier: "standard", rewardNote: "  a\u0000b\n\n c  " }).rewardNote === "a b c");
++  const H = "A".repeat(64);
++  check("parse: valid SHA-256 hex accepted (lower-cased); malformed hash is IGNORED, not an error", P({ pages: 3, fileHash: H }).fileHash === "a".repeat(64) && P({ pages: 3, fileHash: "nope" }).fileHash === null && !P({ pages: 3, fileHash: 123 }).error);
++
++  // approve persists the hash; legacy approve untouched
++  const a = ctx(env, { user: admin });
++  const r1 = await approveResourceById(a, "q-clean", P({ pages: 9, snippet: "s", fileHash: H }));
++  check("approve: succeeds and stores the file hash", r1.status === 200 && one(DB, "SELECT file_hash h, status, pages FROM resources WHERE id='q-clean'").h === "a".repeat(64) && one(DB, "SELECT status FROM resources WHERE id='q-clean'").status === "approved");
++  const r2 = await approveResourceById(ctx(env, { user: admin }), "q-solo", P({ pages: 4, snippet: "" }));
++  check("approve: legacy body works and leaves file_hash NULL", r2.status === 200 && one(DB, "SELECT file_hash h FROM resources WHERE id='q-solo'").h === null);
++  seedResource(DB, { id: "had", status: "pending", uploader: "clean", hash: "b".repeat(64) });
++  await approveResourceById(ctx(env, { user: admin }), "had", P({ pages: 2 }));
++  check("approve: no hash supplied never wipes an existing one (COALESCE)", one(DB, "SELECT file_hash h FROM resources WHERE id='had'").h === "b".repeat(64));
++  const r3 = await approveResourceById(ctx(env, { user: admin }), "q-clean", P({ pages: 9 }));
++  check("approve: second approval of the same item still 409", r3.status === 409);
++}
++
++// ============ my-uploads reward chips
++{
++  const { env, DB } = world();
++  seedUser(DB, "me");
++  const mk = (id, status, type = "Past Question", bountyId = null, createdAt = iso(1)) => seedResource(DB, { id, status, type, uploader: "me", bountyId, createdAt });
++  seedBounty(DB, { id: "B200", reward: 200 }); seedBounty(DB, { id: "BCLOSED", reward: 200, status: "closed" });
++  mk("pend-pq", "pending"); mk("pend-ln-bounty", "pending", "Lecture Note", "B200"); mk("pend-ln-closed", "pending", "Lecture Note", "BCLOSED"); mk("pend-other", "pending", "Other");
++  mk("ap-paid", "approved"); mk("ap-clear", "approved"); mk("ap-rev", "approved"); mk("ap-shadow", "approved"); mk("rej", "rejected");
++  seedLedger(DB, { user: "me", amount: 100, status: "pending", resource: "ap-paid", tier: "standard" });
++  seedLedger(DB, { user: "me", amount: 50, status: "cleared", resource: "ap-paid", tier: "first" });
++  seedLedger(DB, { user: "me", amount: 100, status: "cleared", resource: "ap-clear", tier: "standard" });
++  seedLedger(DB, { user: "me", amount: 100, status: "reversed", resource: "ap-rev", tier: "standard" });
++  seedLedger(DB, { user: "me", amount: 100, status: "shadow", resource: "ap-shadow", tier: "standard" });
++  seedLedger(DB, { user: "me", amount: 100, status: "cleared", resource: "rej", tier: "standard" });
++  const get = async () => Object.fromEntries((await getMyUploads(ctx(env, { user: { id: "me" }, query: {} }))).body.resources.map((r) => [r.id, r]));
++
++  for (const s of ["off", "shadow"]) { setCfg(DB, s); const g = await get(); check(`my-uploads(${s}): no resource has a reward chip (output unchanged)`, Object.values(g).every((r) => !("reward" in r)) && Object.keys(g).length === 9); }
++  setCfg(DB, "live");
++  const g = await get();
++  check("my-uploads(live): pending past question → 'up to' standard amount, no status", g["pend-pq"].reward.amount === 100 && g["pend-pq"].reward.status === undefined);
++  check("my-uploads(live): pending upload answering an open request → the larger request reward", g["pend-ln-bounty"].reward.amount === 200);
++  check("my-uploads(live): closed request ignored → standard lecture-note amount", g["pend-ln-closed"].reward.amount === 60);
++  check("my-uploads(live): types with no standard reward get no chip", !("reward" in g["pend-other"]));
++  check("my-uploads(live): approved with pending+cleared parts → summed, status 'pending' (still clearing)", g["ap-paid"].reward.amount === 150 && g["ap-paid"].reward.status === "pending");
++  check("my-uploads(live): approved & cleared → {100,'cleared'}", g["ap-clear"].reward.amount === 100 && g["ap-clear"].reward.status === "cleared");
++  check("my-uploads(live): reversed reward → {100,'reversed'}", g["ap-rev"].reward.amount === 100 && g["ap-rev"].reward.status === "reversed");
++  check("my-uploads(live): shadow-only ledger never shown to the student", !("reward" in g["ap-shadow"]));
++  check("my-uploads(live): rejected upload has no chip even if a row exists", !("reward" in g["rej"]));
++  setCfg(DB, "paused");
++  check("my-uploads(paused): chips still shown", "reward" in (await get())["ap-clear"]);
++}
++
++// ============ register / referral / verify
++{
++  const { env, DB } = world();
++  seedUser(DB, "inviter", { code: "ABCD2345" }); seedUser(DB, "unv", { code: "UNVER222", verified: 0 }); seedUser(DB, "susp", { code: "SUSP2222", status: "suspended" });
++  const reg = (email, extra = {}, ip = "203.0.113.9") =>
++    register(ctx(env, { body: { fullName: "New Student", email, password: "Password123", department: "Computer Science", level: "100", ...extra }, headers: { "CF-Connecting-IP": ip } }));
++  const uid = (email) => one(DB, "SELECT id FROM users WHERE email=?", email).id;
++
++  let r = await reg("a@x.com", { referralCode: "abcd2345" });
++  check("register: still 201 with a referral code", r.status === 201 && r.body.success);
++  const a = one(DB, "SELECT referred_by, signup_ip_hash h FROM users WHERE email='a@x.com'");
++  check("register: valid code (any case) links the inviter and records a 'signed_up' referral", a.referred_by === "inviter" && one(DB, "SELECT status, inviter_id, earned FROM referrals WHERE invitee_id=?", uid("a@x.com")).status === "signed_up");
++  check("register: IP stored only as a 32-hex salted hash (never the raw IP)", /^[0-9a-f]{32}$/.test(a.h) && !a.h.includes("203"));
++  await reg("b@x.com", {}, "203.0.113.9"); await reg("c@x.com", {}, "198.51.100.4");
++  const hh = (e) => one(DB, "SELECT signup_ip_hash h FROM users WHERE email=?", e).h;
++  check("register: same IP → same hash; different IP → different hash", hh("a@x.com") === hh("b@x.com") && hh("a@x.com") !== hh("c@x.com"));
++  check("register: no code → no referral, no problem", one(DB, "SELECT referred_by r FROM users WHERE email='b@x.com'").r === null && n(DB, "SELECT COUNT(*) AS n FROM referrals WHERE invitee_id=?", uid("b@x.com")) === 0);
++  for (const [email, code] of [["d@x.com", "NOPE9999"], ["e@x.com", "UNVER222"], ["f@x.com", "SUSP2222"], ["g@x.com", "bad code!!"], ["h@x.com", ""]]) {
++    const rr = await reg(email, { referralCode: code });
++    check(`register: code '${code}' (unknown/unverified/suspended/malformed) → signup still succeeds, no referral`, rr.status === 201 && n(DB, "SELECT COUNT(*) AS n FROM referrals WHERE invitee_id=?", uid(email)) === 0);
++  }
++  await reg("i@x.com", { referralCode: "ABCD2345" });
++  check("register: one inviter can bring many friends", n(DB, "SELECT COUNT(*) AS n FROM referrals WHERE inviter_id='inviter'") === 2);
++  check("register: duplicate email still rejected as before (409)", (await reg("a@x.com")).status === 409);
++
++  const dup = await captureReferral(DB, { inviteeId: uid("a@x.com"), rawCode: "ABCD2345", ts: iso(0) });
++  check("referral: a second capture for the same invitee is swallowed, not thrown (UNIQUE invitee)", dup === null && n(DB, "SELECT COUNT(*) AS n FROM referrals WHERE invitee_id=?", uid("a@x.com")) === 1);
++
++  // email verification moves signed_up → verified, and never downgrades
++  const id = uid("a@x.com");
++  DB._raw.prepare("UPDATE users SET verification_otp=?, verification_otp_expires=? WHERE id=?").run(await hashOtp(env, id, "verify", "123456"), new Date(Date.now() + 600000).toISOString(), id);
++  const v = await verifyOTP(ctx(env, { body: { email: "a@x.com", otp: "123456" } }));
++  check("verifyOTP: still succeeds and returns a token", v.status === 200 && v.body.success && !!v.body.token);
++  check("verifyOTP: referral 'signed_up' → 'verified'", one(DB, "SELECT status FROM referrals WHERE invitee_id=?", id).status === "verified");
++  DB._raw.prepare("UPDATE referrals SET status='contributed' WHERE invitee_id=?").run(id);
++  await markReferralVerified(DB, id, iso(0));
++  check("referral: 'contributed' is never downgraded by a late verify", one(DB, "SELECT status FROM referrals WHERE invitee_id=?", id).status === "contributed");
++  const id2 = uid("b@x.com");
++  DB._raw.prepare("UPDATE users SET verification_otp=?, verification_otp_expires=? WHERE id=?").run(await hashOtp(env, id2, "verify", "654321"), new Date(Date.now() + 600000).toISOString(), id2);
++  check("verifyOTP: a user with no referral verifies exactly as before", (await verifyOTP(ctx(env, { body: { email: "b@x.com", otp: "654321" } }))).status === 200);
++}
++
++// ============ deletion cascades
++{
++  const build = () => {
++    const w = world();
++    const { DB } = w;
++    ["V", "W", "X", "Y"].forEach((id) => seedUser(DB, id, { name: id + " Person" }));
++    DB._raw.prepare("UPDATE users SET referred_by='V' WHERE id='X'").run();
++    DB._raw.prepare("UPDATE users SET referred_by='Y' WHERE id='V'").run();
++    seedBounty(DB, { id: "B1" });
++    seedResource(DB, { id: "vr1", uploader: "V", status: "approved", bountyId: "B1" });
++    seedResource(DB, { id: "wr1", uploader: "W", status: "approved" });
++    seedLedger(DB, { id: "LV1", user: "V", amount: 100, resource: "vr1", tier: "standard" });
++    seedLedger(DB, { id: "LV2", user: "V", amount: 40, resource: null, tier: "referral" });
++    seedLedger(DB, { id: "LW1", user: "W", amount: 50, resource: "vr1", tier: "referral" });   // W earned something tied to V's resource
++    seedLedger(DB, { id: "LW2", user: "W", amount: 100, resource: "wr1", tier: "standard" });
++    DB._raw.prepare("INSERT INTO referrals (id,inviter_id,invitee_id,status,created_at,updated_at) VALUES ('rf1','V','X','verified',?,?),('rf2','Y','V','verified',?,?)").run(...Array(4).fill(iso(1)));
++    DB._raw.prepare("INSERT INTO incentive_flags (id,user_id,status,created_at,updated_at) VALUES ('fv','V','open',?,?),('fw','W','open',?,?)").run(...Array(4).fill(iso(1)));
++    return w;
++  };
++
++  let { env, DB } = build();
++  let fkError = null;
++  try { DB._raw.exec("BEGIN"); DB._raw.prepare("DELETE FROM users WHERE id='V'").run(); } catch (e) { fkError = e.message; } finally { try { DB._raw.exec("ROLLBACK"); } catch {} }
++  check("setup is meaningful: a bare DELETE of the user violates a foreign key (so the cascade is needed)", /FOREIGN KEY/i.test(fkError || ""), String(fkError));
++
++  const r = await deleteMyAccount(ctx(env, { user: { id: "V" } }));
++  check("deleteMyAccount: succeeds with rewards, referrals and flags present", r.status === 200 && r.body.success, JSON.stringify(r.body));
++  check("deleteMyAccount: the user is gone", n(DB, "SELECT COUNT(*) AS n FROM users WHERE id='V'") === 0);
++  const lv1 = one(DB, "SELECT user_id u, resource_id r, amount a FROM reward_ledger WHERE id='LV1'"), lv2 = one(DB, "SELECT user_id u FROM reward_ledger WHERE id='LV2'");
++  check("deleteMyAccount: their reward history is KEPT but detached (user_id/resource_id NULL)", lv1 && lv1.u === null && lv1.r === null && lv1.a === 100 && lv2 && lv2.u === null);
++  const lw1 = one(DB, "SELECT user_id u, resource_id r FROM reward_ledger WHERE id='LW1'");
++  check("deleteMyAccount: another student's reward tied to the deleted resource is kept, resource detached", lw1.u === "W" && lw1.r === null);
++  check("deleteMyAccount: referrals involving them removed; invitee's referred_by cleared; their flags removed (others' kept)", n(DB, "SELECT COUNT(*) AS n FROM referrals") === 0 && one(DB, "SELECT referred_by r FROM users WHERE id='X'").r === null && n(DB, "SELECT COUNT(*) AS n FROM incentive_flags WHERE user_id='V'") === 0 && n(DB, "SELECT COUNT(*) AS n FROM incentive_flags WHERE user_id='W'") === 1);
++  check("deleteMyAccount: unrelated users/ledger rows untouched", one(DB, "SELECT user_id u, resource_id r FROM reward_ledger WHERE id='LW2'").r === "wr1" && n(DB, "SELECT COUNT(*) AS n FROM users WHERE id IN ('W','X','Y')") === 3);
++
++  // permanent resource deletion
++  const pr = await permanentlyDeleteResource(ctx(env, { user: admin, params: { id: "wr1" } }));
++  check("permanentlyDeleteResource: succeeds when a reward references the resource", pr.status === 200 && n(DB, "SELECT COUNT(*) AS n FROM resources WHERE id='wr1'") === 0, JSON.stringify(pr.body));
++  const lw2 = one(DB, "SELECT user_id u, resource_id r, amount a FROM reward_ledger WHERE id='LW2'");
++  check("permanentlyDeleteResource: the reward row is kept, detached from the resource", lw2.u === "W" && lw2.r === null && lw2.a === 100);
++}
++
++summary();
+--- a/src/index.js
++++ b/src/index.js
+@@ -6,6 +6,8 @@
+ import studentNotificationRoutes from "./routes/studentNotificationRoutes.js";
+ import resourceRoutes from "./routes/resourceRoutes.js";
+ import downloadsRoutes from "./routes/downloadsRoutes.js";
++import incentiveRoutes from "./routes/incentiveRoutes.js";
++import adminIncentiveRoutes from "./routes/adminIncentiveRoutes.js";
+ import walletRoutes from "./routes/walletRoutes.js";
+ import moderationRoutes from "./routes/moderationRoutes.js";
+ import adminResourceRoutes from "./routes/adminResourceRoutes.js";
+@@ -60,12 +62,14 @@
+ app.route("/api/notifications", studentNotificationRoutes);
+ app.route("/api/resources", resourceRoutes);
+ app.route("/api/downloads", downloadsRoutes);
++app.route("/api/incentives", incentiveRoutes);
+ app.route("/api/wallet", walletRoutes);
+ app.route("/api/admin/moderation", moderationRoutes);
+ app.route("/api/admin/resources", adminResourceRoutes);
+ app.route("/api/admin/announcements", announcementRoutes);
+ app.route("/api/admin/notifications", adminNotificationRoutes);
+ app.route("/api/admin/users", adminUserRoutes);
++app.route("/api/admin/incentives", adminIncentiveRoutes);
+ app.route("/api/admin", adminTransactionRoutes);
+ app.route("/api/users", userSettingsRoutes);
+ 
+--- a/src/db/schema.sql
++++ b/src/db/schema.sql
+@@ -41,11 +41,20 @@
+   failed_logins               INTEGER NOT NULL DEFAULT 0,
+   lockout_until               TEXT,
+   password_changed_at         TEXT,
++  -- Incentive columns (see migrations/004_incentives.sql)
++  reward_balance              REAL NOT NULL DEFAULT 0,       -- spendable rewards. NO >= 0 check: a reversal after the student spent it may legitimately go negative
++  reward_pending              REAL NOT NULL DEFAULT 0 CHECK (reward_pending >= 0),  -- rewards still inside the hold period
++  rewards_frozen              INTEGER NOT NULL DEFAULT 0,    -- 0/1: moderator froze this student's rewards
++  referral_code               TEXT,                          -- unique (partial index below), created lazily
++  referred_by                 TEXT,                          -- inviter's user id (informational, no FK so deletes stay simple)
++  signup_ip_hash              TEXT,                          -- salted SHA-256 of the signup IP, for referral-ring detection only
+   created_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+   updated_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ );
+ 
+ CREATE INDEX idx_users_role_lastlogin ON users (role, last_login_at DESC);
++CREATE UNIQUE INDEX idx_users_referral_code ON users (referral_code) WHERE referral_code IS NOT NULL;
++CREATE INDEX idx_users_signup_ip_hash ON users (signup_ip_hash) WHERE signup_ip_hash IS NOT NULL;
+ 
+ -- Default shape written into `preferences` for a brand-new user (app-layer
+ -- default, since SQLite's column DEFAULT can't express nested JSON structure):
+@@ -100,9 +109,14 @@
+   reviewed_at                TEXT,
+   description                TEXT NOT NULL DEFAULT '',
+ 
++  -- Incentive columns (see migrations/004_incentives.sql)
++  file_hash                  TEXT,                          -- SHA-256 hex, computed in the moderator's browser at review time; used for duplicate detection
++  bounty_id                  TEXT,                          -- the request (bounty) this upload answers, validated at upload time
++
+   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ );
++CREATE INDEX idx_resources_file_hash ON resources (file_hash) WHERE file_hash IS NOT NULL;
+ 
+ -- ----------------------------------------------------------------------------
+ -- upload_intents — permits for direct browser -> Cloudinary uploads
+@@ -152,6 +166,7 @@
+   reference    TEXT UNIQUE,                    -- sparse-unique: SQLite treats each NULL as distinct, same as Mongo
+   resource_id  TEXT REFERENCES resources(id),  -- only set for purchases
+   description  TEXT NOT NULL DEFAULT '',
++  from_rewards REAL NOT NULL DEFAULT 0,        -- portion of a purchase paid from reward balance (funded part = amount - from_rewards)
+   created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+   updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ );
+@@ -253,3 +268,122 @@
+ CREATE INDEX idx_downloadlogs_user_created     ON download_logs (user_id, created_at DESC);
+ CREATE INDEX idx_downloadlogs_user_resource    ON download_logs (user_id, resource_id);
+ CREATE INDEX idx_downloadlogs_created_resource ON download_logs (created_at DESC, resource_id);
++
++-- ----------------------------------------------------------------------------
++-- Incentive program (see BACKEND_INTEGRATION.md in the update package)
++--   status 'off' (the default) = nothing observable changes for students or moderators.
++-- ----------------------------------------------------------------------------
++
++-- Single-row settings table (id is forced to 1). `rules` is a JSON object of the
++-- numeric limits and reward amounts; the app merges it over safe defaults.
++CREATE TABLE incentive_config (
++  id               INTEGER PRIMARY KEY CHECK (id = 1),
++  status           TEXT NOT NULL DEFAULT 'off' CHECK (status IN ('off','shadow','live','paused')),
++  rules            TEXT NOT NULL DEFAULT '{}',
++  season_name      TEXT,
++  season_ends_at   TEXT,
++  updated_by       TEXT,
++  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++INSERT OR IGNORE INTO incentive_config (id, status, rules) VALUES (1, 'off', '{}');
++
++-- Requests ("Wanted") that pay a fixed reward for a specific missing resource.
++CREATE TABLE bounties (
++  id            TEXT PRIMARY KEY,
++  course        TEXT NOT NULL,                    -- as displayed, e.g. 'CSC 305'
++  course_key    TEXT NOT NULL,                    -- normalised for matching: upper-case, letters+digits only ('CSC305')
++  type          TEXT NOT NULL CHECK (type IN ('Past Questions','Lecture Notes','Revision Sheet')),
++  level         TEXT NOT NULL,                    -- '300 Level'
++  reward        REAL NOT NULL CHECK (reward > 0),
++  max_payouts   INTEGER NOT NULL DEFAULT 1 CHECK (max_payouts BETWEEN 1 AND 3),
++  paid          INTEGER NOT NULL DEFAULT 0,
++  note          TEXT NOT NULL DEFAULT '',
++  expires_at    TEXT NOT NULL,                    -- ISO8601 (end of the chosen day, Africa/Lagos)
++  status        TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed','fulfilled')),  -- 'expired' is derived from expires_at
++  created_by    TEXT,                             -- admin id (no FK: an admin deleting their account must not fail)
++  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX idx_bounties_status_expires ON bounties (status, expires_at);
++CREATE INDEX idx_bounties_course_key ON bounties (course_key);
++
++-- Referral relationships. One inviter per invitee. Statuses move signed_up -> verified -> contributed.
++CREATE TABLE referrals (
++  id          TEXT PRIMARY KEY,
++  inviter_id  TEXT NOT NULL REFERENCES users(id),
++  invitee_id  TEXT NOT NULL UNIQUE REFERENCES users(id),
++  status      TEXT NOT NULL DEFAULT 'signed_up' CHECK (status IN ('signed_up','verified','contributed')),
++  earned      REAL NOT NULL DEFAULT 0,
++  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX idx_referrals_inviter ON referrals (inviter_id, created_at DESC);
++
++-- Every reward and every reversal. Reversals are separate NEGATIVE rows so history is never rewritten.
++-- user_id / resource_id are nullable for the same reason as transactions: financial history
++-- must outlive a deleted account or resource (see deleteMyAccount / permanentlyDeleteResource).
++CREATE TABLE reward_ledger (
++  id               TEXT PRIMARY KEY,
++  user_id          TEXT REFERENCES users(id),
++  type             TEXT NOT NULL CHECK (type IN ('reward','reversal')),
++  amount           REAL NOT NULL,                 -- reversals are negative
++  status           TEXT NOT NULL CHECK (status IN ('pending','cleared','reversed','shadow')),
++  tier             TEXT CHECK (tier IS NULL OR tier IN ('bounty','standard','high','rare','first','referral','challenge')),
++  label            TEXT NOT NULL DEFAULT '',
++  resource_id      TEXT REFERENCES resources(id),
++  bounty_id        TEXT,
++  referral_id      TEXT,
++  approved_by      TEXT,                          -- admin id (no FK)
++  note             TEXT NOT NULL DEFAULT '',
++  clears_at        TEXT,                          -- when a pending reward becomes spendable
++  reversed_at      TEXT,
++  reversed_by      TEXT,
++  reversal_reason  TEXT NOT NULL DEFAULT '',
++  reverses_id      TEXT,                          -- on a reversal row: the reward it cancels
++  created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX idx_reward_ledger_user_created ON reward_ledger (user_id, created_at DESC);
++CREATE INDEX idx_reward_ledger_status_clears ON reward_ledger (status, clears_at);
++CREATE INDEX idx_reward_ledger_created ON reward_ledger (created_at);
++CREATE INDEX idx_reward_ledger_approver ON reward_ledger (approved_by, created_at);
++-- Idempotency: the same student can never be paid twice for the same resource and tier,
++-- however many times an approval is retried, re-approved, or raced.
++CREATE UNIQUE INDEX idx_reward_ledger_once
++  ON reward_ledger (resource_id, user_id, tier) WHERE type = 'reward' AND resource_id IS NOT NULL;
++-- A reward can be reversed at most once.
++CREATE UNIQUE INDEX idx_reward_ledger_one_reversal
++  ON reward_ledger (reverses_id) WHERE reverses_id IS NOT NULL;
++
++-- Fraud signals raised by the nightly job (Phase 3) and resolved by a moderator.
++CREATE TABLE incentive_flags (
++  id           TEXT PRIMARY KEY,
++  user_id      TEXT NOT NULL REFERENCES users(id),
++  signals      TEXT NOT NULL DEFAULT '[]',        -- JSON array of plain-English lines
++  exposure     REAL NOT NULL DEFAULT 0,
++  status       TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','dismissed','frozen','reversed')),
++  note         TEXT NOT NULL DEFAULT '',
++  resolved_by  TEXT,
++  resolved_at  TEXT,
++  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
++  updated_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX idx_incentive_flags_status ON incentive_flags (status, created_at DESC);
++CREATE INDEX idx_incentive_flags_user ON incentive_flags (user_id);
++
++-- Append-only record of every consequential admin action. admin_name is a snapshot so
++-- the log stays readable after an account is deleted; admin_id is NULL for system events.
++CREATE TABLE incentive_audit (
++  id          TEXT PRIMARY KEY,
++  admin_id    TEXT,
++  admin_name  TEXT NOT NULL,
++  action      TEXT NOT NULL,
++  detail      TEXT NOT NULL DEFAULT '',
++  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX idx_incentive_audit_created ON incentive_audit (created_at DESC);
++
++-- Makes the audit log tamper-evident: rows can be added but never changed or removed.
++CREATE TRIGGER incentive_audit_no_update BEFORE UPDATE ON incentive_audit
++BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;
++CREATE TRIGGER incentive_audit_no_delete BEFORE DELETE ON incentive_audit
++BEGIN SELECT RAISE(ABORT, 'incentive_audit is append-only'); END;
+--- a/src/utils/lagosDay.js
++++ b/src/utils/lagosDay.js
+@@ -15,3 +15,40 @@
+   shifted.setUTCHours(0, 0, 0, 0);
+   return new Date(shifted.getTime() - LAGOS_OFFSET_MS);
+ }
++
++// ---- Added for the incentive program ---------------------------------------
++// All "this month" / "this week" windows follow the Lagos calendar, for the same
++// reason as startOfTodayInLagos above (the server clock is UTC).
++
++// Midnight at the start of the 1st of the current month, Africa/Lagos.
++export function startOfMonthInLagos() {
++  const shifted = new Date(Date.now() + LAGOS_OFFSET_MS);
++  shifted.setUTCDate(1);
++  shifted.setUTCHours(0, 0, 0, 0);
++  return new Date(shifted.getTime() - LAGOS_OFFSET_MS);
++}
++
++// Midnight at the start of the current week. Weeks start on MONDAY.
++export function startOfWeekInLagos() {
++  const shifted = new Date(Date.now() + LAGOS_OFFSET_MS);
++  const daysSinceMonday = (shifted.getUTCDay() + 6) % 7;
++  shifted.setUTCDate(shifted.getUTCDate() - daysSinceMonday);
++  shifted.setUTCHours(0, 0, 0, 0);
++  return new Date(shifted.getTime() - LAGOS_OFFSET_MS);
++}
++
++// "YYYY-MM-DD" for today in Lagos.
++export function todayInLagosYmd() {
++  return new Date(Date.now() + LAGOS_OFFSET_MS).toISOString().slice(0, 10);
++}
++
++// ISO instant of 23:59:59.999 on the given Lagos calendar day ("YYYY-MM-DD"),
++// or null if the string is not a real date.
++export function endOfLagosDayIso(ymd) {
++  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ""));
++  if (!m) return null;
++  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
++  const probe = new Date(Date.UTC(y, mo - 1, d));
++  if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return null;
++  return new Date(Date.UTC(y, mo - 1, d, 23, 59, 59, 999) - LAGOS_OFFSET_MS).toISOString();
++}
+--- a/src/validators/authValidators.js
++++ b/src/validators/authValidators.js
+@@ -41,6 +41,12 @@
+     z.enum(["Male", "Female", "Other"], { message: "Please select a valid gender" }).optional()
+   ),
+   communitySurvey: z.string().trim().optional(),
++  // Optional invite code (from a "?ref=" signup link). A malformed code is quietly
++  // treated as absent: a bad referral code must never stop someone from signing up.
++  referralCode: z.preprocess(
++    (v) => (typeof v === "string" && /^[A-Za-z0-9_-]{4,24}$/.test(v.trim()) ? v.trim() : undefined),
++    z.string().optional()
++  ),
+ });
+ 
+ export const loginSchema = z.object({
+--- a/src/controllers/authController.js
++++ b/src/controllers/authController.js
+@@ -5,6 +5,8 @@
+ import { hashPassword, verifyPassword, dummyVerify } from "../utils/password.js";
+ import { invalidateAuthCache } from "../middleware/protect.js";
+ import { sendVerificationEmail, sendPasswordResetEmail } from "../services/emailService.js";
++import { hashIp } from "../utils/ipHash.js";
++import { captureReferral, markReferralVerified } from "../services/referralService.js";
+ 
+ const OTP_EXPIRY_MINUTES = 10;
+ const MAX_OTP_ATTEMPTS = 5; // wrong guesses allowed per issued code
+@@ -54,7 +56,7 @@
+ // @route POST /api/auth/register
+ export async function register(c) {
+   try {
+-    const { fullName, email, password, matricNumber, university, faculty, department, level, gender, communitySurvey } =
++    const { fullName, email, password, matricNumber, university, faculty, department, level, gender, communitySurvey, referralCode } =
+       c.req.valid("json");
+ 
+     const existingUser = matricNumber
+@@ -80,20 +82,25 @@
+     const otpExpires = isoPlusMinutes(OTP_EXPIRY_MINUTES);
+     const hashedPassword = await hashPassword(c.env, password);
+     const timestamp = nowIso();
++    // Salted hash only (never the raw IP); lets the reward program spot referral rings later.
++    const signupIpHash = await hashIp(c.env, c.req.header("CF-Connecting-IP"));
+ 
+     await c.env.DB.prepare(
+       `INSERT INTO users
+         (id, full_name, email, password, matric_number, university, faculty, department, level, gender,
+-         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at)
+-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
++         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at, signup_ip_hash)
++       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     )
+       .bind(
+         id, fullName, email, hashedPassword, matricNumber || null, university || null, faculty || null,
+         department || null, level || null, gender || null, communitySurvey || "", otpHash, otpExpires,
+-        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp
++        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp, signupIpHash
+       )
+       .run();
+ 
++    // Best effort: a bad or unknown invite code never affects signup (swallows its own errors).
++    await captureReferral(c.env.DB, { inviteeId: id, rawCode: referralCode, ts: timestamp });
++
+     c.executionCtx.waitUntil(
+       sendVerificationEmail(c.env, email, fullName, otp).catch((err) => {
+         console.error(`Failed to send verification email to ${email}:`, err.message);
+@@ -153,6 +160,9 @@
+       .bind(timestamp, timestamp, user.id)
+       .run();
+ 
++    // Referral bookkeeping only (signed_up -> verified); pays nothing and never throws.
++    await markReferralVerified(c.env.DB, user.id, timestamp);
++
+     if (user.account_status === "suspended") {
+       return c.json({ success: false, suspended: true, message: "Your account has been suspended. Contact support if you believe this is a mistake." }, 403);
+     }
+--- a/src/controllers/uploadController.js
++++ b/src/controllers/uploadController.js
+@@ -5,6 +5,7 @@
+ import { inspectRemoteFile, matchesMagic } from "../utils/fileChecks.js";
+ import { purgeStaleUploads } from "../jobs/purgeStaleUploads.js";
+ import { formatFileSize } from "../utils/resourceShape.js";
++import { resolveBountyForUpload } from "../services/bountyService.js";
+ 
+ // Direct-to-Cloudinary upload, in two cheap Worker calls:
+ //   1. POST /api/resources/upload/permit   -> validate metadata, hand back a signed permit
+@@ -77,6 +78,10 @@
+       );
+     }
+ 
++    // Optional: the request ("bounty") this upload answers. Silently dropped unless valid.
++    const bountyId = await resolveBountyForUpload(c.env.DB, body.bountyId, parsed.data.course);
++    const metadata = bountyId ? { ...parsed.data, bountyId } : parsed.data;
++
+     const id = generateId();
+     // The public_id (storage path) is chosen here, never by the client. For raw
+     // files the extension is part of it.
+@@ -87,7 +92,7 @@
+       `INSERT INTO upload_intents (id, user_id, public_id, file_name, file_extension, declared_size, metadata, created_at, expires_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     )
+-      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, JSON.stringify(parsed.data), nowIso, expiresAt)
++      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, JSON.stringify(metadata), nowIso, expiresAt)
+       .run();
+ 
+     const permit = await signUploadPermit(c.env, publicId);
+@@ -175,12 +180,12 @@
+           `INSERT INTO resources
+             (id, title, type, department, course, level, semester, session, description, uploader_id,
+              file_name, file_url, cloudinary_public_id, cloudinary_resource_type, file_size_bytes, file_extension,
+-             pages, preview_type, preview_snippet, preview_message, created_at, updated_at)
+-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?)`
++             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id)
++           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?)`
+         ).bind(
+           intent.id, meta.title, meta.type, meta.department, meta.course, meta.level, meta.semester, meta.session,
+           meta.description || "", user.id, intent.file_name, buildRawFileUrl(c.env, intent.public_id), intent.public_id,
+-          info.size, intent.file_extension, timestamp, timestamp
++          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null
+         ),
+         c.env.DB.prepare(
+           "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, NULL, 'new_upload', 1, ?, ?)"
+--- a/src/controllers/moderationController.js
++++ b/src/controllers/moderationController.js
+@@ -4,8 +4,10 @@
+ import { timeAgo } from "../utils/timeAgo.js";
+ import { sendResourceStatusEmail } from "../services/emailService.js";
+ import { generateId } from "../utils/id.js";
++import { getIncentiveConfig } from "../services/incentiveConfig.js";
+ 
+ const AGED_THRESHOLD_DAYS = 4;
++const REWARD_TIERS = ["bounty", "standard", "high", "rare", "none"];
+ 
+ function formatFileSize(bytes) {
+   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+@@ -17,6 +19,30 @@
+ }
+ 
+ // @route GET /api/admin/moderation/queue
++// Extra context for the moderation queue, only when the reward program is on in some
++// form (shadow/live/paused). With the program 'off' the queue is exactly what it always was.
++// `bounty`: the request this upload answers, if it can still be paid.
++// `uploaderRisk`: plain-English reasons to look twice before paying this student.
++function rewardFieldsFor(x, nowMs) {
++  if (!x) return {};
++  const out = {};
++  if (x.bounty_id && x.bounty_status === "open" && x.bounty_expires > new Date(nowMs).toISOString() && x.bounty_paid < x.bounty_max) {
++    out.bounty = { id: x.bounty_id, reward: x.bounty_reward };
++  }
++  const notes = [];
++  let level = "low";
++  const RANK = { low: 0, medium: 1, high: 2 };
++  const raise = (to) => { if (RANK[to] > RANK[level]) level = to; };
++  if (x.open_flag) { raise("high"); notes.push("Has an open reward flag"); }
++  if (x.rejected_14d >= 3) { raise("high"); notes.push(`${x.rejected_14d} uploads rejected in the last 14 days`); }
++  else if (x.rejected_14d >= 1) { raise("medium"); notes.push(`${x.rejected_14d} upload${x.rejected_14d > 1 ? "s" : ""} rejected in the last 14 days`); }
++  const ageDays = (nowMs - new Date(x.acct_created).getTime()) / 86400000;
++  if (Number.isFinite(ageDays) && ageDays < 7) { raise("medium"); notes.push(`Account is ${Math.max(0, Math.floor(ageDays))} day(s) old`); }
++  if (x.shared_ip) { raise("medium"); notes.push("Signed up from the same connection as another account"); }
++  out.uploaderRisk = { level, notes };
++  return out;
++}
++
+ export async function getModerationQueue(c) {
+   try {
+     const sortDirection = c.req.query("sort") === "newest" ? "DESC" : "ASC";
+@@ -37,6 +63,32 @@
+       .bind(limit, skip)
+       .all();
+ 
++    // Same page (same filter, order, limit and offset), plus reward context.
++    let extras = new Map();
++    const incentiveCfg = await getIncentiveConfig(c.env.DB);
++    if (incentiveCfg.status !== "off") {
++      const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
++      const { results: extraRows } = await c.env.DB.prepare(
++        `SELECT r.id AS rid,
++                b.id AS bounty_id, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
++                b.paid AS bounty_paid, b.max_payouts AS bounty_max,
++                u.created_at AS acct_created,
++                (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = r.uploader_id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
++                EXISTS (SELECT 1 FROM incentive_flags f WHERE f.user_id = r.uploader_id AND f.status = 'open') AS open_flag,
++                EXISTS (SELECT 1 FROM users o WHERE u.signup_ip_hash IS NOT NULL AND o.signup_ip_hash = u.signup_ip_hash AND o.id != u.id) AS shared_ip
++           FROM resources r
++           LEFT JOIN users u ON u.id = r.uploader_id
++           LEFT JOIN bounties b ON b.id = r.bounty_id
++          WHERE r.status = 'pending'
++          ORDER BY r.created_at ${sortDirection}
++          LIMIT ? OFFSET ?`
++      )
++        .bind(fourteenDaysAgo, limit, skip)
++        .all();
++      extras = new Map(extraRows.map((e) => [e.rid, e]));
++    }
++    const nowMs = Date.now();
++
+     const queue = results.map((r) => {
+       const ageDays = (Date.now() - new Date(r.created_at).getTime()) / 86400000;
+       return {
+@@ -52,6 +104,7 @@
+         size: formatFileSize(r.file_size_bytes),
+         uploadDate: timeAgo(r.created_at),
+         isAged: ageDays >= AGED_THRESHOLD_DAYS,
++        ...rewardFieldsFor(extras.get(r.id), nowMs),
+       };
+     });
+ 
+@@ -129,7 +182,24 @@
+   }
+   let snippet = typeof body.snippet === "string" ? body.snippet.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim() : "";
+   if (snippet.length > MAX_SNIPPET_CHARS) snippet = snippet.slice(0, MAX_SNIPPET_CHARS).trim() + "…";
+-  return { pages, snippet };
++
++  // Reward choice (optional): what the moderator picked in the reward panel. Validated
++  // here so a bad value is a clear 400 instead of surprising the payout logic later.
++  let rewardTier;
++  if (body.rewardTier !== undefined && body.rewardTier !== null && body.rewardTier !== "") {
++    if (!REWARD_TIERS.includes(body.rewardTier)) return { error: "Choose a valid reward option." };
++    rewardTier = body.rewardTier;
++  }
++  const rewardNote = typeof body.rewardNote === "string" ? body.rewardNote.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
++  if ((rewardTier === "high" || rewardTier === "rare") && rewardNote.length < 5) {
++    return { error: "Add a short reason for a High-value or Rare reward." };
++  }
++
++  // SHA-256 of the file, computed in the moderator's browser while it counts pages.
++  // Advisory only (used to spot duplicate uploads), so a malformed value is ignored, not an error.
++  const fileHash = typeof body.fileHash === "string" && /^[a-fA-F0-9]{64}$/.test(body.fileHash.trim()) ? body.fileHash.trim().toLowerCase() : null;
++
++  return { pages, snippet, rewardTier, rewardNote, fileHash };
+ }
+ 
+ // Inner logic, callable either from the route handler below (which reads
+@@ -147,6 +217,7 @@
+   const result = await c.env.DB.prepare(
+     `UPDATE resources
+         SET status = 'approved', pages = ?, preview_type = ?, preview_snippet = ?, preview_message = ?,
++            file_hash = COALESCE(?, file_hash),
+             reviewed_by = ?, reviewed_at = ?, updated_at = ?
+       WHERE id = ? AND status = 'pending'`
+   )
+@@ -155,6 +226,7 @@
+       hasSnippet ? "text" : "none",
+       review.snippet,
+       hasSnippet ? "" : NO_PREVIEW_MESSAGE,
++      review.fileHash ?? null,
+       user.id, nowIso(), nowIso(), id
+     )
+     .run();
+--- a/src/controllers/resourceController.js
++++ b/src/controllers/resourceController.js
+@@ -1,4 +1,5 @@
+ import { sanitizeError } from "../utils/sanitizeError.js";
++import { rewardChipsForUploads } from "../services/uploadRewards.js";
+ 
+ function formatFileSize(bytes) {
+   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+@@ -116,13 +117,15 @@
+     ]);
+ 
+     const total = countRow.total;
++    // Empty unless the reward program is live/paused, so nothing changes while it is off.
++    const chips = await rewardChipsForUploads(c.env.DB, user.id, results);
+     return c.json({
+       success: true,
+       count: results.length,
+       total,
+       page,
+       totalPages: Math.max(1, Math.ceil(total / limit)),
+-      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason })),
++      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason, ...(chips.has(r.id) ? { reward: chips.get(r.id) } : {}) })),
+     });
+   } catch (err) {
+     console.error("resourceController error:", err?.message);
+--- a/src/controllers/userSettingsController.js
++++ b/src/controllers/userSettingsController.js
+@@ -1,4 +1,5 @@
+ import { generateOTP, hashOtp } from "../utils/otp.js";
++import { incentiveCascadeForUser } from "../services/referralService.js";
+ import { hashPassword, verifyPassword } from "../utils/password.js";
+ import { generateToken } from "../utils/token.js";
+ import { sanitizeError } from "../utils/sanitizeError.js";
+@@ -293,11 +294,15 @@
+     //   this schema's actual sentinel for "shared admin feed" (see
+     //   schema.sql), so nulling it would make a deleted user's old
+     //   notifications incorrectly reappear there.
++    // Reward-program rows reference users/resources: detach or remove them first so
++    // this deletion can never fail on a foreign key (see referralService.js).
++    const incentive = incentiveCascadeForUser(c.env.DB, userId);
+     await c.env.DB.batch([
+       c.env.DB.prepare("DELETE FROM bookmarks WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
+       c.env.DB.prepare("DELETE FROM download_logs WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
+       c.env.DB.prepare("UPDATE transactions SET resource_id = NULL WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
+       c.env.DB.prepare("UPDATE notifications SET resource_id = NULL, updated_at = ? WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(timestamp, userId),
++      ...incentive.beforeResources,
+       c.env.DB.prepare("DELETE FROM resources WHERE uploader_id = ?").bind(userId),
+ 
+       c.env.DB.prepare("DELETE FROM bookmarks WHERE user_id = ?").bind(userId),
+@@ -307,6 +312,7 @@
+       c.env.DB.prepare("UPDATE resources SET reviewed_by = NULL WHERE reviewed_by = ?").bind(userId),
+       c.env.DB.prepare("UPDATE announcements SET created_by = NULL WHERE created_by = ?").bind(userId),
+ 
++      ...incentive.beforeUser,
+       c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
+     ]);
+ 
+--- a/src/controllers/adminResourceController.js
++++ b/src/controllers/adminResourceController.js
+@@ -1,4 +1,5 @@
+ import { sanitizeError } from "../utils/sanitizeError.js";
++import { incentiveCascadeForResource } from "../services/referralService.js";
+ import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
+ import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
+ 
+@@ -302,6 +303,7 @@
+       c.env.DB.prepare("DELETE FROM download_logs WHERE resource_id = ?").bind(id),
+       c.env.DB.prepare("UPDATE transactions SET resource_id = NULL WHERE resource_id = ?").bind(id),
+       c.env.DB.prepare("UPDATE notifications SET resource_id = NULL, updated_at = ? WHERE resource_id = ?").bind(timestamp, id),
++      ...incentiveCascadeForResource(c.env.DB, id),
+       c.env.DB.prepare("DELETE FROM resources WHERE id = ?").bind(id),
+     ]);
+ 

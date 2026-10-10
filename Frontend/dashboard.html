@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="dashboard.css" />
+    <link rel="stylesheet" href="earn.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -91,19 +92,14 @@
             <span>Lecture Notes</span>
           </a>
 
-          <div class="menu-section-label">Community</div>
-          <a href="community.html" class="menu-link">
-            <svg
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              viewBox="0 0 24 24"
-            >
-              <path
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <span>Study Groups</span>
+          <div class="menu-section-label">Activity</div>
+          <a href="downloads.html" class="menu-link">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+            <span>Downloads</span>
+          </a>
+          <a href="earn.html" class="menu-link rewards-nav-link" style="display: none">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7" /></svg>
+            <span>Earn Rewards</span>
           </a>
 
           <div class="menu-section-label">Personal</div>
@@ -116,7 +112,7 @@
             >
               <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
             </svg>
-            <span>Bookmarks</span>
+            <span>Wishlist</span>
           </a>
           <a href="my-uploads.html" class="menu-link">
             <svg
@@ -381,7 +377,7 @@
                       d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"
                     />
                   </svg>
-                  <span>Bookmarks</span>
+                  <span>Wishlist</span>
                 </a>
                 <a
                   href="settings.html"
@@ -441,16 +437,39 @@
 
         <!-- MAIN CONTENT -->
         <main class="main-workspace" id="main-content">
-          <header class="workspace-header">
-            <h1 id="dashboardGreeting">Good evening, Ebimotimi.</h1>
+          <!-- HERO: greeting, primary search, wallet -->
+          <header class="dash-hero">
+            <div class="dash-hero-main">
+              <h1 id="dashboardGreeting">Good evening.</h1>
+              <p class="dash-sub">Search for the past questions and notes you need. Most are ready to download in a few taps.</p>
+              <form class="dash-search" id="dashSearchForm" role="search">
+                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                <input type="text" id="dashSearchInput" placeholder="Search a course code or topic, e.g. CSC 201" aria-label="Search resources" autocomplete="off" />
+                <button type="submit" class="dash-search-btn">Search</button>
+              </form>
+              <div class="dash-chips" id="dashChips" aria-label="Quick searches"></div>
+            </div>
+            <aside class="dash-wallet" aria-label="Study wallet">
+              <span class="dw-label">Study wallet</span>
+              <strong class="dw-balance" id="dwBalance">&hellip;</strong>
+              <span class="dw-sub" id="dwSub">Downloads start from &#8358;200.</span>
+              <button type="button" class="btn-primary-sm" id="dwFund">Add funds</button>
+              <a class="dw-link" id="dwRewards" href="earn.html" style="display: none"></a>
+            </aside>
           </header>
 
-          <section class="dashboard-section" id="continueLearningSection">
-            <h2 class="section-title">Continue Learning</h2>
-            <div id="continueLearningContainer">
-              <!-- Rendered by dashboard.js from GET /api/resources/continue-learning -->
-            </div>
+          <!-- ONE smart next step (wishlist / wallet), filled by dashboard-home.js -->
+          <div class="dash-nudge hidden" id="dashNudge" role="status"></div>
+
+          <!-- PERSONALISED: matched to the student's level and department -->
+          <section class="dashboard-section hidden" id="forYouSection">
+            <h2 class="section-title"><span id="forYouTitle">For your level</span><a class="see-all-link" href="resources.html">Browse all</a></h2>
+            <div class="resource-grid" id="forYouGrid"></div>
           </section>
+          <div class="dash-profile-cta hidden" id="forYouProfileCta">
+            <div><strong>Get resources picked for you</strong><span>Add your department and level to your profile and we will show what matches.</span></div>
+            <a class="btn-primary-sm" href="profile.html">Complete profile</a>
+          </div>
 
           <section class="dashboard-section" id="trendingSection">
             <h2 class="section-title">
@@ -502,45 +521,20 @@
             </div>
           </section>
 
-          <section class="dashboard-section">
-            <h2 class="section-title">Quick Actions</h2>
-            <div class="actions-trio-grid">
-              <a href="resources.html" class="action-strip-btn">
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <span>Browse Resources</span>
-              </a>
-              <a href="upload.html" class="action-strip-btn">
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-                  />
-                </svg>
-                <span>Upload Resource</span>
-              </a>
-              <a href="bookmarks.html" class="action-strip-btn">
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z" />
-                </svg>
-                <span>Bookmarks</span>
-              </a>
+          <section class="dashboard-section" id="rewardsDashSection" style="display: none">
+            <h2 class="section-title">
+              Earn Rewards
+              <a class="see-all-link" href="earn.html">Open</a>
+            </h2>
+            <div class="rw-strip" id="rewardsDashBody"></div>
+          </section>
+
+          <section class="dash-contribute" id="dashContribute">
+            <div>
+              <h2>Have notes or past questions others need?</h2>
+              <p>Every upload helps a classmate and is checked before it goes live. Share what you have.</p>
             </div>
+            <a class="btn-primary-sm" href="upload.html">Upload a resource</a>
           </section>
         </main>
       </div>
@@ -561,5 +555,7 @@
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
+    <script src="incentives.js"></script>
+    <script src="dashboard-home.js"></script>
   </body>
 </html>

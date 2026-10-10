@@ -5,6 +5,8 @@ import { sanitizeError } from "../utils/sanitizeError.js";
 import { hashPassword, verifyPassword, dummyVerify } from "../utils/password.js";
 import { invalidateAuthCache } from "../middleware/protect.js";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/emailService.js";
+import { hashIp } from "../utils/ipHash.js";
+import { captureReferral, markReferralVerified } from "../services/referralService.js";
 
 const OTP_EXPIRY_MINUTES = 10;
 const MAX_OTP_ATTEMPTS = 5; // wrong guesses allowed per issued code
@@ -54,7 +56,7 @@ function issuedRecently(expiresIso) {
 // @route POST /api/auth/register
 export async function register(c) {
   try {
-    const { fullName, email, password, matricNumber, university, faculty, department, level, gender, communitySurvey } =
+    const { fullName, email, password, matricNumber, university, faculty, department, level, gender, communitySurvey, referralCode } =
       c.req.valid("json");
 
     const existingUser = matricNumber
@@ -80,19 +82,24 @@ export async function register(c) {
     const otpExpires = isoPlusMinutes(OTP_EXPIRY_MINUTES);
     const hashedPassword = await hashPassword(c.env, password);
     const timestamp = nowIso();
+    // Salted hash only (never the raw IP); lets the reward program spot referral rings later.
+    const signupIpHash = await hashIp(c.env, c.req.header("CF-Connecting-IP"));
 
     await c.env.DB.prepare(
       `INSERT INTO users
         (id, full_name, email, password, matric_number, university, faculty, department, level, gender,
-         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at, signup_ip_hash)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(
         id, fullName, email, hashedPassword, matricNumber || null, university || null, faculty || null,
         department || null, level || null, gender || null, communitySurvey || "", otpHash, otpExpires,
-        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp
+        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp, signupIpHash
       )
       .run();
+
+    // Best effort: a bad or unknown invite code never affects signup (swallows its own errors).
+    await captureReferral(c.env.DB, { inviteeId: id, rawCode: referralCode, ts: timestamp });
 
     c.executionCtx.waitUntil(
       sendVerificationEmail(c.env, email, fullName, otp).catch((err) => {
@@ -152,6 +159,9 @@ export async function verifyOTP(c) {
     )
       .bind(timestamp, timestamp, user.id)
       .run();
+
+    // Referral bookkeeping only (signed_up -> verified); pays nothing and never throws.
+    await markReferralVerified(c.env.DB, user.id, timestamp);
 
     if (user.account_status === "suspended") {
       return c.json({ success: false, suspended: true, message: "Your account has been suspended. Contact support if you believe this is a mistake." }, 403);

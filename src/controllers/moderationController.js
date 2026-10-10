@@ -4,8 +4,13 @@ import { startOfTodayInLagos } from "../utils/lagosDay.js";
 import { timeAgo } from "../utils/timeAgo.js";
 import { sendResourceStatusEmail } from "../services/emailService.js";
 import { generateId } from "../utils/id.js";
+import { getIncentiveConfig, paidStatuses } from "../services/incentiveConfig.js";
+import { uploaderRiskFrom } from "../services/uploaderRisk.js";
+import { awardForApproval, previewAward, sumRewards } from "../services/rewardEngine.js";
+import { startOfMonthInLagos } from "../utils/lagosDay.js";
 
 const AGED_THRESHOLD_DAYS = 4;
+const REWARD_TIERS = ["bounty", "standard", "high", "rare", "none"];
 
 function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -17,6 +22,26 @@ function nowIso() {
 }
 
 // @route GET /api/admin/moderation/queue
+// Extra context for the moderation queue, only when the reward program is on in some
+// form (shadow/live/paused). With the program 'off' the queue is exactly what it always was.
+// `bounty`: the request this upload answers, if it can still be paid.
+// `uploaderRisk`: plain-English reasons to look twice before paying this student.
+function rewardFieldsFor(x, nowMs, rctx) {
+  if (!x) return {};
+  const out = {};
+  if (x.bounty_id && x.bounty_status === "open" && x.bounty_expires > new Date(nowMs).toISOString() && x.bounty_paid < x.bounty_max) {
+    out.bounty = { id: x.bounty_id, reward: x.bounty_reward };
+  }
+  out.uploaderRisk = uploaderRiskFrom(x, nowMs);
+  // What approving this with the default tier would do right now (or why it can't pay).
+  const preview = previewAward(rctx.cfg, {
+    adminId: rctx.adminId, uploaderId: x.uploader_id, frozen: !!x.frozen, type: x.rtype,
+    hasBounty: !!out.bounty, bountyReward: x.bounty_reward, earned7d: x.earned7d, paidMonth: rctx.paidMonth, adminToday: rctx.adminToday,
+  });
+  if (preview) out.rewardPreview = preview;
+  return out;
+}
+
 export async function getModerationQueue(c) {
   try {
     const sortDirection = c.req.query("sort") === "newest" ? "DESC" : "ASC";
@@ -37,6 +62,44 @@ export async function getModerationQueue(c) {
       .bind(limit, skip)
       .all();
 
+    // Same page (same filter, order, limit and offset), plus reward context.
+    let extras = new Map();
+    const incentiveCfg = await getIncentiveConfig(c.env.DB);
+    const admin = c.get("user");
+    let rewardCtx = null;
+    if (incentiveCfg.status !== "off") {
+      const counted = paidStatuses(incentiveCfg.status);
+      const marks = counted.map(() => "?").join(",");
+      const fourteenDaysAgo = new Date(Date.now() - 14 * 86400000).toISOString();
+      const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+      const [paidMonth, adminToday, extraResult] = await Promise.all([
+        sumRewards(c.env.DB, { since: startOfMonthInLagos().toISOString(), counted }),
+        sumRewards(c.env.DB, { approverId: admin.id, since: startOfTodayInLagos().toISOString(), counted }),
+        c.env.DB.prepare(
+          `SELECT r.id AS rid, r.uploader_id AS uploader_id, r.type AS rtype,
+                  b.id AS bounty_id, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
+                  b.paid AS bounty_paid, b.max_payouts AS bounty_max,
+                  u.created_at AS acct_created, u.rewards_frozen AS frozen,
+                  (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = r.uploader_id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
+                  EXISTS (SELECT 1 FROM incentive_flags f WHERE f.user_id = r.uploader_id AND f.status = 'open') AS open_flag,
+                  EXISTS (SELECT 1 FROM users o WHERE u.signup_ip_hash IS NOT NULL AND o.signup_ip_hash = u.signup_ip_hash AND o.id != u.id) AS shared_ip,
+                  (SELECT COALESCE(SUM(l.amount), 0) FROM reward_ledger l
+                    WHERE l.user_id = r.uploader_id AND l.type = 'reward' AND l.status IN (${marks}) AND l.created_at >= ?) AS earned7d
+             FROM resources r
+             LEFT JOIN users u ON u.id = r.uploader_id
+             LEFT JOIN bounties b ON b.id = r.bounty_id
+            WHERE r.status = 'pending'
+            ORDER BY r.created_at ${sortDirection}
+            LIMIT ? OFFSET ?`
+        )
+          .bind(fourteenDaysAgo, ...counted, sevenDaysAgo, limit, skip)
+          .all(),
+      ]);
+      extras = new Map(extraResult.results.map((e) => [e.rid, e]));
+      rewardCtx = { cfg: incentiveCfg, adminId: admin.id, paidMonth, adminToday };
+    }
+    const nowMs = Date.now();
+
     const queue = results.map((r) => {
       const ageDays = (Date.now() - new Date(r.created_at).getTime()) / 86400000;
       return {
@@ -52,6 +115,7 @@ export async function getModerationQueue(c) {
         size: formatFileSize(r.file_size_bytes),
         uploadDate: timeAgo(r.created_at),
         isAged: ageDays >= AGED_THRESHOLD_DAYS,
+        ...rewardFieldsFor(extras.get(r.id), nowMs, rewardCtx),
       };
     });
 
@@ -129,7 +193,24 @@ export function parseApprovalReview(body) {
   }
   let snippet = typeof body.snippet === "string" ? body.snippet.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim() : "";
   if (snippet.length > MAX_SNIPPET_CHARS) snippet = snippet.slice(0, MAX_SNIPPET_CHARS).trim() + "…";
-  return { pages, snippet };
+
+  // Reward choice (optional): what the moderator picked in the reward panel. Validated
+  // here so a bad value is a clear 400 instead of surprising the payout logic later.
+  let rewardTier;
+  if (body.rewardTier !== undefined && body.rewardTier !== null && body.rewardTier !== "") {
+    if (!REWARD_TIERS.includes(body.rewardTier)) return { error: "Choose a valid reward option." };
+    rewardTier = body.rewardTier;
+  }
+  const rewardNote = typeof body.rewardNote === "string" ? body.rewardNote.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 300) : "";
+  if ((rewardTier === "high" || rewardTier === "rare") && rewardNote.length < 5) {
+    return { error: "Add a short reason for a High-value or Rare reward." };
+  }
+
+  // SHA-256 of the file, computed in the moderator's browser while it counts pages.
+  // Advisory only (used to spot duplicate uploads), so a malformed value is ignored, not an error.
+  const fileHash = typeof body.fileHash === "string" && /^[a-fA-F0-9]{64}$/.test(body.fileHash.trim()) ? body.fileHash.trim().toLowerCase() : null;
+
+  return { pages, snippet, rewardTier, rewardNote, fileHash };
 }
 
 // Inner logic, callable either from the route handler below (which reads
@@ -147,6 +228,7 @@ export async function approveResourceById(c, id, review) {
   const result = await c.env.DB.prepare(
     `UPDATE resources
         SET status = 'approved', pages = ?, preview_type = ?, preview_snippet = ?, preview_message = ?,
+            file_hash = COALESCE(?, file_hash),
             reviewed_by = ?, reviewed_at = ?, updated_at = ?
       WHERE id = ? AND status = 'pending'`
   )
@@ -155,6 +237,7 @@ export async function approveResourceById(c, id, review) {
       hasSnippet ? "text" : "none",
       review.snippet,
       hasSnippet ? "" : NO_PREVIEW_MESSAGE,
+      review.fileHash ?? null,
       user.id, nowIso(), nowIso(), id
     )
     .run();
@@ -167,7 +250,18 @@ export async function approveResourceById(c, id, review) {
   const resource = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
   await notifyUploaderOfDecision(c, resource, "resource_approved");
 
-  return c.json({ success: true, message: "Resource approved" });
+  // Reward program (no-op while it is 'off'). The approval has already succeeded and must stay
+  // succeeded, so a failure here is reported to the moderator rather than undoing the approval.
+  let reward = null;
+  try {
+    reward = await awardForApproval(c.env.DB, { resource, admin: user, review, ts: nowIso() });
+  } catch (err) {
+    console.error("awardForApproval failed:", err?.message);
+    reward = { status: "error", amount: 0, message: "The reward could not be recorded (the approval itself went through). Check Incentives → Payouts and the server logs." };
+  }
+  // With the program off `reward` is null and the response is exactly what it always was.
+  const message = reward?.message ? `Resource approved. ${reward.message}` : "Resource approved";
+  return c.json({ success: true, message, ...(reward ? { reward } : {}) });
 }
 
 // @route POST /api/admin/moderation/:id/approve

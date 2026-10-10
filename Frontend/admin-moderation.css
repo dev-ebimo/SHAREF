@@ -1352,3 +1352,35 @@ button {
 .review-pages-note.warn {
   color: var(--amber);
 }
+
+/* --- Rewards: reward picker + queue badges (from update package) --- */
+   Incentive rewards (approve modal, queue badges, shared admin helpers)
+.rw-admin-panel { text-align: left; margin: 1.1rem 0 0.2rem; display: flex; flex-direction: column; gap: 8px; }
+.rw-admin-panel.hidden, .rw-admin-risk.hidden { display: none; }
+.rw-admin-panel label { font-size: 0.8rem; font-weight: 600; color: var(--text-lead); }
+.rw-admin-panel select, .rw-admin-panel input, .rw-form input, .rw-form select { width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-hair); background: var(--surface-02); color: var(--text-pure); font: inherit; font-size: 0.88rem; }
+.rw-admin-panel select option, .rw-form select option { background: #0f0e17; }
+.rw-admin-hint { font-size: 0.78rem !important; color: var(--text-muted); line-height: 1.5; }
+.rw-admin-risk { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.28); color: var(--red); font-size: 0.8rem; }
+.rw-admin-risk span { color: var(--text-lead); }
+.rw-q-badge { display: inline-block; margin: 0 8px 8px 0; padding: 4px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 600; background: rgba(168, 85, 247, 0.14); color: var(--purple-soft); }
+.rw-q-badge.risk { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+#sidebarFlagCount { background: var(--red); }
+
+/* --- Rewards: message shown after approving (what happened with the reward) --- */
+.rw-approval-note {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: min(560px, calc(100vw - 32px));
+    padding: 12px 18px;
+    border-radius: 12px;
+    background: #0f5132;
+    color: #fff;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+    z-index: 10000;
+}
+.rw-approval-note.warn { background: #7a4b00; }

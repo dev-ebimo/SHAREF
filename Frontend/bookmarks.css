@@ -1,234 +1,49 @@
-/* ==========================================================================
-   BOOKMARKS — styled on top of dashboard.css design tokens
-   ========================================================================== */
+/* WISHLIST: built on dashboard.css tokens */
+.wl-summary { display: grid; grid-template-columns: repeat(3, auto) 1fr; gap: 28px; align-items: center; background: linear-gradient(135deg, rgba(168, 85, 247, 0.14), rgba(99, 102, 241, 0.04)); border: 1px solid var(--border-hover); border-radius: var(--radius-lg); padding: 18px 24px; margin-bottom: 1.6rem; }
+.wl-sum-item span { display: block; font-size: 0.76rem; color: var(--text-muted); }
+.wl-sum-item strong { display: block; font-size: 1.45rem; font-weight: 700; letter-spacing: -0.02em; margin-top: 2px; }
+.wl-sum-cta { display: flex; align-items: center; justify-content: flex-end; gap: 14px; font-size: 0.82rem; color: var(--text-lead); text-align: right; }
 
-/* --- Controls bar --- */
-.controls-bar {
-  display: flex;
-  gap: 0.85rem;
-  margin-bottom: 2rem;
-}
-.controls-search {
-  position: relative;
-  flex: 1;
-}
-.controls-search svg.icon-search {
-  position: absolute;
-  left: 1rem;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 16px;
-  color: var(--text-muted);
-  pointer-events: none;
-}
-.controls-search input {
-  width: 100%;
-  height: 46px;
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  color: var(--text-pure);
-  font-family: inherit;
-  padding: 0 1rem 0 2.7rem;
-  border-radius: 10px;
-  outline: none;
-  font-size: 0.87rem;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
-}
-.controls-search input::placeholder {
-  color: var(--text-muted);
-}
-.controls-search input:focus {
-  border-color: rgba(168, 85, 247, 0.55);
-  background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12);
-}
+.controls-bar { display: flex; gap: 0.85rem; margin-bottom: 1.8rem; flex-wrap: wrap; }
+.controls-search { position: relative; flex: 1; min-width: 200px; }
+.controls-search svg.icon-search { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-muted); pointer-events: none; }
+.controls-search input { width: 100%; height: 46px; background: var(--surface-01); border: 1px solid var(--border-hair); color: var(--text-pure); font: inherit; font-size: 0.87rem; padding: 0 1rem 0 2.7rem; border-radius: 10px; outline: none; transition: border-color 0.2s, box-shadow 0.2s; }
+.controls-search input::placeholder { color: var(--text-muted); }
+.controls-search input:focus { border-color: rgba(168, 85, 247, 0.55); box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12); }
+.controls-bar select { background: var(--surface-01); border: 1px solid var(--border-hair); color: var(--text-pure); font: inherit; font-size: 0.85rem; height: 46px; padding: 0 1rem; border-radius: 10px; cursor: pointer; outline: none; }
+.controls-bar select option { background: #0f0e17; }
+.controls-bar select:focus { border-color: rgba(168, 85, 247, 0.55); }
 
-.controls-bar select {
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  color: var(--text-pure);
-  font-family: inherit;
-  height: 46px;
-  padding: 0 1rem;
-  border-radius: 10px;
-  outline: none;
-  cursor: pointer;
-  font-size: 0.85rem;
-  min-width: 180px;
-  
-  color-scheme: dark;
-  transition:
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-.controls-bar select option {
-  background: #0f0e17;
-  color: var(--text-pure);
-}
-.controls-bar select:hover {
-  border-color: var(--border-hover);
-}
-.controls-bar select:focus {
-  border-color: rgba(168, 85, 247, 0.55);
-  background: var(--surface-02);
-}
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+.wl-card { display: flex; flex-direction: column; background: var(--surface-01); border: 1px solid var(--border-hair); border-radius: var(--radius-lg); overflow: hidden; transition: border-color 0.2s, transform 0.25s var(--ease-snap); }
+.wl-card:hover { border-color: var(--border-hover); transform: translateY(-3px); }
+.wl-cover { position: relative; height: 112px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(99, 102, 241, 0.08)); }
+.wl-ext { font-size: 1.7rem; font-weight: 800; letter-spacing: 0.04em; color: rgba(255, 255, 255, 0.85); }
+.wl-type { position: absolute; left: 12px; bottom: 10px; font-size: 0.68rem; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: rgba(7, 6, 13, 0.55); color: var(--text-lead); }
+.wl-heart { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%; border: 0; display: grid; place-items: center; cursor: pointer; background: rgba(7, 6, 13, 0.55); color: var(--pink); transition: transform 0.2s var(--ease-snap), background 0.2s; }
+.wl-heart svg { width: 17px; height: 17px; }
+.wl-heart:hover { transform: scale(1.12); background: rgba(7, 6, 13, 0.8); }
+.wl-body { padding: 14px 16px 6px; flex: 1; }
+.wl-title { font-size: 0.97rem; font-weight: 600; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 6px; }
+.wl-meta { font-size: 0.78rem; color: var(--text-muted); margin-top: 2px; min-height: 1em; }
+.wl-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px 16px; }
+.wl-price strong { display: block; font-size: 1.15rem; font-weight: 700; }
+.wl-price small { display: block; font-size: 0.72rem; color: var(--amber); margin-top: 2px; }
+.wl-btn { white-space: nowrap; background: var(--purple); color: #fff; border: 0; border-radius: 10px; padding: 0.6rem 1.1rem; font: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none; transition: background 0.2s, transform 0.2s var(--ease-snap); }
+.wl-btn:hover { background: #b55fe6; transform: translateY(-1px); }
+.wl-btn.ghost { background: transparent; color: var(--purple-soft); border: 1px solid var(--border-hover); }
+.wl-btn.ghost:hover { background: rgba(168, 85, 247, 0.12); }
+.wl-owned { font-size: 0.82rem; font-weight: 600; color: var(--teal, #2dd4bf); }
+.wl-card.is-owned .wl-cover { background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(99, 102, 241, 0.06)); }
 
-/* --- Grid layout --- */
-.bookmarks-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 1.1rem;
+.wl-snack { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); display: flex; align-items: center; gap: 16px; background: #1a1528; border: 1px solid var(--border-hover); border-radius: 12px; padding: 12px 18px; font-size: 0.86rem; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s var(--ease-snap); z-index: 60; }
+.wl-snack.is-visible { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+.wl-snack button { background: none; border: 0; color: var(--purple-soft); font: inherit; font-weight: 600; cursor: pointer; }
+.bookmarks-error { color: var(--red); }
+.hidden { display: none !important; }
+@media (max-width: 760px) {
+  .wl-summary { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .wl-sum-cta { grid-column: 1 / -1; justify-content: space-between; text-align: left; }
+  .wl-sum-item strong { font-size: 1.15rem; }
 }
-
-/* --- Individual cards --- */
-.bookmark-card {
-  background: var(--surface-01);
-  border: 1px solid var(--border-hair);
-  border-radius: var(--radius-lg);
-  padding: 1.4rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  position: relative;
-  transition:
-    transform 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-.bookmark-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(168, 85, 247, 0.35);
-  background: var(--surface-02);
-}
-
-.card-body h3.card-title {
-  font-size: 1.02rem;
-  font-weight: 600;
-  color: var(--text-pure);
-  margin-bottom: 0.5rem;
-  max-width: 90%;
-  line-height: 1.4;
-}
-.card-meta {
-  font-size: 0.82rem;
-  color: var(--text-muted);
-  margin-bottom: 1.4rem;
-}
-
-/* --- Action buttons --- */
-.card-actions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: auto;
-}
-.btn-view {
-  color: var(--purple-soft);
-  text-decoration: none;
-  font-size: 0.85rem;
-  font-weight: 600;
-  transition: color 0.2s ease;
-}
-.btn-view:hover {
-  color: var(--text-pure);
-}
-
-.btn-unpin {
-  background: transparent;
-  border: none;
-  color: var(--purple-soft);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.3rem;
-  border-radius: 6px;
-  transition:
-    color 0.2s ease,
-    transform 0.2s ease,
-    background 0.2s ease;
-}
-.btn-unpin svg {
-  width: 18px;
-  height: 18px;
-}
-.btn-unpin:hover {
-  color: var(--red);
-  background: rgba(239, 68, 68, 0.08);
-  transform: scale(1.08);
-}
-
-/* --- Empty state --- */
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background: var(--surface-01);
-  border: 1px dashed var(--border-hair);
-  border-radius: var(--radius-lg);
-}
-.empty-icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 1.1rem;
-  border-radius: 50%;
-  background: var(--surface-02);
-  border: 1px solid var(--border-hair);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-faint);
-}
-.empty-icon svg {
-  width: 26px;
-  height: 26px;
-}
-.empty-state h3 {
-  color: var(--text-pure);
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-.empty-state p {
-  color: var(--text-muted);
-  font-size: 0.88rem;
-  margin-bottom: 1.5rem;
-}
-.btn-primary-sm {
-  display: inline-block;
-  background: var(--purple);
-  color: #fff;
-  text-decoration: none;
-  padding: 0.65rem 1.3rem;
-  border-radius: 10px;
-  font-family: inherit;
-  font-size: 0.87rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: background 0.2s ease, transform 0.2s var(--ease-snap);
-}
-.btn-primary-sm:hover {
-  background: #b55fe6;
-  transform: translateY(-1px);
-}
-
-.hidden {
-  display: none !important;
-}
-
-/* --- Responsive --- */
-@media (max-width: 480px) {
-  .controls-bar {
-    flex-direction: column;
-  }
-  .controls-bar select {
-    width: 100%;
-  }
-  .bookmarks-grid {
-    grid-template-columns: 1fr;
-  }
-}
+@media (max-width: 480px) { .wl-grid { grid-template-columns: 1fr; } }

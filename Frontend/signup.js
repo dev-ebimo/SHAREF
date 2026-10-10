@@ -1,3 +1,7 @@
+// Referral capture: signup.html?ref=CODE is remembered so the code survives
+// the user browsing around before they register. The server validates it and
+// only pays the referrer after the new account verifies and contributes.
+try { var __ref = new URLSearchParams(location.search).get("ref"); if (__ref && /^[A-Za-z0-9_-]{4,24}$/.test(__ref)) localStorage.setItem("sharefRef", __ref); } catch (e) {}
 document.addEventListener("DOMContentLoaded", () => {
   const form = document.getElementById("signup-form");
   const errorBox = document.getElementById("signup-error");
@@ -20,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const payload = {
       fullName: document.getElementById("fullname").value.trim(),
+      referralCode: (function () { try { return localStorage.getItem("sharefRef") || undefined; } catch (e) { return undefined; } })(),
       email: document.getElementById("email").value.trim(),
       password: document.getElementById("password").value,
       // Store the readable label ("Word of Mouth / Friend"), not the raw slug —

@@ -41,6 +41,12 @@ export const registerSchema = z.object({
     z.enum(["Male", "Female", "Other"], { message: "Please select a valid gender" }).optional()
   ),
   communitySurvey: z.string().trim().optional(),
+  // Optional invite code (from a "?ref=" signup link). A malformed code is quietly
+  // treated as absent: a bad referral code must never stop someone from signing up.
+  referralCode: z.preprocess(
+    (v) => (typeof v === "string" && /^[A-Za-z0-9_-]{4,24}$/.test(v.trim()) ? v.trim() : undefined),
+    z.string().optional()
+  ),
 });
 
 export const loginSchema = z.object({

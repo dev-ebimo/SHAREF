@@ -109,7 +109,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
         var resources = data.resources;
         if (resources.length === 0) {
-          savedResourcesListEl.innerHTML = '<p class="uploads-empty">No bookmarks yet.</p>';
+          savedResourcesListEl.innerHTML = '<p class="uploads-empty">No wishlist items yet.</p>';
           return;
         }
         savedResourcesListEl.innerHTML = resources.slice(0, 3).map(function (item) {
@@ -128,7 +128,7 @@ document.addEventListener("DOMContentLoaded", function () {
       })
       .catch(function (err) {
         console.error("Could not load saved resources preview:", err);
-        savedResourcesListEl.innerHTML = '<p class="uploads-error">Could not load bookmarks.</p>';
+        savedResourcesListEl.innerHTML = '<p class="uploads-error">Could not load wishlist.</p>';
       });
   }
 

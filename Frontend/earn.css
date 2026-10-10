@@ -1,0 +1,47 @@
+/* Rewards UI — shared by earn.html and the dashboard strip. Uses the
+   tokens defined in dashboard.css so it follows the site's look. */
+.rw-lead { color: var(--text-muted); font-size: 0.95rem; margin-top: 6px; max-width: 60ch; line-height: 1.6; }
+.rw-banner { margin: 0 0 20px; padding: 12px 16px; border-radius: var(--radius-md); background: rgba(245, 185, 66, 0.1); border: 1px solid rgba(245, 185, 66, 0.3); color: var(--amber); font-size: 0.9rem; }
+.rw-state { color: var(--text-muted); padding: 40px 0; }
+.rw-grid { display: grid; gap: 14px; }
+.rw-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.rw-strip { display: grid; gap: 14px; grid-template-columns: 1.4fr 1fr 1fr; }
+.rw-card { background: var(--surface-02); border: 1px solid var(--border-hair); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
+.rw-card-main { background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(99, 102, 241, 0.06)); border-color: var(--border-hover); }
+a.rw-card-req { transition: border-color 0.2s; } a.rw-card-req:hover { border-color: var(--border-hover); }
+.rw-label { color: var(--text-muted); font-size: 0.8rem; font-weight: 500; }
+.rw-big { font-size: 2.2rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.rw-big-sm { font-size: 1.5rem; }
+.rw-sub { color: var(--text-muted); font-size: 0.82rem; line-height: 1.5; display: block; }
+.rw-tag { align-self: flex-start; font-size: 0.7rem; font-weight: 600; padding: 3px 9px; border-radius: 99px; background: rgba(245, 185, 66, 0.14); color: var(--amber); }
+.rw-card .btn-primary-sm { align-self: flex-start; margin-top: 8px; }
+.rw-cap { margin-top: 14px; font-size: 0.85rem; color: var(--text-lead); }
+.rw-cap-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+.rw-meter { height: 8px; border-radius: 99px; background: rgba(255, 255, 255, 0.07); overflow: hidden; margin: 10px 0 6px; }
+.rw-cap .rw-meter { margin-top: 0; }
+.rw-meter i { display: block; height: 100%; background: linear-gradient(90deg, var(--indigo), var(--purple)); border-radius: 99px; transition: width 0.5s var(--ease-snap); }
+.rw-list { display: flex; flex-direction: column; }
+.rw-row { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 14px 4px; border-top: 1px solid var(--border-hair); flex-wrap: wrap; }
+.rw-row:first-child { border-top: 0; }
+.rw-row-end { display: flex; align-items: center; gap: 14px; }
+.rw-row strong { font-weight: 600; font-size: 0.95rem; display: block; }
+.rw-amt { font-weight: 600; color: var(--purple-soft); white-space: nowrap; }
+.rw-amt.neg { color: var(--red); }
+.rw-chip { font-size: 0.72rem; font-weight: 600; padding: 3px 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); color: var(--text-lead); }
+.rw-pending { color: var(--amber); } .rw-cleared { color: #2dd4bf; } .rw-reversed { color: var(--red); }
+.rw-rules { margin: 16px 0 0; padding-left: 18px; color: var(--text-muted); font-size: 0.85rem; line-height: 1.8; }
+.rw-rules li:empty { display: none; }
+.rw-ref { display: flex; gap: 10px; margin: 12px 0; }
+.rw-ref input { flex: 1; min-width: 0; padding: 10px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-hair); background: var(--surface-01); color: var(--text-lead); font: inherit; font-size: 0.85rem; }
+.rw-ref .btn-primary-sm { margin: 0; border: 0; cursor: pointer; }
+.rw-board { list-style: none; margin: 0; padding: 0; }
+.rw-board li { display: flex; justify-content: space-between; padding: 11px 4px; border-top: 1px solid var(--border-hair); font-size: 0.92rem; }
+.rw-board li:first-child { border-top: 0; }
+.rw-board li.is-me span { color: var(--purple-soft); font-weight: 600; }
+.rw-empty { color: var(--text-muted); font-size: 0.88rem; padding: 14px 4px; list-style: none; }
+.rw-state.hidden, .rw-banner.hidden, #rwContent.hidden, #rwChallengeSection.hidden, #rwRequestsSection.hidden { display: none; }
+@media (max-width: 820px) { .rw-grid-3, .rw-strip { grid-template-columns: 1fr; } .rw-big { font-size: 1.8rem; } }
+.rw-bounty { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius-md); background: rgba(168, 85, 247, 0.12); border: 1px solid var(--border-hover); font-size: 0.9rem; color: var(--text-lead); }
+.rw-bounty.hidden { display: none; }
+.rw-upload-chip { margin-top: 10px; font-size: 0.8rem; font-weight: 600; color: var(--purple-soft); }
+.rw-upload-chip.reversed { color: var(--red); }

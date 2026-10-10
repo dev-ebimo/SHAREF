@@ -1,4 +1,5 @@
 import { generateOTP, hashOtp } from "../utils/otp.js";
+import { incentiveCascadeForUser } from "../services/referralService.js";
 import { hashPassword, verifyPassword } from "../utils/password.js";
 import { generateToken } from "../utils/token.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
@@ -293,11 +294,15 @@ export async function deleteMyAccount(c) {
     //   this schema's actual sentinel for "shared admin feed" (see
     //   schema.sql), so nulling it would make a deleted user's old
     //   notifications incorrectly reappear there.
+    // Reward-program rows reference users/resources: detach or remove them first so
+    // this deletion can never fail on a foreign key (see referralService.js).
+    const incentive = incentiveCascadeForUser(c.env.DB, userId);
     await c.env.DB.batch([
       c.env.DB.prepare("DELETE FROM bookmarks WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
       c.env.DB.prepare("DELETE FROM download_logs WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
       c.env.DB.prepare("UPDATE transactions SET resource_id = NULL WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(userId),
       c.env.DB.prepare("UPDATE notifications SET resource_id = NULL, updated_at = ? WHERE resource_id IN (SELECT id FROM resources WHERE uploader_id = ?)").bind(timestamp, userId),
+      ...incentive.beforeResources,
       c.env.DB.prepare("DELETE FROM resources WHERE uploader_id = ?").bind(userId),
 
       c.env.DB.prepare("DELETE FROM bookmarks WHERE user_id = ?").bind(userId),
@@ -307,6 +312,7 @@ export async function deleteMyAccount(c) {
       c.env.DB.prepare("UPDATE resources SET reviewed_by = NULL WHERE reviewed_by = ?").bind(userId),
       c.env.DB.prepare("UPDATE announcements SET created_by = NULL WHERE created_by = ?").bind(userId),
 
+      ...incentive.beforeUser,
       c.env.DB.prepare("DELETE FROM users WHERE id = ?").bind(userId),
     ]);
 

@@ -1,4 +1,5 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
+import { rewardChipsForUploads } from "../services/uploadRewards.js";
 
 function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -116,13 +117,15 @@ export async function getMyUploads(c) {
     ]);
 
     const total = countRow.total;
+    // Empty unless the reward program is live/paused, so nothing changes while it is off.
+    const chips = await rewardChipsForUploads(c.env.DB, user.id, results);
     return c.json({
       success: true,
       count: results.length,
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),
-      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason })),
+      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason, ...(chips.has(r.id) ? { reward: chips.get(r.id) } : {}) })),
     });
   } catch (err) {
     console.error("resourceController error:", err?.message);
