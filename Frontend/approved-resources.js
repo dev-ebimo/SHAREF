@@ -137,7 +137,7 @@ document.addEventListener("DOMContentLoaded", () => {
     tableContainer.style.display = "table";
     emptyState.style.display = "none";
 
-    authFetch(`${API_BASE}/admin/resources/approved?${buildQuery()}`)
+    return authFetch(`${API_BASE}/admin/resources/approved?${buildQuery()}`)
       .then((res) => res.json())
       .then((data) => {
         if (!data.success) {
@@ -207,6 +207,9 @@ document.addEventListener("DOMContentLoaded", () => {
                 <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
               </svg>
             </button>
+            <button class="btn-icon btn-edit-details" title="Edit details" aria-label="Edit details" onclick="editResource('${r.id}')">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            </button>
             <button class="btn-view" onclick="openResourceDetails('${r.id}')">Details</button>
           </div>
         </td>
@@ -216,6 +219,20 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.__approvedResourceCache = () => resourceCache;
+  window.__reloadApprovedResources = loadApprovedResources;
+
+  /* ---- Refresh after an admin edits a resource's details (resource-editor.js) ---- */
+  document.addEventListener("resource:edited", (e) => {
+    const editedId = e.detail && e.detail.id;
+    loadApprovedResources().then(() => {
+      // If the details modal was showing this item, refresh it with the new values -
+      // or close it when the edit moved the item out of the current filter.
+      if (editedId && window.__currentModalResourceId === editedId) {
+        if (resourceCache[editedId]) openResourceDetails(editedId);
+        else closeResourceDetails();
+      }
+    });
+  });
   window.__reasonLabels = REASON_LABELS;
 
   loadApprovedResources();
@@ -374,4 +391,9 @@ function previewResource(resourceId) {
     return;
   }
   window.open(r.fileUrl, "_blank");
+}
+
+/* ---- Edit details (shared editor, resource-editor.js) ---- */
+function editResource(resourceId) {
+  if (window.ResourceEditor && resourceId) window.ResourceEditor.open(resourceId);
 }

@@ -4,6 +4,7 @@ Everything is inside `Frontend/`. Backend (`src/`, patches, tests) is untouched.
 
 ## New files
 - `Frontend/responsive.css` — shared mobile layer, linked LAST on all 32 pages. Each section is commented.
+- `Frontend/responsive-dates.js` — toggles an `.is-empty` class on the date filter wrapper (approved/rejected resources).
 - `Frontend/responsive-tables.js` — adds column labels to table cells so admin tables can render as cards on phones. Included on: users, approved-resources, rejected-resources, admin-incentives.
 
 ## Edited in every HTML page
@@ -23,7 +24,7 @@ Everything is inside `Frontend/`. Backend (`src/`, patches, tests) is untouched.
 5. Dialogs fit the visible viewport and scroll internally
 6. Tab bars scroll sideways instead of clipping
 7. Admin tables become labelled cards at <= 700px
-8. Date filter: the custom "Approval/Rejection Date" overlay label was REMOVED from approved-resources.html and rejected-resources.html (it overprinted the browser's own dd/mm/yyyy text). The native date field is shown as-is.
+8. Date filter (approved/rejected resources): on screens <= 860px the "Approval/Rejection Date" label is shown and the browser's own dd/mm/yyyy text is hidden while the field is empty (no more overprint). On desktop the label is hidden and the native field shows. Uses new `responsive-dates.js`.
 9. Upload form section headings no longer collide with card borders (all screen sizes)
 10. fieldset min-width quirk, searchable-select hidden element, queue sort dropdown, segmented controls, moderation action buttons
 
@@ -40,4 +41,4 @@ NOT tested: real devices, Safari/iOS, live API data.
 
 ## Round 2 fixes
 - `admin-incentives.js`: the hamburger button and avatar (profile) menu did nothing on the Incentives page. The other 7 admin pages wire these in their own scripts; this one never did (bug existed in the original upload). Handlers added, matching the other pages.
-- Date filters on approved/rejected resources: overlay label removed (see item 8). Note: iPhone Safari shows an empty date field as blank, so on iOS the field will have no visible text until a date is picked.
+- Date filters on approved/rejected resources: label restored on phones/tablets only (see item 8). New file: `Frontend/responsive-dates.js`, included on those two pages.

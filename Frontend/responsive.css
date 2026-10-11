@@ -293,11 +293,37 @@ fieldset { min-width: 0; }
 
 /* --------------------------------------------------------------------------
    8. Date filter (approved / rejected resources)
-   The custom "Approval/Rejection Date" overlay label was removed from the
-   HTML: browsers that draw their own "dd/mm/yyyy" text (Android Chrome,
-   desktop) printed it underneath the label. The native input is now shown
-   as-is. On phones it fills the row like the other filters.
+   Phones and tablets (<= 860px): show the custom label ("Approval Date" /
+   "Rejection Date") and hide the browser's own "dd/mm/yyyy" text while the
+   field is empty (responsive-dates.js sets .is-empty), so the two never print
+   on top of each other. Once a date is picked the page script hides the label
+   and the chosen date shows normally.
+   Desktop (> 860px): no label, the native field is shown as-is.
+   The label is hidden by default WITHOUT !important on purpose: the page
+   script sets an inline display:none when a date is chosen, which must win.
    -------------------------------------------------------------------------- */
+.date-placeholder { display: none; }
+@media (max-width: 860px) {
+  .date-placeholder { display: block; font-size: 16px; }
+  .date-filter-wrap.is-empty input[type="date"],
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit,
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit-text,
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit-month-field,
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit-day-field,
+  .date-filter-wrap.is-empty input[type="date"]::-webkit-datetime-edit-year-field {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+  }
+  /* A focused segment gets a blue highlight box that would show behind the
+     label. (:focus must sit on the input, before the pseudo-element.) */
+  .date-filter-wrap.is-empty input[type="date"]:focus::-webkit-datetime-edit-month-field,
+  .date-filter-wrap.is-empty input[type="date"]:focus::-webkit-datetime-edit-day-field,
+  .date-filter-wrap.is-empty input[type="date"]:focus::-webkit-datetime-edit-year-field {
+    background: transparent !important;
+    color: transparent !important;
+  }
+}
 @media (max-width: 480px) {
   .date-filter-wrap { display: flex; width: 100%; }
   .date-filter-wrap input[type="date"] { width: 100%; min-width: 0; }

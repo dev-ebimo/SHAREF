@@ -4,6 +4,7 @@ import { reverseRewardsForResource } from "../services/rewardReversal.js";
 import { adminDisplayName } from "../services/incentiveConfig.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
+import { updateResourceMetadataSchema, formatZodErrors } from "../validators/resourceValidators.js";
 
 const REJECTION_REASONS = [
   "duplicate", "wrong_course", "wrong_dept", "poor_quality",
@@ -31,6 +32,8 @@ async function shapeAdminResource(c, r, extra = {}) {
     semester: r.semester,
     session: r.session,
     description: r.description,
+    status: r.status,
+    pages: r.pages,
     fileExtension: r.file_extension,
     fileUrl: await buildDownloadStreamUrl(c, r.id, user.id),
     size: formatFileSize(r.file_size_bytes),
@@ -205,6 +208,91 @@ export async function getResourceDetails(c) {
   } catch (err) {
     console.error("adminResourceController error:", err?.message);
     return c.json({ success: false, message: "Could not fetch resource", error: sanitizeError(c.env, err) }, 500);
+  }
+}
+
+// @route PATCH /api/admin/resources/:id
+// Lets an admin correct the metadata a student typed at upload time (title, type,
+// department, course, level, semester, session, description) without a reject +
+// re-upload round trip. Works for pending, approved and rejected resources alike.
+// Approved resources may also have their reviewed page count corrected.
+//
+// Deliberately narrow: only the whitelisted columns below can change. Status,
+// uploader, file, preview, rewards and review attribution (reviewed_by/at) are
+// never touched, so editing is not a back door around moderation or payouts.
+const EDITABLE_COLUMNS = {
+  title: "title", type: "type", department: "department", course: "course", level: "level",
+  semester: "semester", session: "session", description: "description", pages: "pages",
+};
+
+export async function updateResourceMetadata(c) {
+  try {
+    const id = c.req.param("id");
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return c.json({ success: false, message: "Send the fields you want to change as JSON." }, 400);
+    }
+
+    const parsed = updateResourceMetadataSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ success: false, message: "Please fix the highlighted fields.", errors: formatZodErrors(parsed.error) }, 400);
+    }
+
+    const existing = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
+    if (!existing) return c.json({ success: false, message: "Resource not found" }, 404);
+
+    const incoming = parsed.data;
+    if (incoming.pages !== undefined && existing.status !== "approved") {
+      return c.json({
+        success: false,
+        message: "Please fix the highlighted fields.",
+        errors: [{ field: "pages", message: "Page count can only be edited on approved resources." }],
+      }, 400);
+    }
+
+    // Only write what actually changed.
+    const sets = [];
+    const values = [];
+    const changedFields = [];
+    for (const [key, column] of Object.entries(EDITABLE_COLUMNS)) {
+      if (incoming[key] === undefined) continue;
+      if (incoming[key] === existing[column]) continue;
+      sets.push(`${column} = ?`);
+      values.push(incoming[key]);
+      changedFields.push(key);
+    }
+
+    const loadShaped = async () => {
+      const row = await c.env.DB.prepare(
+        `SELECT r.*, u.full_name AS uploader_full_name, rev.full_name AS reviewer_full_name
+           FROM resources r
+           LEFT JOIN users u ON u.id = r.uploader_id
+           LEFT JOIN users rev ON rev.id = r.reviewed_by
+          WHERE r.id = ?`
+      ).bind(id).first();
+      return shapeAdminResource(c, row, { rejectionReason: row.rejection_reason });
+    };
+
+    if (sets.length === 0) {
+      return c.json({ success: true, changed: false, changedFields: [], message: "No changes to save.", resource: await loadShaped() });
+    }
+
+    sets.push("updated_at = ?");
+    values.push(new Date().toISOString());
+    // The status guard makes the write atomic with respect to the pages rule above: if
+    // another admin changed the status between our read and this write, nothing is written.
+    const result = await c.env.DB.prepare(`UPDATE resources SET ${sets.join(", ")} WHERE id = ? AND status = ?`)
+      .bind(...values, id, existing.status)
+      .run();
+
+    if ((result.meta?.changes ?? result.meta?.rows_written ?? 0) === 0) {
+      return c.json({ success: false, message: "This resource was just updated by someone else. Reload and try again." }, 409);
+    }
+
+    return c.json({ success: true, changed: true, changedFields, message: "Resource details updated.", resource: await loadShaped() });
+  } catch (err) {
+    console.error("adminResourceController error:", err?.message);
+    return c.json({ success: false, message: "Could not update this resource", error: sanitizeError(c.env, err) }, 500);
   }
 }
 

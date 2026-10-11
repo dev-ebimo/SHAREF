@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="admin-moderation.css" />
+    <link rel="stylesheet" href="resource-editor.css" />
     <link rel="stylesheet" href="responsive.css" />
   </head>
   <body>
@@ -432,6 +433,10 @@
             <span class="modal-tag" id="previewType">Lecture Note</span>
             <h2 id="previewTitle">Document Title</h2>
             <p id="previewMeta">Department • Course • Semester • Level</p>
+            <button type="button" class="btn-sm btn-preview btn-edit-details" id="previewEditBtn" style="margin-top: 0.75rem">
+              <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+              Edit details
+            </button>
           </div>
 
           <div class="metadata-grid">
@@ -627,6 +632,7 @@
     <script src="auth-guard.js"></script>
     <script src="admin-shared.js"></script>
     <script src="doc-analyzer.js"></script>
+    <script src="resource-editor.js"></script>
     <script src="admin-moderation.js"></script>
   </body>
 </html>

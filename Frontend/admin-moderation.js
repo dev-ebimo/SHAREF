@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const ICONS = {
         doc: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>',
         clock: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+        pencil: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>',
         eye: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>',
         check: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7"/></svg>',
         x: '<svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"/></svg>',
@@ -158,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="q-actions">
                         <button class="btn-sm btn-preview" onclick="openPreview('${item.id}')">${ICONS.eye}Preview</button>
+                        <button class="btn-sm btn-preview btn-edit-details" onclick="editResource('${item.id}')" aria-label="Edit details of ${escapeHtml(item.title)}">${ICONS.pencil}Edit</button>
                         <button class="btn-sm btn-approve" onclick="quickApprove('${item.id}')">${ICONS.check}Approve</button>
                         <button class="btn-sm btn-reject" onclick="quickReject('${item.id}')">${ICONS.x}Reject</button>
                     </div>
@@ -167,6 +169,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Fills the preview modal's header/metadata from a queue item. Its own function so the
+    // modal can be refreshed in place after an admin edits the item's details.
+    // (textContent is already safe, so no escapeHtml here - it would show "&amp;" literally.)
+    function fillPreviewMeta(item) {
+        document.getElementById('previewType').textContent = item.type;
+        document.getElementById('previewTitle').textContent = item.title;
+        document.getElementById('previewMeta').textContent = `${item.dept} • ${item.course} • ${item.semester} Semester • ${item.level}`;
+        document.getElementById('previewUploader').textContent = item.uploader;
+        document.getElementById('previewDate').textContent = item.uploadDate;
+        document.getElementById('previewSize').textContent = item.size;
+        document.getElementById('previewSession').textContent = item.session;
+    }
+
     // Modal Triggers (Exposed to Window for inline onclicks)
     window.openPreview = (id) => {
         const item = pendingQueue.find(i => i.id === id);
@@ -174,13 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         currentReviewId = id;
 
-        document.getElementById('previewType').textContent = item.type;
-        document.getElementById('previewTitle').textContent = item.title;
-        document.getElementById('previewMeta').textContent = `${escapeHtml(item.dept)} • ${escapeHtml(item.course)} • ${item.semester} Semester • ${item.level}`;
-        document.getElementById('previewUploader').textContent = item.uploader;
-        document.getElementById('previewDate').textContent = item.uploadDate;
-        document.getElementById('previewSize').textContent = item.size;
-        document.getElementById('previewSession').textContent = item.session;
+        fillPreviewMeta(item);
 
         const placeholderEl = document.getElementById('docPreviewPlaceholder');
         const textEl = document.getElementById('docPreviewText');
@@ -500,8 +509,34 @@ document.addEventListener('DOMContentLoaded', () => {
         rejectModal.classList.remove('hidden');
     });
 
+    // ------------------------------------------------------------------
+    // Edit resource details (shared editor, resource-editor.js)
+    // ------------------------------------------------------------------
+    window.editResource = (id) => {
+        if (window.ResourceEditor) window.ResourceEditor.open(id);
+    };
+    const previewEditBtn = document.getElementById('previewEditBtn');
+    if (previewEditBtn) {
+        previewEditBtn.addEventListener('click', () => {
+            if (currentReviewId) window.editResource(currentReviewId);
+        });
+    }
+    // After a save: reload the queue, and refresh the preview modal if it is showing that item.
+    document.addEventListener('resource:edited', (e) => {
+        const editedId = e.detail && e.detail.id;
+        loadQueue().then(() => {
+            if (!previewModal.classList.contains('hidden') && currentReviewId === editedId) {
+                const item = pendingQueue.find(i => i.id === editedId);
+                if (item) fillPreviewMeta(item);
+            }
+        });
+    });
+
     // Keyboard Shortcuts (Only active when Preview Modal is open)
     document.addEventListener('keydown', (e) => {
+        // Never hijack typing in a form field, or browser shortcuts like Ctrl/Cmd+R.
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.target && e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
         if (!previewModal.classList.contains('hidden') && approveModal.classList.contains('hidden') && rejectModal.classList.contains('hidden')) {
             if (e.key.toLowerCase() === 'a') {
                 e.preventDefault();

@@ -1,0 +1,235 @@
+/* ==========================================================================
+   resource-editor.css — styles for the admin "Edit resource details" dialog
+   (resource-editor.js). Every class is prefixed `re-` so nothing here can
+   collide with page styles. Colours come from the admin pages' CSS variables
+   (with fallbacks, so the dialog still looks right if one is missing).
+
+   Layout: centred dialog on desktop; on phones (<= 600px) it becomes a bottom
+   sheet with a sticky Save bar that clears the home indicator.
+   ========================================================================== */
+
+.re-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200; /* above the page modals (max 1000) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(1rem, env(safe-area-inset-top, 0px)) max(1rem, env(safe-area-inset-right, 0px))
+           max(1rem, env(safe-area-inset-bottom, 0px)) max(1rem, env(safe-area-inset-left, 0px));
+  background: rgba(4, 3, 10, 0.72);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.re-overlay[hidden] { display: none; }
+
+.re-dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 660px;
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  background: #0f0e17;
+  border: 1px solid var(--border-hair, rgba(255, 255, 255, 0.07));
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  color: var(--text-pure, #fff);
+  font-family: inherit;
+  overflow: hidden;
+}
+
+/* ---- header ---- */
+.re-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.25rem 1.4rem 1rem;
+  border-bottom: 1px solid var(--border-hair, rgba(255, 255, 255, 0.07));
+}
+.re-head h2 { margin: 0; font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
+.re-sub { margin: 0.3rem 0 0; font-size: 0.8rem; color: var(--text-muted, #8b93a7); overflow-wrap: anywhere; }
+.re-x {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin: -0.35rem -0.45rem 0 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-muted, #8b93a7);
+  cursor: pointer;
+}
+.re-x:hover { color: #fff; background: var(--surface-02, rgba(255, 255, 255, 0.04)); }
+.re-x svg { width: 18px; height: 18px; }
+
+/* ---- body ---- */
+.re-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.2rem 1.4rem 1.4rem;
+}
+.re-state {
+  padding: 2.2rem 0;
+  text-align: center;
+  color: var(--text-muted, #8b93a7);
+  font-size: 0.9rem;
+}
+.re-state .re-btn { margin-top: 1rem; }
+.re-state[hidden], .re-banner[hidden], .re-body form[hidden] { display: none; }
+
+.re-banner {
+  margin: 0 0 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 10px;
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.re-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1rem;
+}
+.re-field { display: flex; flex-direction: column; min-width: 0; }
+.re-field.is-full { grid-column: 1 / -1; }
+.re-field[hidden] { display: none; }
+
+.re-label {
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted, #8b93a7);
+}
+/* A field you have changed says so, so you can see what Save will send. */
+.re-field.is-changed .re-label::after {
+  content: " \2022  edited";
+  color: var(--purple, #a855f7);
+  letter-spacing: 0.03em;
+  text-transform: none;
+  font-weight: 600;
+}
+
+.re-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.7rem 0.85rem;
+  background: var(--surface-02, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--border-hair, rgba(255, 255, 255, 0.1));
+  border-radius: 10px;
+  color: var(--text-pure, #fff);
+  font: inherit;
+  font-size: 16px; /* 16px stops iOS from zooming the page when the field is focused */
+  line-height: 1.4;
+  color-scheme: dark;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+select.re-input { appearance: auto; }
+textarea.re-input { min-height: 7rem; resize: vertical; }
+.re-input:focus {
+  outline: none;
+  border-color: var(--purple, #a855f7);
+  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.2);
+}
+.re-field.has-error .re-input { border-color: #f87171; }
+.re-field.has-error .re-input:focus { box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.2); }
+.re-error { margin-top: 0.35rem; font-size: 0.78rem; color: #fca5a5; }
+.re-error[hidden] { display: none; }
+.re-hint { margin-top: 0.35rem; font-size: 0.75rem; color: var(--text-muted, #8b93a7); }
+
+/* ---- footer ---- */
+.re-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.95rem 1.4rem;
+  border-top: 1px solid var(--border-hair, rgba(255, 255, 255, 0.07));
+  background: rgba(255, 255, 255, 0.015);
+}
+.re-dirty { flex: 1 1 auto; min-width: 0; font-size: 0.8rem; color: var(--text-muted, #8b93a7); }
+.re-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 1.2rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.re-btn-ghost { background: var(--surface-02, rgba(255, 255, 255, 0.04)); border-color: var(--border-hair, rgba(255, 255, 255, 0.1)); color: var(--text-lead, #cbd5e1); }
+.re-btn-ghost:hover { color: #fff; border-color: rgba(255, 255, 255, 0.25); }
+.re-btn-primary { background: linear-gradient(135deg, #8b5cf6, #a855f7); color: #fff; }
+.re-btn-primary:hover:not(:disabled) { filter: brightness(1.08); }
+.re-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.re-btn:focus-visible, .re-x:focus-visible { outline: 2px solid var(--purple, #a855f7); outline-offset: 2px; }
+
+/* ---- toast ---- */
+.re-toast {
+  position: fixed;
+  left: 50%;
+  bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  transform: translateX(-50%);
+  z-index: 1300;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 1.1rem;
+  border-radius: 12px;
+  background: #14231f;
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: #5eead4;
+  font-size: 0.88rem;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.re-toast.is-info { background: #181a2a; border-color: rgba(255, 255, 255, 0.15); color: #cbd5e1; }
+
+/* ---- the "Edit" buttons the pages add (match each page's neutral button) ---- */
+.btn-edit-details svg { width: 15px; height: 15px; flex: none; }
+
+/* ---- phones: bottom sheet ---- */
+@media (max-width: 600px) {
+  .re-overlay { align-items: flex-end; padding: 0; }
+  .re-dialog {
+    max-width: none;
+    max-height: 94vh;
+    max-height: 94dvh;
+    border-radius: 18px 18px 0 0;
+    border-bottom: 0;
+  }
+  .re-head { padding: 1.05rem 1.1rem 0.85rem; }
+  .re-body { padding: 1rem 1.1rem 1.2rem; }
+  .re-grid { grid-template-columns: minmax(0, 1fr); }
+  .re-foot {
+    padding: 0.8rem 1.1rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
+    flex-wrap: wrap;
+  }
+  .re-dirty { flex-basis: 100%; }
+  .re-foot .re-btn { flex: 1 1 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .re-dialog { animation: re-pop 0.18s ease-out; }
+  @keyframes re-pop { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+  @media (max-width: 600px) {
+    .re-dialog { animation-name: re-sheet; }
+    @keyframes re-sheet { from { transform: translateY(40px); opacity: 0.6; } to { transform: none; opacity: 1; } }
+  }
+}

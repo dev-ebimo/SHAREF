@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import {
   getFilterOptions, getApprovedResources, getRejectedResources,
-  getResourceDetails, removeApprovedResource, restoreToPending, permanentlyDeleteResource,
+  getResourceDetails, updateResourceMetadata, removeApprovedResource, restoreToPending, permanentlyDeleteResource,
 } from "../controllers/adminResourceController.js";
 import { protect, restrictTo } from "../middleware/protect.js";
 
@@ -13,6 +13,7 @@ adminResourceRoutes.get("/filter-options", getFilterOptions);
 adminResourceRoutes.get("/approved", getApprovedResources);
 adminResourceRoutes.get("/rejected", getRejectedResources);
 adminResourceRoutes.get("/:id", getResourceDetails);
+adminResourceRoutes.patch("/:id", updateResourceMetadata);
 adminResourceRoutes.post("/:id/remove", removeApprovedResource);
 adminResourceRoutes.post("/:id/restore", restoreToPending);
 adminResourceRoutes.delete("/:id", permanentlyDeleteResource);

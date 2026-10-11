@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="approved-resources.css" />
     <link rel="stylesheet" href="rejected-resources.css" />
     <link rel="stylesheet" href="searchable-select.css" />
+    <link rel="stylesheet" href="resource-editor.css" />
     <link rel="stylesheet" href="responsive.css" />
   </head>
   <body>
@@ -356,6 +357,7 @@
                   aria-label="Filter by Rejection Date"
                   title="Rejection Date"
                 />
+                <span class="date-placeholder" id="filterDatePlaceholder">Rejection Date</span>
               </div>
 
               <div class="select-wrap">
@@ -653,6 +655,13 @@
             </svg>
             Preview Document
           </button>
+          <button
+            class="btn-lg btn-secondary btn-edit-details"
+            onclick="editResource(window.__currentModalResourceId)"
+          >
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+            Edit Details
+          </button>
         </div>
         <div class="action-row">
           <button
@@ -692,10 +701,12 @@
     </div>
 
     <script src="responsive-tables.js"></script>
+    <script src="responsive-dates.js"></script>
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
     <script src="admin-shared.js"></script>
     <script src="searchable-select.js"></script>
+    <script src="resource-editor.js"></script>
     <script src="rejected-resources.js"></script>
   </body>
 </html>
