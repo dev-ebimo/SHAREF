@@ -23,7 +23,7 @@ Everything is inside `Frontend/`. Backend (`src/`, patches, tests) is untouched.
 5. Dialogs fit the visible viewport and scroll internally
 6. Tab bars scroll sideways instead of clipping
 7. Admin tables become labelled cards at <= 700px
-8. Date filter label no longer overprinted by "mm/dd/yyyy" (Android/desktop)
+8. Date filter: the custom "Approval/Rejection Date" overlay label was REMOVED from approved-resources.html and rejected-resources.html (it overprinted the browser's own dd/mm/yyyy text). The native date field is shown as-is.
 9. Upload form section headings no longer collide with card borders (all screen sizes)
 10. fieldset min-width quirk, searchable-select hidden element, queue sort dropdown, segmented controls, moderation action buttons
 
@@ -37,3 +37,7 @@ Everything is inside `Frontend/`. Backend (`src/`, patches, tests) is untouched.
 ## How it was tested
 Headless Chromium, 32 pages x 6 widths (320, 360, 390, 768, 1024, 1280) with the overflow mask removed: 0 pages overflow. Also checked: open drawers, wallet modal, 7 dialog types on a 640px-tall screen, landscape (740x360), desktop pixel-diff vs original.
 NOT tested: real devices, Safari/iOS, live API data.
+
+## Round 2 fixes
+- `admin-incentives.js`: the hamburger button and avatar (profile) menu did nothing on the Incentives page. The other 7 admin pages wire these in their own scripts; this one never did (bug existed in the original upload). Handlers added, matching the other pages.
+- Date filters on approved/rejected resources: overlay label removed (see item 8). Note: iPhone Safari shows an empty date field as blank, so on iOS the field will have no visible text until a date is picked.

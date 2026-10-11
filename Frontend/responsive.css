@@ -292,25 +292,15 @@ fieldset { min-width: 0; }
 }
 
 /* --------------------------------------------------------------------------
-   8. Date filter label (approved / rejected resources)
-   The custom label ("Approval Date") sits on top of <input type="date">. iOS
-   Safari shows an empty date input as blank, but Android Chrome and desktop
-   show "mm/dd/yyyy", which printed over the label. While the label is
-   visible (the page script hides it once a date is picked), make the native
-   text transparent so only one of them is ever readable.
+   8. Date filter (approved / rejected resources)
+   The custom "Approval/Rejection Date" overlay label was removed from the
+   HTML: browsers that draw their own "dd/mm/yyyy" text (Android Chrome,
+   desktop) printed it underneath the label. The native input is now shown
+   as-is. On phones it fills the row like the other filters.
    -------------------------------------------------------------------------- */
-.date-filter-wrap:has(.date-placeholder:not([style*="none"])) input[type="date"] {
-  color: transparent;
-}
-.date-filter-wrap:has(.date-placeholder:not([style*="none"])) input[type="date"]::-webkit-datetime-edit {
-  color: transparent;
-}
 @media (max-width: 480px) {
   .date-filter-wrap { display: flex; width: 100%; }
   .date-filter-wrap input[type="date"] { width: 100%; min-width: 0; }
-}
-@media (max-width: 860px) {
-  .date-placeholder { font-size: 16px; }
 }
 
 /* --------------------------------------------------------------------------

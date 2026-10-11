@@ -15,6 +15,51 @@ document.addEventListener("DOMContentLoaded", function () {
   if (!adminUser) return;
   wireLogoutButton();
 
+  // ---- Mobile drawer + account (profile) menu ----------------------------
+  // Every other admin page wires these in its own script; this page never did,
+  // so the hamburger and the avatar rendered but did nothing.
+  (function wireShell() {
+    var hamburgerBtn = document.getElementById("hamburgerBtn");
+    var sidebar = document.getElementById("sidebar");
+    var sidebarCloseBtn = document.getElementById("sidebarCloseBtn");
+    var scrim = document.getElementById("scrim");
+
+    function openSidebar() {
+      if (!sidebar) return;
+      sidebar.classList.add("is-open");
+      if (scrim) scrim.classList.add("is-visible");
+      if (hamburgerBtn) hamburgerBtn.setAttribute("aria-expanded", "true");
+    }
+    function closeSidebar() {
+      if (!sidebar) return;
+      sidebar.classList.remove("is-open");
+      if (scrim) scrim.classList.remove("is-visible");
+      if (hamburgerBtn) hamburgerBtn.setAttribute("aria-expanded", "false");
+    }
+    if (hamburgerBtn) hamburgerBtn.addEventListener("click", openSidebar);
+    if (sidebarCloseBtn) sidebarCloseBtn.addEventListener("click", closeSidebar);
+    if (scrim) scrim.addEventListener("click", closeSidebar);
+
+    var accountWrapper = document.getElementById("accountMenuWrapper");
+    var accountTrigger = document.getElementById("accountMenuTrigger");
+    var accountPanel = document.getElementById("accountMenuPanel");
+    if (accountTrigger && accountWrapper && accountPanel) {
+      accountTrigger.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var isOpen = accountWrapper.classList.toggle("is-open");
+        accountTrigger.setAttribute("aria-expanded", String(isOpen));
+        accountPanel.setAttribute("aria-hidden", String(!isOpen));
+      });
+    }
+    document.addEventListener("click", function (e) {
+      if (accountWrapper && !accountWrapper.contains(e.target)) {
+        accountWrapper.classList.remove("is-open");
+        if (accountTrigger) accountTrigger.setAttribute("aria-expanded", "false");
+        if (accountPanel) accountPanel.setAttribute("aria-hidden", "true");
+      }
+    });
+  })();
+
   var $ = function (id) { return document.getElementById(id); };
   var naira = function (n) { return "₦" + Math.round(Number(n) || 0).toLocaleString("en-NG"); };
   var pct = function (a, b) { return b > 0 ? Math.round(a / b * 100) : 0; };
