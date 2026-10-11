@@ -28,6 +28,7 @@ body {
   background-color: var(--bg-dark);
   color: var(--text-pure);
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -70,8 +71,9 @@ body {
    ========================================================================== */
 .split-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
 }
 
@@ -464,7 +466,7 @@ body {
    ========================================================================== */
 .form-trust-note {
   display: grid;
-  grid-template-columns: 16px 1fr;
+  grid-template-columns: 16px minmax(0, 1fr);
   gap: 0.75rem;
   margin-top: 2rem;
   padding-top: 1.25rem;
@@ -489,7 +491,7 @@ body {
    8. MOBILITY SCALE CAPTURE RESPONSIVENESS
    ========================================================================== */
 @media (max-width: 1120px) {
-  .split-container { grid-template-columns: 1fr; }
+  .split-container { grid-template-columns: minmax(0, 1fr); }
   .visual-panel { display: none; }
   .mobile-logo { display: inline-block; text-decoration: none; color: var(--text-pure); font-weight: 800; font-size: 2rem; margin-bottom: 1.5rem; }
   .mobile-logo span { color: #a855f7; }

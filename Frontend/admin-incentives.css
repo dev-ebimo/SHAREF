@@ -42,4 +42,4 @@
 .rwa-modal-err { color: var(--red) !important; min-height: 1.2em; margin-top: 8px; }
 #rwaModal .rw-form { margin-top: 12px; }
 .rw-form input, .rw-form select { width: 100%; }
-@media (max-width: 860px) { .rwa-grid, .rwa-form-grid { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .rwa-grid, .rwa-form-grid { grid-template-columns: minmax(0, 1fr); } }

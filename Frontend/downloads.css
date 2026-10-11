@@ -32,7 +32,7 @@
 .dl-error { color: var(--red); }
 .hidden { display: none !important; }
 @media (max-width: 640px) {
-  .dl-stats { grid-template-columns: 1fr; }
+  .dl-stats { grid-template-columns: minmax(0, 1fr); }
   .dl-row { flex-wrap: wrap; }
   .dl-main { flex-basis: calc(100% - 66px); }
   .dl-when { flex-direction: row; gap: 10px; text-align: left; }

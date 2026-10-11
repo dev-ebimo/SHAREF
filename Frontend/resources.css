@@ -567,7 +567,7 @@
 .preview-meta-list {
   list-style: none;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.6rem 1rem;
 }
 .preview-meta-list li {
@@ -708,7 +708,7 @@
     grid-template-columns: repeat(2, 1fr);
   }
   .resource-grid-large {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .preview-body {
     flex-direction: column;
@@ -721,6 +721,6 @@
 
 @media (max-width: 480px) {
   .resources-filter-bar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }

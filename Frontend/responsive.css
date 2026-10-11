@@ -1,0 +1,331 @@
+/* ==========================================================================
+   responsive.css — shared mobile layer (loaded LAST on every page)
+
+   Why this file exists: each page's own stylesheet handles its own layout,
+   but the same handful of phone problems kept showing up everywhere (top bar
+   overflow, iOS input zoom, 100vh cut-offs, wide tables, notch overlap).
+   Fixing them once here keeps all 32 pages consistent.
+
+   Breakpoint scale used by this file (and recommended for new CSS):
+     <= 340px  very small phones
+     <= 480px  phones
+     <= 700px  large phones / small tablets (tables become cards here)
+     <= 860px  tablets and below (sidebar becomes a drawer — matches the
+               existing dashboard.css / admin-moderation.css switch)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   0. Global safety net
+   -------------------------------------------------------------------------- */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+img, video, canvas, iframe {
+  max-width: 100%;
+}
+/* Removes the 300ms tap delay / double-tap-zoom on interactive elements. */
+a, button, [role="button"], input, select, textarea, label, summary {
+  touch-action: manipulation;
+}
+/* Long unbroken strings (emails, filenames, course titles) wrap instead of
+   pushing the page wider than the screen. */
+main h1, main h2, main h3, main h4, main p, main td, main a, main li,
+.main-workspace h1, .main-workspace h2, .main-workspace h3, .main-workspace p,
+.main-workspace td, .main-workspace a {
+  overflow-wrap: anywhere;
+}
+
+/* ...but buttons and badges inside tables keep their words whole ("View"). */
+table button, table .btn-view, table .btn-sm, table [class*="badge"], table [class*="status-pill"] {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+/* Notched phones in landscape (needs viewport-fit=cover, set in every page). */
+body {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+/* --------------------------------------------------------------------------
+   1. Decorative background glows
+   They are position:fixed boxes wider than a phone (e.g. 620px, with a
+   negative right offset). The old fix was `overflow-x: hidden` on <body>,
+   which hides the problem on desktop but still lets some mobile browsers
+   pan sideways / zoom out. On phones the glows are resized to fit the
+   screen, and the animated 150px blur is dropped (it is very heavy on
+   low-end phones and drains battery).
+   -------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  .bg {
+    animation: none !important;
+    filter: blur(80px) !important;
+    width: min(420px, 100vw) !important;
+    height: min(420px, 100vw) !important;
+  }
+  .bg1 { left: 0 !important; right: auto !important; top: -120px !important; bottom: auto !important; }
+  .bg2 { right: 0 !important; left: auto !important; bottom: -140px !important; top: auto !important; }
+  .bg3 { right: 0 !important; left: auto !important; }
+}
+
+/* --------------------------------------------------------------------------
+   2. Forms on touch devices
+   iOS Safari zooms the whole page when an input with font-size < 16px is
+   focused, and does not zoom back out. 16px is the documented threshold.
+   -------------------------------------------------------------------------- */
+@media (max-width: 860px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="submit"]):not([type="button"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   3. Student app shell (dashboard.css) — top bar, drawer, workspace
+   -------------------------------------------------------------------------- */
+@media (max-width: 860px) {
+  /* Drawer: scrolls on short/landscape screens, never trapped behind the
+     browser toolbar, respects the notch. */
+  .sidebar-panel {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-left: max(1.1rem, env(safe-area-inset-left, 0px));
+    padding-bottom: max(1.75rem, env(safe-area-inset-bottom, 0px));
+  }
+  .menu-link { min-height: 44px; }
+
+  .hamburger-btn { width: 44px; height: 44px; }
+
+  .top-nav {
+    padding-left: max(1.1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.1rem, env(safe-area-inset-right, 0px));
+  }
+  .main-workspace {
+    padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Floating "upload" button clears the home indicator. */
+  .fab-upload-node {
+    right: max(1rem, env(safe-area-inset-right, 0px));
+    bottom: max(1.25rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  }
+}
+
+/* The top bar holds: menu, logo, search, bell, wallet, avatar. At 360px that
+   is ~4px too wide, which pushed the avatar off-screen. Tighten it. */
+@media (max-width: 480px) {
+  .top-nav { gap: 0.5rem; }
+  .nav-actions { gap: 0.35rem; min-width: 0; }
+  .mobile-logo { font-size: 1.05rem; }
+  .wallet-chip { padding: 0.42rem 0.65rem; font-size: 0.78rem; gap: 0.3rem; }
+  .wallet-chip svg { width: 13px; height: 13px; }
+  .icon-btn-badge { min-width: 36px; min-height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+}
+@media (max-width: 340px) {
+  .mobile-logo { display: none !important; }
+  .wallet-chip svg { display: none; }
+}
+
+/* Tap targets (finger, not mouse) */
+@media (pointer: coarse) {
+  .tab-btn, .modal-save-btn, .modal-cancel-btn, .modal-close-btn,
+  .wallet-modal-actions button, .wallet-modal-close-btn { min-height: 44px; }
+}
+
+/* --------------------------------------------------------------------------
+   4. Modals / overlays / side panels
+   Must fit the *visible* viewport (dvh) and scroll internally, so Save /
+   Cancel buttons are never pushed below the fold on short phones.
+   -------------------------------------------------------------------------- */
+.wallet-modal, .edit-profile-modal, .preview-modal, .danger-modal,
+.profile-prompt-modal, .modal-surface {
+  max-width: 100%;
+}
+@media (max-width: 700px) {
+  .wallet-modal, .edit-profile-modal, .preview-modal, .danger-modal,
+  .profile-prompt-modal, .modal-surface {
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .wallet-modal-overlay, .modal-overlay, .profile-prompt-overlay {
+    padding: max(0.75rem, env(safe-area-inset-top, 0px)) max(0.75rem, env(safe-area-inset-right, 0px)) max(0.75rem, env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-left, 0px));
+  }
+  /* The admin user drawer (.modal-overlay.slide-modal) is full-bleed by design. */
+  .modal-overlay.slide-modal { padding: 0; }
+  .wallet-modal, .profile-prompt-modal { padding: 1.5rem; }
+  .modal-actions, .wallet-modal-actions, .profile-prompt-actions { flex-wrap: wrap; }
+}
+/* Right-anchored admin profile drawer: full width on phones */
+@media (max-width: 480px) {
+  .profile-panel { width: 100% !important; padding-bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* --------------------------------------------------------------------------
+   5. Tab bars scroll sideways instead of clipping their last tab
+   -------------------------------------------------------------------------- */
+.page-tabs, .tab-group, .tabs-container {
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-wrap: nowrap;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+.page-tabs::-webkit-scrollbar, .tab-group::-webkit-scrollbar, .tabs-container::-webkit-scrollbar { display: none; }
+.page-tabs .tab-btn, .tab-group .tab-btn, .tabs-container .tab-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   6. Admin tables -> stacked cards on phones
+   Wide tables (8-9 columns) forced a 700-760px sideways scroll. On screens
+   <= 700px each row becomes a card with "Label  value" lines. The labels are
+   added automatically from each column header by responsive-tables.js (the
+   rows are rendered by page scripts, so they can't be hard-coded in HTML).
+   Tables without that script/labels still fall back to the old scroll.
+   -------------------------------------------------------------------------- */
+@media (max-width: 700px) {
+  .table-container { overflow-x: visible !important; background: none; border: 0; }
+  table.is-stacked,
+  table.is-stacked tbody { display: block; width: 100%; min-width: 0 !important; }
+  table.is-stacked thead { display: none; }
+  table.is-stacked tbody tr {
+    display: block;
+    background: var(--surface-01, rgba(255,255,255,.02));
+    border: 1px solid var(--border-hair, rgba(255,255,255,.07));
+    border-radius: var(--radius-md, 12px);
+    padding: 0.35rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+  table.is-stacked tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.6rem 0 !important;
+    border: 0 !important;
+    border-bottom: 1px solid var(--border-hair, rgba(255,255,255,.07)) !important;
+    text-align: right;
+    min-width: 0;
+    width: auto !important;
+  }
+  table.is-stacked tbody td:last-child { border-bottom: 0 !important; }
+  table.is-stacked tbody td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    max-width: 42%;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted, #8b93a7);
+    text-align: left;
+  }
+  /* Cells whose label is empty (avatar/primary column) lead the card. */
+  table.is-stacked tbody td[data-label=""]::before { display: none; }
+  table.is-stacked tbody td[data-label=""] { justify-content: flex-start; text-align: left; }
+  /* Empty-state / loading rows span the full table: keep them centred. */
+  table.is-stacked tbody td[colspan] { display: block; text-align: center; }
+  table.is-stacked tbody td[colspan]::before { display: none; }
+  /* The lead cell (user / title) heads the card: full width, left aligned,
+     no label. The icon-only "File" column is decorative on phones. */
+  table.is-stacked tbody td[data-primary] {
+    display: block;
+    text-align: left;
+    padding-top: 0.85rem !important;
+  }
+  table.is-stacked tbody td[data-primary]::before { display: none; }
+  table.is-stacked tbody td[data-primary] > span { display: block; }
+  table.is-stacked tbody td[data-primary] .res-type { margin-top: 0.3rem; }
+  table.is-stacked tbody td[data-label="File"] { display: none; }
+
+  /* Row action buttons wrap rather than overflow. */
+  table.is-stacked td .action-buttons, table.is-stacked td .row-actions, table.is-stacked td .action-group {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7. Specific overflow fixes found by rendering every page at 320-390px
+   -------------------------------------------------------------------------- */
+/* <fieldset> defaults to min-width:min-content, so a long field inside it
+   makes the whole form wider than the screen (upload page). */
+fieldset { min-width: 0; }
+
+/* Visually-hidden native <select> behind the searchable-select widget: its
+   "auto" position landed past the right edge and widened the page. */
+.searchable-select-native { left: 0 !important; top: 0 !important; }
+
+/* Section title + sort dropdown ("Pending Reviews [Oldest First (Recommended)]")
+   wraps instead of overflowing; the dropdown takes the full row. */
+@media (max-width: 480px) {
+  .section-title { flex-wrap: wrap; row-gap: 0.6rem; }
+  .queue-filters { flex: 1 1 100%; min-width: 0; }
+  .queue-filters select { width: 100%; max-width: 100%; }
+}
+
+/* Segmented controls (appearance / landing page choices) wrap on narrow
+   screens instead of running off the card. */
+@media (max-width: 480px) {
+  .segmented-control { flex-wrap: wrap; }
+  .segment-btn { flex: 1 1 auto; justify-content: center; min-width: 0; padding: 0.5rem 0.6rem; }
+}
+
+/* Moderation queue cards: Preview / Approve / Reject share the row evenly and
+   wrap on very narrow phones instead of overflowing the card. */
+@media (max-width: 700px) {
+  .q-actions { flex-wrap: wrap; }
+  .q-actions .btn-sm { flex: 1 1 auto; justify-content: center; }
+}
+@media (pointer: coarse) {
+  .btn-sm { min-height: 40px; }
+}
+
+/* --------------------------------------------------------------------------
+   8. Date filter label (approved / rejected resources)
+   The custom label ("Approval Date") sits on top of <input type="date">. iOS
+   Safari shows an empty date input as blank, but Android Chrome and desktop
+   show "mm/dd/yyyy", which printed over the label. While the label is
+   visible (the page script hides it once a date is picked), make the native
+   text transparent so only one of them is ever readable.
+   -------------------------------------------------------------------------- */
+.date-filter-wrap:has(.date-placeholder:not([style*="none"])) input[type="date"] {
+  color: transparent;
+}
+.date-filter-wrap:has(.date-placeholder:not([style*="none"])) input[type="date"]::-webkit-datetime-edit {
+  color: transparent;
+}
+@media (max-width: 480px) {
+  .date-filter-wrap { display: flex; width: 100%; }
+  .date-filter-wrap input[type="date"] { width: 100%; min-width: 0; }
+}
+@media (max-width: 860px) {
+  .date-placeholder { font-size: 16px; }
+}
+
+/* --------------------------------------------------------------------------
+   9. Upload form: <legend> inside a bordered <fieldset> straddles the border by
+   default, so "Upload Area" / "Resource Information" collided with the card
+   edge. Floating it places it inside the card padding like a normal heading.
+   -------------------------------------------------------------------------- */
+.form-section > legend {
+  float: left;
+  width: 100%;
+  padding-top: 0;
+}
+.form-section > legend ~ * {
+  clear: both;
+}
+@media (max-width: 700px) {
+  .input-row { row-gap: 1.1rem; }
+}

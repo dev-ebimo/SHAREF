@@ -5,7 +5,7 @@
 .rw-state { color: var(--text-muted); padding: 40px 0; }
 .rw-grid { display: grid; gap: 14px; }
 .rw-grid-3 { grid-template-columns: repeat(3, 1fr); }
-.rw-strip { display: grid; gap: 14px; grid-template-columns: 1.4fr 1fr 1fr; }
+.rw-strip { display: grid; gap: 14px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); }
 .rw-card { background: var(--surface-02); border: 1px solid var(--border-hair); border-radius: var(--radius-lg); padding: 18px 20px; display: flex; flex-direction: column; gap: 6px; }
 .rw-card-main { background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(99, 102, 241, 0.06)); border-color: var(--border-hover); }
 a.rw-card-req { transition: border-color 0.2s; } a.rw-card-req:hover { border-color: var(--border-hover); }
@@ -40,7 +40,7 @@ a.rw-card-req { transition: border-color 0.2s; } a.rw-card-req:hover { border-co
 .rw-board li.is-me span { color: var(--purple-soft); font-weight: 600; }
 .rw-empty { color: var(--text-muted); font-size: 0.88rem; padding: 14px 4px; list-style: none; }
 .rw-state.hidden, .rw-banner.hidden, #rwContent.hidden, #rwChallengeSection.hidden, #rwRequestsSection.hidden { display: none; }
-@media (max-width: 820px) { .rw-grid-3, .rw-strip { grid-template-columns: 1fr; } .rw-big { font-size: 1.8rem; } }
+@media (max-width: 820px) { .rw-grid-3, .rw-strip { grid-template-columns: minmax(0, 1fr); } .rw-big { font-size: 1.8rem; } }
 .rw-bounty { margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius-md); background: rgba(168, 85, 247, 0.12); border: 1px solid var(--border-hover); font-size: 0.9rem; color: var(--text-lead); }
 .rw-bounty.hidden { display: none; }
 .rw-upload-chip { margin-top: 10px; font-size: 0.8rem; font-weight: 600; color: var(--purple-soft); }

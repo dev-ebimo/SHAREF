@@ -29,6 +29,7 @@ body {
   background-color: var(--bg-dark);
   color: var(--text-pure);
   min-height: 100vh;
+  min-height: 100dvh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
@@ -66,8 +67,9 @@ body {
    ========================================================================== */
 .split-container {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
 }
 
@@ -485,7 +487,7 @@ input:focus, select:focus {
    7. COMPACT LAYOUT MOBILE RESPONSIVENESS
    ========================================================================== */
 @media (max-width: 1120px) {
-  .split-container { grid-template-columns: 1fr; }
+  .split-container { grid-template-columns: minmax(0, 1fr); }
   .visual-panel { display: none; } /* Kept hidden for clean responsive layout drop rules */
   .mobile-logo { display: inline-block; }
   .form-panel { padding: 4rem 1.5rem; }

@@ -14,7 +14,7 @@
 .controls-bar select option { background: #0f0e17; }
 .controls-bar select:focus { border-color: rgba(168, 85, 247, 0.55); }
 
-.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 18px; }
+.wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 18px; }
 .wl-card { display: flex; flex-direction: column; background: var(--surface-01); border: 1px solid var(--border-hair); border-radius: var(--radius-lg); overflow: hidden; transition: border-color 0.2s, transform 0.25s var(--ease-snap); }
 .wl-card:hover { border-color: var(--border-hover); transform: translateY(-3px); }
 .wl-cover { position: relative; height: 112px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(99, 102, 241, 0.08)); }
@@ -46,4 +46,4 @@
   .wl-sum-cta { grid-column: 1 / -1; justify-content: space-between; text-align: left; }
   .wl-sum-item strong { font-size: 1.15rem; }
 }
-@media (max-width: 480px) { .wl-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .wl-grid { grid-template-columns: minmax(0, 1fr); } }
