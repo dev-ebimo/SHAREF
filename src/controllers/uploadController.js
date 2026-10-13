@@ -17,6 +17,7 @@ import { resolveBountyForUpload } from "../services/bountyService.js";
 
 const ALLOWED_EXTENSIONS = ["pdf", "docx", "pptx", "zip", "jpg", "jpeg", "png"];
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // comfortably under Cloudinary's free ~10MB per-file cap
+const MAX_ORIGINAL_BYTES = 200 * 1024 * 1024; // sanity bound on the (informational) pre-compression size
 const PERMIT_TTL_MINUTES = 30;
 const MAX_LIVE_PERMITS_PER_USER = 3;
 
@@ -59,6 +60,14 @@ export async function requestUploadPermit(c) {
       return c.json({ success: false, errors: formatZodErrors(parsed.error) }, 400);
     }
 
+    // Size of the file BEFORE the browser compressed it. Purely informational (it lets us report
+    // how much storage compression saves), so a missing or odd value is dropped, never an error,
+    // and nothing is ever decided from it. The file that is actually stored is verified separately.
+    const originalSize =
+      Number.isInteger(body.originalSize) && body.originalSize >= 1 && body.originalSize <= MAX_ORIGINAL_BYTES
+        ? body.originalSize
+        : null;
+
     const user = c.get("user");
     const now = new Date();
     const nowIso = now.toISOString();
@@ -89,10 +98,10 @@ export async function requestUploadPermit(c) {
     const expiresAt = new Date(now.getTime() + PERMIT_TTL_MINUTES * 60 * 1000).toISOString();
 
     await c.env.DB.prepare(
-      `INSERT INTO upload_intents (id, user_id, public_id, file_name, file_extension, declared_size, metadata, created_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO upload_intents (id, user_id, public_id, file_name, file_extension, declared_size, original_size, metadata, created_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, JSON.stringify(metadata), nowIso, expiresAt)
+      .bind(id, user.id, publicId, cleanFileName(fileName), ext, fileSize, originalSize, JSON.stringify(metadata), nowIso, expiresAt)
       .run();
 
     const permit = await signUploadPermit(c.env, publicId);
@@ -180,12 +189,12 @@ export async function completeUpload(c) {
           `INSERT INTO resources
             (id, title, type, department, course, level, semester, session, description, uploader_id,
              file_name, file_url, cloudinary_public_id, cloudinary_resource_type, file_size_bytes, file_extension,
-             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?)`
+             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id, original_size_bytes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?, ?)`
         ).bind(
           intent.id, meta.title, meta.type, meta.department, meta.course, meta.level, meta.semester, meta.session,
           meta.description || "", user.id, intent.file_name, buildRawFileUrl(c.env, intent.public_id), intent.public_id,
-          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null
+          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null, intent.original_size ?? null
         ),
         c.env.DB.prepare(
           "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, NULL, 'new_upload', 1, ?, ?)"

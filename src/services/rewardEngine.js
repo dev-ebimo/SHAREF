@@ -96,8 +96,16 @@ async function loadContext(DB, { resource, adminId, cfg, now }) {
     ).bind(resource.uploader_id, resource.id, resource.reviewed_at ?? null, resource.reviewed_at ?? null, resource.reviewed_at ?? null, resource.id).first(),
     DB.prepare("SELECT 1 AS x FROM reward_ledger WHERE user_id = ? AND type = 'reward' AND tier = 'first' AND (status != 'shadow' OR ?) LIMIT 1")
       .bind(resource.uploader_id, cfg.status === "shadow" ? 1 : 0).first(),
-    resource.file_hash
-      ? DB.prepare("SELECT 1 AS x FROM resources WHERE file_hash = ? AND status = 'approved' AND id != ? LIMIT 1").bind(resource.file_hash, resource.id).first()
+    // Same file already approved? Matches on EITHER fingerprint: the exact SHA-256 of the stored file, or the
+    // compression-proof content fingerprint (two uploads of the same original compress to different bytes in
+    // different browsers, but share a content fingerprint). Both come from the moderator's browser, never the uploader.
+    resource.file_hash || resource.content_fp
+      ? DB.prepare(
+          `SELECT 1 AS x FROM resources
+            WHERE status = 'approved' AND id != ?
+              AND ((? IS NOT NULL AND file_hash = ?) OR (? IS NOT NULL AND content_fp = ?))
+            LIMIT 1`
+        ).bind(resource.id, resource.file_hash ?? null, resource.file_hash ?? null, resource.content_fp ?? null, resource.content_fp ?? null).first()
       : Promise.resolve(null),
     resource.bounty_id
       ? DB.prepare("SELECT id, reward, course_key FROM bounties WHERE id = ? AND status = 'open' AND paid < max_payouts AND expires_at >= ?")

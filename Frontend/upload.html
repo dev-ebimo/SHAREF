@@ -491,7 +491,7 @@
                     required
                   />
                   <p class="drop-zone__support-text">
-                    Supported: PDF, DOCX, PPTX, ZIP (Max 8MB)
+                    Supported: PDF, DOCX, PPTX (up to 40MB, shrunk automatically to fit 8MB) or ZIP (max 8MB)
                   </p>
                 </div>
                 <!-- File Preview (Hidden by default) -->
@@ -519,6 +519,7 @@
                     <div class="file-info">
                       <span id="fileName" class="file-name"></span>
                       <span id="fileSize" class="file-size"></span>
+                      <span id="compressStatus" class="compress-status" role="status" aria-live="polite" style="display: none"></span>
                     </div>
                   </div>
                   <button type="button" id="removeFileBtn" class="btn-remove">
@@ -715,6 +716,7 @@
     <script src="auth-guard.js"></script>
     <script src="dashboard.js"></script>
     <script src="incentives.js"></script>
+    <script src="upload-compress.js"></script>
     <script src="upload.js"></script>
   </body>
 </html>

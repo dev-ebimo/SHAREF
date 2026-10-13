@@ -430,3 +430,38 @@
     padding: 3rem 1.25rem;
   }
 }
+
+/* Browser-side optimization status under the chosen file ("Optimizing… 40%", "Optimized: 17 MB → 4 MB") */
+.compress-status {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.compress-status.is-working { color: var(--purple-soft); }
+.compress-status.is-working::before {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  margin-right: 0.45em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.05em;
+  animation: compress-spin 0.8s linear infinite;
+}
+.compress-status.is-done { color: #5eead4; }
+.compress-status.is-warn { color: #fbbf24; }
+@keyframes compress-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .compress-status.is-working::before { animation: none; } }
+/* On phones the card is narrow (the Remove button takes ~90px), so let long file names wrap instead of being cut to "A_lecture_p…" */
+@media (max-width: 600px) {
+  .file-info-row { flex: 1 1 auto; }
+  .file-name { white-space: normal; overflow-wrap: break-word; }
+  /* Icon-only Remove button on phones (the text stays in the DOM for screen readers) to give the file name more room */
+  .btn-remove { font-size: 0; gap: 0; padding: 0.55rem; min-width: 40px; min-height: 40px; justify-content: center; }
+  .btn-remove svg { width: 18px; height: 18px; }
+}

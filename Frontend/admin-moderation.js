@@ -310,7 +310,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loadReview(id).then(({ analysis }) => {
             document.body.style.cursor = '';
             if (currentReviewId !== id) return;
-            if (analysis.ok) processApprove(analysis.pages, analysis.snippet, analysis.fileHash);
+            if (analysis.ok) processApprove(analysis.pages, analysis.snippet, analysis.fileHash, analysis.contentFingerprint);
             else showApproveModal();
         });
     }
@@ -422,13 +422,15 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(function () { if (el.parentNode) el.remove(); }, 6000);
     }
 
-    function processApprove(pages, snippet, fileHash) {
+    function processApprove(pages, snippet, fileHash, contentFingerprint) {
         if (!currentReviewId) return;
         const choice = collectRewardChoice();
         if (choice === false) return; // reward tier needs a reason; alert already shown
         const payload = { pages: pages, snippet: snippet || '' };
         if (choice) Object.assign(payload, choice);
         if (fileHash) payload.fileHash = fileHash; // lets the server spot duplicate uploads
+        // Compression-proof fingerprint of the document's content (computed here from the stored file, never by the uploader).
+        if (contentFingerprint) payload.contentFingerprint = contentFingerprint;
         authFetch(API_BASE + '/admin/moderation/' + currentReviewId + '/approve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -480,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const cached = analysisCache[currentReviewId];
-        processApprove(pages, cached && cached.ok ? cached.snippet : '', cached && cached.fileHash);
+        processApprove(pages, cached && cached.ok ? cached.snippet : '', cached && cached.fileHash, cached && cached.contentFingerprint);
     });
 
     document.getElementById('confirmReject').addEventListener('click', () => {

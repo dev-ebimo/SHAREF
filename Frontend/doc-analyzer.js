@@ -34,6 +34,8 @@
   var MAX_ANALYZE_BYTES = 25 * 1024 * 1024; // refuse to chew on anything absurd
   var MAX_XML_BYTES = 60 * 1024 * 1024; // zip-bomb guard for a single OOXML part
   var MAX_PDF_TEXT_PAGES = 60; // review panel text; the page COUNT covers every page
+  var MIN_FP_TEXT_CHARS = 200; // below this a document has too little text to fingerprint safely (see contentFingerprint)
+  var MAX_FP_BYTES = 150 * 1024 * 1024; // total bytes we are willing to hash for one OOXML fingerprint
 
   /* ------------------------------ pure helpers ------------------------------ */
 
@@ -112,6 +114,66 @@
     return { ok: false, pages: null, fullText: "", snippet: "", message: message };
   }
 
+  /* ------------------------------ content fingerprint ------------------------------ */
+
+  // WHY THIS EXISTS. Uploads are compressed in the student's browser, and different browsers encode
+  // images differently, so two uploads of the SAME original can be different bytes with different
+  // SHA-256 hashes. This fingerprint ignores the parts compression changes, so it stays the same.
+  //
+  // WHY IT CAN'T BE FORGED. It is computed HERE, by the reviewing admin's browser, from the file that is
+  // actually stored. The uploader never supplies it. The only way to change it is to change the document
+  // itself - exactly as with an exact-file hash.
+  //
+  //   ooxml1:<sha256>    .docx/.pptx - every part of the package EXCEPT embedded media (word|ppt/media/*) and
+  //                      the preview thumbnail. Compression only rewrites media, so everything hashed here is
+  //                      byte-identical before and after.
+  //   pdftext1:<sha256>  .pdf - the document's normalised text plus its page count. Compression never touches
+  //                      text, only images.
+  //
+  // A document with little or no text (e.g. a Word file that is just pasted scans) gets NO fingerprint (null):
+  // two different image-only documents can have identical XML, and it is safer to fall back to the exact file
+  // hash than to ever call one a duplicate of the other. If the algorithm changes, bump the version prefix.
+
+  function fingerprintText(text) {
+    return String(text || "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  }
+
+  async function sha256OfText(text) {
+    var Enc = root.TextEncoder;
+    if (!Enc) return null;
+    return sha256Hex(new Enc().encode(text));
+  }
+
+  async function ooxmlFingerprint(zip, text) {
+    if (fingerprintText(text).length < MIN_FP_TEXT_CHARS) return null;
+    var names = Object.keys(zip.files)
+      .filter(function (n) { return !zip.files[n].dir && !/(^|\/)media\//i.test(n) && !/^docProps\/thumbnail\./i.test(n); })
+      .sort();
+    var total = 0;
+    var lines = [];
+    for (var i = 0; i < names.length; i++) {
+      var entry = zip.file(names[i]);
+      var declared = entry && entry._data && entry._data.uncompressedSize;
+      if (declared) {
+        if (declared > MAX_XML_BYTES) return null;
+        total += declared;
+        if (total > MAX_FP_BYTES) return null;
+      }
+      var h = await sha256Hex(await entry.async("uint8array"));
+      if (!h) return null;
+      lines.push(names[i] + ":" + h);
+    }
+    var fp = await sha256OfText(lines.join("\n"));
+    return fp ? "ooxml1:" + fp : null;
+  }
+
+  async function pdfTextFingerprint(totalPages, pageTexts) {
+    var norm = fingerprintText(pageTexts.join(" "));
+    if (norm.length < MIN_FP_TEXT_CHARS) return null;
+    var fp = await sha256OfText(totalPages + "|" + norm);
+    return fp ? "pdftext1:" + fp : null;
+  }
+
   /* ------------------------------ per-format analysis ------------------------------ */
 
   async function readZipText(zip, name) {
@@ -134,6 +196,7 @@
       fullText: text,
       snippet: snippetFromText(text),
       message: words ? "" : "No readable text found in this document.",
+      contentFingerprint: await ooxmlFingerprint(zip, text),
     };
   }
 
@@ -155,12 +218,14 @@
       var half = snippet.slice(0, Math.max(1, Math.ceil(snippet.length / 2)));
       snippet = half.length > MAX_SNIPPET_CHARS ? half.slice(0, MAX_SNIPPET_CHARS).trim() + "…" : half;
     }
+    var pptxText = slideTexts.filter(Boolean).join("\n\n");
     return {
       ok: true,
       pages: clampPages(slideNames.length),
-      fullText: slideTexts.filter(Boolean).join("\n\n"),
+      fullText: pptxText,
       snippet: snippet,
       message: firstWithText ? "" : "No readable text found in these slides.",
+      contentFingerprint: await ooxmlFingerprint(zip, pptxText),
     };
   }
 
@@ -197,6 +262,7 @@
         fullText: fullText,
         snippet: snippetFromText(firstPageText),
         message: parts.length ? "" : "This PDF has no selectable text (likely scanned images), so students won't get a text preview.",
+        contentFingerprint: await pdfTextFingerprint(total, parts),
       };
     } finally {
       try { pdf.destroy(); } catch (e) { /* ignore */ }
@@ -206,15 +272,19 @@
   // Pure + injectable (libs = { JSZip, pdfjsLib }) so it can be unit-tested.
   async function analyzeBuffer(buffer, fileName, libs) {
     var ext = extOf(fileName);
+    var result;
     try {
-      if (ext === "pdf") return await analyzePdf(buffer, libs);
-      if (ext === "docx") return await analyzeDocx(buffer, libs);
-      if (ext === "pptx") return await analyzePptx(buffer, libs);
+      if (ext === "pdf") result = await analyzePdf(buffer, libs);
+      else if (ext === "docx") result = await analyzeDocx(buffer, libs);
+      else if (ext === "pptx") result = await analyzePptx(buffer, libs);
       // zip / jpg / jpeg / png: nothing to read; one "page", no text preview.
-      return { ok: true, pages: 1, fullText: "", snippet: "", message: "No text preview is available for this file type." };
+      else result = { ok: true, pages: 1, fullText: "", snippet: "", message: "No text preview is available for this file type." };
     } catch (err) {
-      return failure("Couldn't read this file automatically — enter the page count manually.");
+      result = failure("Couldn't read this file automatically — enter the page count manually.");
     }
+    // Always present: null means "no content fingerprint" (unsupported type, too little text, or unreadable).
+    if (!result.contentFingerprint) result.contentFingerprint = null;
+    return result;
   }
 
   /* ------------------------------ browser glue ------------------------------ */
@@ -274,11 +344,13 @@
       var libs = await loadLibsFor(ext);
       var result = await analyzeBuffer(buffer, fileName, libs);
       result.fileHash = fileHash;
+      result.contentFingerprint = result.contentFingerprint || null;
       return result;
     } catch (err) {
       // The file was downloaded (so the hash is still useful) even if parsing it failed.
       var failed = failure("Couldn't analyze this file automatically — enter the page count manually.");
       failed.fileHash = fileHash;
+      failed.contentFingerprint = null;
       return failed;
     }
   }
@@ -294,6 +366,7 @@
       wordsToPages: wordsToPages,
       clampPages: clampPages,
       decodeEntities: decodeEntities,
+      fingerprintText: fingerprintText,
     },
   };
 

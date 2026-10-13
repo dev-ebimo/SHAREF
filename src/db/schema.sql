@@ -111,12 +111,15 @@ CREATE TABLE resources (
 
   -- Incentive columns (see migrations/004_incentives.sql)
   file_hash                  TEXT,                          -- SHA-256 hex, computed in the moderator's browser at review time; used for duplicate detection
+  content_fp                 TEXT,                          -- compression-proof fingerprint ('ooxml1:'/'pdftext1:' + sha256), computed in the moderator's browser at review time; used for duplicate detection
+  original_size_bytes        INTEGER,                       -- size before browser-side compression (informational only; reported by the uploader's browser)
   bounty_id                  TEXT,                          -- the request (bounty) this upload answers, validated at upload time
 
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX idx_resources_file_hash ON resources (file_hash) WHERE file_hash IS NOT NULL;
+CREATE INDEX idx_resources_content_fp ON resources (content_fp) WHERE content_fp IS NOT NULL;
 
 -- ----------------------------------------------------------------------------
 -- upload_intents — permits for direct browser -> Cloudinary uploads
@@ -135,6 +138,7 @@ CREATE TABLE upload_intents (
   file_name        TEXT NOT NULL,
   file_extension   TEXT NOT NULL,
   declared_size    INTEGER NOT NULL,
+  original_size    INTEGER,                           -- size before browser-side compression (informational only)
   metadata         TEXT NOT NULL,                     -- JSON: validated title/type/department/...
   created_at       TEXT NOT NULL,
   expires_at       TEXT NOT NULL

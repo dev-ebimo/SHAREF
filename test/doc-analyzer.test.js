@@ -112,6 +112,98 @@ const libs = { JSZip };
     check("pdf: page count clamped to the server's 1000 maximum", huge.pages === 1000);
   }
 
+  // ---------- content fingerprint (compression-proof duplicate detection) ----------
+  // A second sandbox WITH crypto, because fingerprints need SHA-256 (the sandbox above has none, which also proves the
+  // analyzer degrades gracefully to "no fingerprint" instead of crashing when hashing is unavailable).
+  {
+    const fpBox = { module: { exports: {} }, console, String, Number, Math, Object, Array, Uint8Array, JSON, parseInt, isFinite, Error, RegExp, crypto: globalThis.crypto, TextEncoder };
+    vm.createContext(fpBox); vm.runInContext(src, fpBox);
+    const fp = fpBox.module.exports._internals;
+    const FP_OK = (v, kind) => typeof v === "string" && new RegExp(`^${kind}:[0-9a-f]{64}$`).test(v);
+    const sentences = (n, tag = "") => Array.from({ length: n }, (_, i) => `Operating systems manage hardware ${tag} resource number ${i + 1}.`).join(" ");
+    const LONG = sentences(12);                       // comfortably over the 200-character minimum
+    const bytes = (n, seed) => Uint8Array.from({ length: n }, (_, i) => (i * 31 + seed) & 255);
+
+    async function docxZip(text, { media = [], extra = {}, order = null } = {}) {
+      const zip = new JSZip();
+      const paras = text.split("\n").map((t) => `<w:p><w:r><w:t xml:space="preserve">${t}</w:t></w:r></w:p>`).join("");
+      const entries = { "[Content_Types].xml": "<Types/>", "word/document.xml": `<w:document><w:body>${paras}</w:body></w:document>`, "word/_rels/document.xml.rels": "<Relationships/>", ...extra };
+      for (const k of (order || Object.keys(entries))) zip.file(k, entries[k]);
+      media.forEach(([name, data]) => zip.file(name, data));
+      return zip;
+    }
+    const gen = (zip, o = {}) => zip.generateAsync({ type: "uint8array", ...o });
+    const fpOf = async (data, name) => (await fp.analyzeBuffer(data, name, libs)).contentFingerprint;
+
+    // --- DOCX ---
+    const base = await fpOf(await gen(await docxZip(LONG, { media: [["word/media/image1.jpeg", bytes(5000, 1)]] })), "a.docx");
+    check("fp docx: produced, in 'ooxml1:<sha256>' form", FP_OK(base, "ooxml1"), String(base));
+
+    const recompressed = await fpOf(await gen(await docxZip(LONG, { media: [["word/media/image1.jpeg", bytes(900, 7)]] })), "a.docx");
+    check("fp docx: IMAGES replaced by smaller recompressed ones -> SAME fingerprint (the whole point)", recompressed === base);
+
+    const moreMedia = await fpOf(await gen(await docxZip(LONG, { media: [["word/media/image1.jpeg", bytes(10, 3)], ["word/media/image2.png", bytes(10, 4)]] })), "a.docx");
+    check("fp docx: even a different NUMBER of media files doesn't change it (media is excluded entirely)", moreMedia === base);
+
+    const lvl9 = await fpOf(await gen(await docxZip(LONG, { media: [["word/media/image1.jpeg", bytes(5000, 1)]] }), { compression: "DEFLATE", compressionOptions: { level: 9 } }), "a.docx");
+    const store = await fpOf(await gen(await docxZip(LONG, { media: [["word/media/image1.jpeg", bytes(5000, 1)]] }), { compression: "STORE" }), "a.docx");
+    check("fp docx: zip compression level / STORE doesn't change it", lvl9 === base && store === base);
+
+    const reordered = await fpOf(await gen(await docxZip(LONG, { order: ["word/_rels/document.xml.rels", "word/document.xml", "[Content_Types].xml"] })), "a.docx");
+    check("fp docx: order of entries inside the zip doesn't change it", reordered === base);
+
+    const withThumb = await fpOf(await gen(await docxZip(LONG, { extra: { "docProps/thumbnail.jpeg": "thumb" } })), "a.docx");
+    check("fp docx: the preview thumbnail is ignored", withThumb === base);
+
+    const edited = await fpOf(await gen(await docxZip(LONG.replace("number 3", "number 99"), { media: [["word/media/image1.jpeg", bytes(5000, 1)]] })), "a.docx");
+    check("fp docx: changing ONE word of the text DOES change it", FP_OK(edited, "ooxml1") && edited !== base);
+
+    const otherPart = await fpOf(await gen(await docxZip(LONG, { extra: { "word/styles.xml": "<styles/>" } })), "a.docx");
+    check("fp docx: adding/changing a non-media part (styles) DOES change it", otherPart !== base);
+
+    const short = await fpOf(await gen(await docxZip("Too short to fingerprint.")), "a.docx");
+    check("fp docx: too little text (<200 chars) -> NO fingerprint (null)", short === null);
+    const imgOnly = await fpOf(await gen(await docxZip("", { media: [["word/media/scan1.jpeg", bytes(4000, 2)]] })), "a.docx");
+    check("fp docx: an image-only document (no text) -> NO fingerprint, so two different scans can't collide", imgOnly === null);
+
+    const noCrypto = await analyzeBuffer(await gen(await docxZip(LONG)), "a.docx", libs);   // original sandbox: no crypto
+    check("fp docx: with no crypto available -> null, analysis otherwise fine", noCrypto.ok && noCrypto.contentFingerprint === null && noCrypto.pages >= 1);
+
+    // --- PPTX ---
+    async function pptxZip(slides, media = []) {
+      const zip = new JSZip(); zip.file("[Content_Types].xml", "<Types/>");
+      slides.forEach((t, i) => zip.file(`ppt/slides/slide${i + 1}.xml`, `<p:sld><a:p><a:r><a:t>${t}</a:t></a:r></a:p></p:sld>`));
+      media.forEach(([n, d]) => zip.file(n, d)); return zip;
+    }
+    const deck = [sentences(3, "a"), sentences(3, "b"), sentences(3, "c")];
+    const p1 = await fpOf(await gen(await pptxZip(deck, [["ppt/media/image1.jpeg", bytes(6000, 1)]])), "d.pptx");
+    const p2 = await fpOf(await gen(await pptxZip(deck, [["ppt/media/image1.jpeg", bytes(700, 9)]])), "d.pptx");
+    check("fp pptx: produced, and unchanged when media is recompressed", FP_OK(p1, "ooxml1") && p1 === p2);
+    const p3 = await fpOf(await gen(await pptxZip([deck[0], deck[1], sentences(3, "CHANGED")], [["ppt/media/image1.jpeg", bytes(6000, 1)]])), "d.pptx");
+    check("fp pptx: editing a slide's text changes it", p3 !== p1);
+    check("fp pptx: a docx and a pptx with otherwise-similar content never share a fingerprint", p1 !== base);
+    const p4 = await fpOf(await gen(await pptxZip(["Hi", "Bye"], [["ppt/media/image1.jpeg", bytes(6000, 1)]])), "d.pptx");
+    check("fp pptx: a deck with almost no text -> NO fingerprint", p4 === null);
+
+    // --- PDF ---
+    const pdfFp = async (pages) => (await fp.analyzeBuffer(new Uint8Array(10), "a.pdf", { pdfjsLib: fakePdfjs(pages) })).contentFingerprint;
+    const PT = [sentences(6, "p1"), sentences(6, "p2"), sentences(6, "p3")];
+    const f1 = await pdfFp(PT);
+    check("fp pdf: produced, in 'pdftext1:<sha256>' form", FP_OK(f1, "pdftext1"), String(f1));
+    check("fp pdf: identical text -> identical fingerprint (pdf file bytes are irrelevant)", (await pdfFp([...PT])) === f1);
+    check("fp pdf: case, punctuation and spacing differences are normalised away",
+      (await pdfFp(PT.map((t) => t.toUpperCase().replace(/ /g, "  ").replace(/\./g, " ;")))) === f1);
+    check("fp pdf: a changed word changes it", (await pdfFp([PT[0], PT[1], PT[2].replace("resource number 4", "resource number 400")])) !== f1);
+    check("fp pdf: same text but a different PAGE COUNT changes it", (await pdfFp([...PT, ""])) === f1 ? false : true);
+    check("fp pdf: scanned PDF (no selectable text) -> NO fingerprint", (await pdfFp(["", "", ""])) === null);
+    check("fp pdf: very little text -> NO fingerprint", (await pdfFp(["Page one", "Page two"])) === null);
+
+    // --- other types: nothing to fingerprint (the exact file hash still applies) ---
+    for (const name of ["a.zip", "a.png"]) check(`fp ${name}: none`, (await fp.analyzeBuffer(new Uint8Array(10), name, {})).contentFingerprint === null);
+    check("fp: an unreadable file -> analysis fails and fingerprint is null, never a crash",
+      (await fp.analyzeBuffer(new Uint8Array([1, 2, 3]), "broken.docx", libs)).contentFingerprint === null);
+  }
+
   // ---------- other types ----------
   for (const name of ["a.zip", "a.jpg", "a.jpeg", "a.png"]) {
     const r = await analyzeBuffer(new Uint8Array(10), name, {});

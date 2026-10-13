@@ -46,10 +46,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const stateProgress = document.getElementById('uploadStateProgress');
     const stateSuccess = document.getElementById('uploadStateSuccess');
     
-    const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB — must match middleware/uploadMiddleware.js on the server
+    const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB — the size of the file that is actually STORED; must match the server
     const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'];
 
-    let currentFile = null;
+    let currentFile = null;   // what the student picked (the original)
+    let uploadFile = null;    // what will actually be sent: the optimized copy, or the original if nothing was gained
+    let optimizing = false;
+    let optimizeToken = 0;    // ignores late results from a file the student has since replaced/removed
+    let optimizeAbort = null;
+    const compressStatus = document.getElementById('compressStatus');
+    const compressApi = window.SharefCompress || null;
+    const mb = (bytes) => `${Math.round(bytes / (1024 * 1024))}MB`;
+
+    // Shows a one-line note under the file ("Optimizing… 40%", "Optimized: 17 MB → 4 MB", ...).
+    function setCompressStatus(text, tone) {
+        if (!compressStatus) return;
+        compressStatus.textContent = text || '';
+        compressStatus.className = 'compress-status' + (tone ? ` is-${tone}` : '');
+        compressStatus.style.display = text ? '' : 'none';
+    }
+
+    function cancelOptimization() {
+        optimizeToken++;
+        if (optimizeAbort) { optimizeAbort.abort(); optimizeAbort = null; }
+        optimizing = false;
+    }
+
+    // Puts the page back to "no file chosen".
+    function clearSelection() {
+        cancelOptimization();
+        fileInput.value = '';
+        currentFile = null;
+        uploadFile = null;
+        setCompressStatus('');
+        dropZone.classList.remove('hidden');
+        filePreview.classList.add('hidden');
+        checkFormValidity();
+    }
 
     // --- 1. Drag and Drop Handling ---
     dropZone.addEventListener('click', () => fileInput.click());
@@ -81,12 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (files.length === 0) return;
         const file = files[0];
 
-        // Validate Size
-        if (file.size > MAX_FILE_SIZE) {
-            showFileError('File exceeds the 8MB maximum size limit.');
-            return;
-        }
-
         // Validate Type (basic check)
         const fileExt = file.name.split('.').pop().toLowerCase();
         const validExts = ['pdf', 'docx', 'pptx', 'zip'];
@@ -95,7 +122,20 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // Validate Size. PDF/DOCX/PPTX are shrunk in the browser before upload, so they may be picked larger than the
+        // 8MB storage limit (the SHRUNK file must fit it). Everything else, or a browser that can't shrink files, keeps 8MB.
+        const canOptimize = !!(compressApi && compressApi.isCompressible(file.name) && compressApi.isSupported());
+        const maxPick = canOptimize ? compressApi.limits.maxInputBytes : MAX_FILE_SIZE;
+        if (file.size > maxPick) {
+            showFileError(canOptimize
+                ? `This file is too large (${mb(maxPick)} maximum). Try removing large images or splitting it into parts.`
+                : 'File exceeds the 8MB maximum size limit.');
+            return;
+        }
+
+        cancelOptimization();
         currentFile = file;
+        uploadFile = null;
         
         // Auto-fill title if empty
         if (!resourceTitle.value) {
@@ -109,28 +149,84 @@ document.addEventListener('DOMContentLoaded', () => {
         fileSizeEl.textContent = formatBytes(file.size);
         dropZone.classList.add('hidden');
         filePreview.classList.remove('hidden');
-        
+
+        startOptimizing(file, canOptimize);
+    }
+
+    // Shrinks the file's images in the browser (see upload-compress.js). The submit button stays disabled until this
+    // finishes. Any problem simply means the ORIGINAL file is uploaded, so this can never break an upload.
+    function startOptimizing(file, canOptimize) {
+        if (!canOptimize) {
+            uploadFile = file;
+            setCompressStatus('');
+            checkFormValidity();
+            return;
+        }
+        uploadFile = null;
+        optimizing = true;
+        const token = ++optimizeToken;
+        optimizeAbort = new AbortController();
+        setCompressStatus('Optimizing for upload… 0%', 'working');
+        checkFormValidity();
+
+        compressApi.compress(file, {
+            signal: optimizeAbort.signal,
+            onProgress: (fraction, pass) => {
+                if (token !== optimizeToken) return;
+                const pct = Math.round(fraction * 100);
+                setCompressStatus(pass === 2
+                    ? `Reducing further to fit the 8MB limit… ${pct}%`
+                    : `Optimizing for upload… ${pct}%`, 'working');
+            },
+        }).then((result) => {
+            if (token !== optimizeToken || result.aborted) return;
+            optimizing = false;
+            optimizeAbort = null;
+            finishOptimizing(result);
+        });
+    }
+
+    function finishOptimizing(result) {
+        uploadFile = result.file;
+        fileSizeEl.textContent = result.compressed
+            ? `${formatBytes(result.size)} (was ${formatBytes(result.originalSize)})`
+            : formatBytes(result.size);
+
+        // What gets STORED must fit the limit; if even the optimized file doesn't, the student must change the file.
+        if (result.size > MAX_FILE_SIZE) {
+            clearSelection();
+            showFileError(`This file is still ${formatBytes(result.size)}${result.compressed ? ' even after optimizing' : ''}, and the limit is 8MB. ` +
+                'Try removing large images or splitting it into parts.');
+            return;
+        }
+
+        if (result.compressed) {
+            setCompressStatus(`Optimized: ${formatBytes(result.originalSize)} → ${formatBytes(result.size)} (${result.savedPct}% smaller)` +
+                (result.preset === 'floor' ? ' · extra reduction was needed to fit the 8MB limit' : ''), 'done');
+        } else if (result.reason === 'no-eligible-images' || result.reason === 'not-smaller') {
+            setCompressStatus('Already compact — no reduction needed.', '');
+        } else if (result.reason === 'timeout' || result.reason === 'failed') {
+            setCompressStatus('Couldn\'t optimize this file, so it will be uploaded as it is.', 'warn');
+        } else {
+            setCompressStatus(''); // too small / unsupported type / unsupported browser: nothing worth saying
+        }
         checkFormValidity();
     }
 
     function showFileError(msg) {
+        cancelOptimization();
         fileError.textContent = msg;
         fileError.style.display = 'block';
         fileInput.value = '';
         currentFile = null;
+        uploadFile = null;
     }
 
-    removeFileBtn.addEventListener('click', () => {
-        fileInput.value = '';
-        currentFile = null;
-        dropZone.classList.remove('hidden');
-        filePreview.classList.add('hidden');
-        checkFormValidity();
-    });
+    removeFileBtn.addEventListener('click', clearSelection);
 
     // --- 3. Form Validation Logic ---
     function checkFormValidity() {
-        let isValid = currentFile !== null;
+        let isValid = currentFile !== null && uploadFile !== null && !optimizing;
         
         requiredInputs.forEach(input => {
             if (input.type !== 'file' && !input.value.trim()) {
@@ -175,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        if (submitBtn.disabled || !currentFile) return;
+        if (submitBtn.disabled || !currentFile || !uploadFile || optimizing) return;
 
         uploadError.style.display = 'none';
         switchState(stateForm, stateProgress);
@@ -298,7 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function realUploadProcess() {
         const progressDetail = document.getElementById('progressDetail');
         resetProgressUi();
-        progressDetail.textContent = `Preparing to upload ${formatBytes(currentFile.size)}…`;
+        progressDetail.textContent = `Preparing to upload ${formatBytes(uploadFile.size)}…`;
 
         const metadata = {
             title: resourceTitle.value.trim(),
@@ -310,7 +406,8 @@ document.addEventListener('DOMContentLoaded', () => {
             session: document.getElementById('academicSession').value,
             description: description.value.trim(),
             fileName: currentFile.name,
-            fileSize: currentFile.size,
+            fileSize: uploadFile.size,            // the file that is actually sent (the server re-checks it)
+            originalSize: currentFile.size,       // before optimizing - informational only, never trusted
         };
         if (activeBounty) metadata.bountyId = activeBounty.id;
 
@@ -334,7 +431,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // 2) the file itself, straight to Cloudinary
-        const sent = await sendToCloudinary(permit.upload, currentFile);
+        const sent = await sendToCloudinary(permit.upload, uploadFile);
         if (!sent.ok) {
             showUploadError(sent.message);
             return;

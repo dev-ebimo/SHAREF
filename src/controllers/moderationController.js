@@ -210,7 +210,15 @@ export function parseApprovalReview(body) {
   // Advisory only (used to spot duplicate uploads), so a malformed value is ignored, not an error.
   const fileHash = typeof body.fileHash === "string" && /^[a-fA-F0-9]{64}$/.test(body.fileHash.trim()) ? body.fileHash.trim().toLowerCase() : null;
 
-  return { pages, snippet, rewardTier, rewardNote, fileHash };
+  // Compression-proof fingerprint of the document's content (see migrations/006). Like fileHash it is
+  // computed by the moderator's browser from the file that is actually stored - the uploader never
+  // supplies it, which is what makes it impossible to forge. Strict format so nothing else can be stored.
+  const contentFp =
+    typeof body.contentFingerprint === "string" && /^(ooxml1|pdftext1):[a-f0-9]{64}$/.test(body.contentFingerprint.trim().toLowerCase())
+      ? body.contentFingerprint.trim().toLowerCase()
+      : null;
+
+  return { pages, snippet, rewardTier, rewardNote, fileHash, contentFp };
 }
 
 // Inner logic, callable either from the route handler below (which reads
@@ -229,6 +237,7 @@ export async function approveResourceById(c, id, review) {
     `UPDATE resources
         SET status = 'approved', pages = ?, preview_type = ?, preview_snippet = ?, preview_message = ?,
             file_hash = COALESCE(?, file_hash),
+            content_fp = COALESCE(?, content_fp),
             reviewed_by = ?, reviewed_at = ?, updated_at = ?
       WHERE id = ? AND status = 'pending'`
   )
@@ -238,6 +247,7 @@ export async function approveResourceById(c, id, review) {
       review.snippet,
       hasSnippet ? "" : NO_PREVIEW_MESSAGE,
       review.fileHash ?? null,
+      review.contentFp ?? null,
       user.id, nowIso(), nowIso(), id
     )
     .run();
