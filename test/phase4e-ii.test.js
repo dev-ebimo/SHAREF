@@ -1,3 +1,4 @@
+import { departmentKey } from "../src/utils/academic.js";
 import fs from "node:fs";
 import { sign } from "hono/jwt";
 import app from "../src/index.js";
@@ -28,8 +29,8 @@ function fullPrefs({ inApp = true, email = true } = {}) {
 
 function seedUser(DB, { id, role = "student", department = null, level = null, preferences = fullPrefs() }) {
   DB._raw
-    .prepare(`INSERT INTO users (id, full_name, email, password, role, department, level, is_verified, preferences) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`)
-    .run(id, `User ${id}`, `${id}@example.com`, "hash", role, department, level, JSON.stringify(preferences));
+    .prepare(`INSERT INTO users (id, full_name, email, password, role, department, department_key, level, is_verified, preferences) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
+    .run(id, `User ${id}`, `${id}@example.com`, "hash", role, department, department ? departmentKey(department) : null, level, JSON.stringify(preferences));
 }
 
 function withExecutionCtx() {
@@ -256,11 +257,11 @@ async function run() {
 
     const token = await tokenFor(env, "admin1", "admin");
     const { ctx, drain } = withExecutionCtx();
-    const res = await postAuthed("/api/admin/notifications/n1/reject", { reason: "Bad scan" }, token, env, ctx);
+    const res = await postAuthed("/api/admin/notifications/n1/reject", { reason: "poor_quality" }, token, env, ctx);
     await drain();
     check("quickReject: 200 status", res.status === 200);
     const resourceRow = DB._raw.prepare("SELECT status, rejection_reason FROM resources WHERE id = 'r1'").get();
-    check("quickReject: correctly rejected with the given reason", resourceRow.status === "rejected" && resourceRow.rejection_reason === "Bad scan");
+    check("quickReject: correctly rejected with the given reason", resourceRow.status === "rejected" && resourceRow.rejection_reason === "poor_quality");
   }
   {
     const { env, DB } = freshEnv();

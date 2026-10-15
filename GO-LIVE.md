@@ -72,6 +72,26 @@ Follow `scripts/migrate/README.md`. Sequencing matters:
   password hash, and financial history. `.gitignore` covers it — don't
   override that.
 
+## 4b. Academic-data consistency (existing databases only - do this before deploying the new Worker code)
+
+The new code reads columns added by migration 007. Apply it, deploy the Worker, then run the one-off normaliser.
+(A brand-new database gets all of this from `schema.sql`; skip this section.)
+
+1. `npm run db:migrate:007:remote`  - adds `department_key`, `course_key`, `last_active_at` and back-fills the keys
+   (best effort, in SQL, so the site works immediately).
+2. `npm run deploy`.
+3. Run the normaliser as an admin. It pages through the data, so repeat each call with the `next` it returns until it
+   answers `"done": true`; start with `resources`, then `users`:
+   ```bash
+   curl -X POST https://<your-worker>/api/admin/maintenance/normalize-academic-data \
+     -H "Authorization: Bearer <admin token>" -H "Content-Type: application/json" \
+     -d '{"table":"resources"}'
+   # ...repeat with {"table":"resources","after":"<lastId from the response>"} until done, then:
+   curl -X POST ... -d '{"table":"users"}'
+   ```
+   It is safe to re-run (a second pass reports `"changed": 0`), never blanks a value it does not understand, and
+   reports any matric-number collisions for you to resolve by hand instead of overwriting them.
+
 ## 5. Flip the frontend
 
 Set `API_BASE` in `Frontend/api-config.js` to the Worker URL (ends in `/api`),

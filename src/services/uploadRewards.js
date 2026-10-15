@@ -1,4 +1,4 @@
-import { getIncentiveConfig, isVisibleToStudents } from "./incentiveConfig.js";
+import { getIncentiveConfig, isVisibleToStudents, bountyMatches } from "./incentiveConfig.js";
 
 // The reward chip on a student's "My uploads" cards: { amount, status }.
 //   pending upload  -> { amount: <most it could earn, standard tier or its request's reward> }  ("Up to ...")
@@ -26,13 +26,13 @@ export async function rewardChipsForUploads(DB, userId, uploads) {
   }
 
   const bountyIds = [...new Set(uploads.filter((u) => u.status === "pending" && u.bounty_id).map((u) => u.bounty_id))];
-  const bountyReward = new Map();
+  const bountyRows = new Map();
   if (bountyIds.length) {
     const { results } = await DB.prepare(
-      `SELECT id, reward FROM bounties
+      `SELECT id, reward, course_key, type, level FROM bounties
         WHERE id IN (${bountyIds.map(() => "?").join(",")}) AND status = 'open' AND expires_at > ? AND paid < max_payouts`
     ).bind(...bountyIds, new Date().toISOString()).all();
-    for (const b of results) bountyReward.set(b.id, b.reward);
+    for (const b of results) bountyRows.set(b.id, b);
   }
 
   for (const u of uploads) {
@@ -47,7 +47,8 @@ export async function rewardChipsForUploads(DB, userId, uploads) {
       }
     } else if (u.status === "pending") {
       const standard = u.type === "Past Question" ? cfg.rules.rewards.pastQuestion : u.type === "Lecture Note" ? cfg.rules.rewards.lectureNote : 0;
-      const potential = Math.max(standard, bountyReward.get(u.bounty_id) || 0);
+      const b = bountyRows.get(u.bounty_id);
+      const potential = Math.max(standard, b && bountyMatches(b, u) ? b.reward : 0);
       if (potential > 0) chips.set(u.id, { amount: potential });
     }
   }

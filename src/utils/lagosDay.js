@@ -52,3 +52,15 @@ export function endOfLagosDayIso(ymd) {
   if (probe.getUTCFullYear() !== y || probe.getUTCMonth() !== mo - 1 || probe.getUTCDate() !== d) return null;
   return new Date(Date.UTC(y, mo - 1, d, 23, 59, 59, 999) - LAGOS_OFFSET_MS).toISOString();
 }
+
+// ---- Added for consistent admin date filters -------------------------------
+// [start, end) of the given Lagos calendar day ("YYYY-MM-DD") as ISO instants, or null if it isn't a real date.
+// The admin "approved on" / "rejected on" filters used the UTC day instead, so a resource approved at 00:30
+// Lagos time (23:30 UTC the day before) showed up under the wrong date, and the filter disagreed with the
+// "Approved Today" counters, which already use Lagos days. An invalid string used to throw a 500.
+export function lagosDayRangeIso(ymd) {
+  const endInclusive = endOfLagosDayIso(ymd);
+  if (!endInclusive) return null;
+  const start = new Date(new Date(endInclusive).getTime() + 1 - 24 * 60 * 60 * 1000);
+  return [start.toISOString(), new Date(new Date(endInclusive).getTime() + 1).toISOString()];
+}

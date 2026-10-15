@@ -7,6 +7,7 @@ import { invalidateAuthCache } from "../middleware/protect.js";
 import { sendVerificationEmail, sendPasswordResetEmail } from "../services/emailService.js";
 import { hashIp } from "../utils/ipHash.js";
 import { captureReferral, markReferralVerified } from "../services/referralService.js";
+import { resolveDepartment } from "../utils/academic.js";
 
 const OTP_EXPIRY_MINUTES = 10;
 const MAX_OTP_ATTEMPTS = 5; // wrong guesses allowed per issued code
@@ -59,8 +60,10 @@ export async function register(c) {
     const { fullName, email, password, matricNumber, university, faculty, department, level, gender, communitySurvey, referralCode } =
       c.req.valid("json");
 
+    // matricNumber arrives normalised (upper-case, no spaces); compare against stored values the same way so a
+    // legacy "csc/2019/001" can't coexist with "CSC/2019/001".
     const existingUser = matricNumber
-      ? await c.env.DB.prepare("SELECT id, email FROM users WHERE email = ? OR matric_number = ?").bind(email, matricNumber).first()
+      ? await c.env.DB.prepare("SELECT id, email FROM users WHERE email = ? OR upper(replace(matric_number, ' ', '')) = ?").bind(email, matricNumber).first()
       : await c.env.DB.prepare("SELECT id, email FROM users WHERE email = ?").bind(email).first();
 
     if (existingUser) {
@@ -76,6 +79,9 @@ export async function register(c) {
       );
     }
 
+    // Canonical department spelling (reuses the spelling already in use) + its comparison key.
+    const dept = department ? await resolveDepartment(c.env.DB, department) : { name: null, key: null };
+
     const id = generateId();
     const otp = generateOTP();
     const otpHash = await hashOtp(c.env, id, "verify", otp);
@@ -88,13 +94,13 @@ export async function register(c) {
     await c.env.DB.prepare(
       `INSERT INTO users
         (id, full_name, email, password, matric_number, university, faculty, department, level, gender,
-         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at, signup_ip_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         community_survey, verification_otp, verification_otp_expires, preferences, created_at, updated_at, signup_ip_hash, department_key)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
       .bind(
         id, fullName, email, hashedPassword, matricNumber || null, university || null, faculty || null,
-        department || null, level || null, gender || null, communitySurvey || "", otpHash, otpExpires,
-        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp, signupIpHash
+        dept.name || null, level || null, gender || null, communitySurvey || "", otpHash, otpExpires,
+        JSON.stringify(DEFAULT_PREFERENCES), timestamp, timestamp, signupIpHash, dept.key || null
       )
       .run();
 
@@ -109,6 +115,12 @@ export async function register(c) {
 
     return c.json({ success: true, message: "Account created. Check your email for a verification code.", email }, 201);
   } catch (err) {
+    // Two sign-ups racing past the existence check above: the UNIQUE constraint is the real guard, and the
+    // loser deserves the same clear 409 as everyone else, not a generic 500.
+    if (/UNIQUE constraint failed/i.test(String(err?.message))) {
+      const field = /matric/i.test(String(err.message)) ? "matric number" : "email";
+      return c.json({ success: false, message: `An account with this ${field} already exists` }, 409);
+    }
     console.error("register failed:", err?.message);
     return c.json({ success: false, message: "Registration failed", error: sanitizeError(c.env, err) }, 500);
   }

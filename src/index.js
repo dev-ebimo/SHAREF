@@ -17,6 +17,8 @@ import adminNotificationRoutes from "./routes/adminNotificationRoutes.js";
 import adminUserRoutes from "./routes/adminUserRoutes.js";
 import adminTransactionRoutes from "./routes/adminTransactionRoutes.js";
 import userSettingsRoutes from "./routes/userSettingsRoutes.js";
+import metaRoutes from "./routes/metaRoutes.js";
+import adminMaintenanceRoutes from "./routes/adminMaintenanceRoutes.js";
 
 const app = new Hono();
 
@@ -71,8 +73,10 @@ app.route("/api/admin/announcements", announcementRoutes);
 app.route("/api/admin/notifications", adminNotificationRoutes);
 app.route("/api/admin/users", adminUserRoutes);
 app.route("/api/admin/incentives", adminIncentiveRoutes);
+app.route("/api/admin/maintenance", adminMaintenanceRoutes);
 app.route("/api/admin", adminTransactionRoutes);
 app.route("/api/users", userSettingsRoutes);
+app.route("/api/meta", metaRoutes);
 
 app.notFound((c) => c.json({ success: false, message: "Not found" }, 404));
 

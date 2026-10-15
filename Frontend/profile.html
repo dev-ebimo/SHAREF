@@ -372,7 +372,8 @@
         </label>
         <label class="modal-field">
           <span>Department</span>
-          <input type="text" id="editDept" value="Computer Science" required />
+          <input type="text" id="editDept" value="Computer Science" required list="departmentSuggestions" autocomplete="off" />
+          <datalist id="departmentSuggestions"></datalist>
         </label>
         <label class="modal-field">
           <span>Level</span>
@@ -409,6 +410,7 @@
 
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
+    <script src="academic.js"></script>
     <script src="dashboard.js"></script>
     <script src="incentives.js"></script>
     <script src="profile.js"></script>

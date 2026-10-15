@@ -1,5 +1,7 @@
+import { pageParams } from "../utils/pagination.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { EFFECTIVE_STATUS_CASE, activeSinceIso } from "./adminUserController.js";
+import { likeContains, searchTerm } from "../utils/academic.js";
 
 // Every wallet transaction PLUS rewards, as one list. Rewards are not wallet transactions, so they
 // are presented here as two extra virtual types ("reward" = credit, "reward_reversal" = debit) built
@@ -27,7 +29,7 @@ export async function getTransactionSummary(c) {
        tx_data AS (
          SELECT t.*, ${EFFECTIVE_STATUS_CASE} AS effective_status
          FROM base t
-         JOIN users u ON u.id = t.user_id
+         LEFT JOIN users u ON u.id = t.user_id
        )
        SELECT
          effective_status,
@@ -45,6 +47,9 @@ export async function getTransactionSummary(c) {
       active: { volume: 0, spent: 0, count: 0, users: 0 },
       suspended: { volume: 0, spent: 0, count: 0, users: 0 },
       inactive: { volume: 0, spent: 0, count: 0, users: 0 },
+      // Money from accounts that were later deleted. Their transactions are kept (financial history) with a NULL
+      // user, and used to fall out of every total, so revenue under-reported after each account deletion.
+      deleted: { volume: 0, spent: 0, count: 0, users: 0 },
     };
     for (const r of results) {
       if (summary[r.effective_status]) {
@@ -52,8 +57,8 @@ export async function getTransactionSummary(c) {
       }
     }
 
-    const totalDepositVolume = summary.active.volume + summary.suspended.volume + summary.inactive.volume;
-    const totalSpentVolume = summary.active.spent + summary.suspended.spent + summary.inactive.spent;
+    const totalDepositVolume = summary.active.volume + summary.suspended.volume + summary.inactive.volume + summary.deleted.volume;
+    const totalSpentVolume = summary.active.spent + summary.suspended.spent + summary.inactive.spent + summary.deleted.spent;
 
     return c.json({ success: true, summary, totalDepositVolume, totalSpentVolume });
   } catch (err) {
@@ -70,8 +75,7 @@ export async function getTransactions(c) {
     const category = c.req.query("category") || "";
     const type = c.req.query("type") || "";
     const status = c.req.query("status") || "";
-    const page = Number(c.req.query("page")) || 1;
-    const limit = Number(c.req.query("limit")) || 20;
+    const { page, limit } = pageParams(c, { defaultLimit: 20, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const cte = `
@@ -80,7 +84,7 @@ export async function getTransactions(c) {
         SELECT t.*, u.full_name AS user_full_name, u.email AS user_email,
                ${EFFECTIVE_STATUS_CASE} AS effective_status
         FROM base t
-        JOIN users u ON u.id = t.user_id
+        LEFT JOIN users u ON u.id = t.user_id
       )
     `;
     const activeSince = activeSinceIso();
@@ -90,9 +94,9 @@ export async function getTransactions(c) {
     if (category) { conditions.push("effective_status = ?"); params.push(category); }
     if (type) { conditions.push("type = ?"); params.push(type); }
     if (status) { conditions.push("status = ?"); params.push(status); }
-    if (search) {
-      conditions.push("(user_full_name LIKE ? OR user_email LIKE ?)");
-      params.push(`%${search}%`, `%${search}%`);
+    if (searchTerm(search)) {
+      conditions.push("(user_full_name LIKE ? ESCAPE '\\' OR user_email LIKE ? ESCAPE '\\')");
+      params.push(likeContains(search), likeContains(search));
     }
     const where = conditions.join(" AND ");
 
@@ -108,7 +112,7 @@ export async function getTransactions(c) {
     return c.json({
       success: true,
       transactions: results.map((t) => ({
-        id: t.id, user: t.user_full_name, email: t.user_email, category: t.effective_status,
+        id: t.id, user: t.user_full_name || "Deleted account", email: t.user_email || "", category: t.effective_status,
         type: t.type, amount: t.amount, status: t.status, date: t.created_at,
       })),
       pagination: { total, page, limit, pages: Math.ceil(total / limit) },

@@ -312,7 +312,9 @@ async function run() {
     check("charge: no additional deduction for re-download", userRow.wallet_balance === 1000, userRow.wallet_balance);
 
     const resourceRow = DB._raw.prepare("SELECT downloads FROM resources WHERE id = 'r1'").get();
-    check("charge: download count still increments on re-download", resourceRow.downloads === 1);
+    check("charge: a re-download does NOT inflate the public download counter", resourceRow.downloads === 0, String(resourceRow.downloads));
+    const logs = DB._raw.prepare("SELECT COUNT(*) AS n FROM download_logs WHERE user_id = 'u1' AND resource_id = 'r1'").get();
+    check("charge: ...but the re-download is still logged (My Downloads shows the date)", logs.n === 1, String(logs.n));
   }
   {
     // insufficient balance -> 402, nothing deducted

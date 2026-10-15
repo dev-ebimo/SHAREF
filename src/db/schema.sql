@@ -48,6 +48,9 @@ CREATE TABLE users (
   referral_code               TEXT,                          -- unique (partial index below), created lazily
   referred_by                 TEXT,                          -- inviter's user id (informational, no FK so deletes stay simple)
   signup_ip_hash              TEXT,                          -- salted SHA-256 of the signup IP, for referral-ring detection only
+  -- Consistency columns (see migrations/007_academic_consistency.sql)
+  department_key              TEXT,                          -- comparison form of `department` ('computer science'); ALL department matching uses this
+  last_active_at              TEXT,                          -- last authenticated activity (throttled to ~1 write/hour); a login alone isn't activity
   created_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
@@ -55,6 +58,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_role_lastlogin ON users (role, last_login_at DESC);
 CREATE UNIQUE INDEX idx_users_referral_code ON users (referral_code) WHERE referral_code IS NOT NULL;
 CREATE INDEX idx_users_signup_ip_hash ON users (signup_ip_hash) WHERE signup_ip_hash IS NOT NULL;
+CREATE INDEX idx_users_department_key ON users (department_key) WHERE department_key IS NOT NULL;
 
 -- Default shape written into `preferences` for a brand-new user (app-layer
 -- default, since SQLite's column DEFAULT can't express nested JSON structure):
@@ -114,12 +118,16 @@ CREATE TABLE resources (
   content_fp                 TEXT,                          -- compression-proof fingerprint ('ooxml1:'/'pdftext1:' + sha256), computed in the moderator's browser at review time; used for duplicate detection
   original_size_bytes        INTEGER,                       -- size before browser-side compression (informational only; reported by the uploader's browser)
   bounty_id                  TEXT,                          -- the request (bounty) this upload answers, validated at upload time
+  department_key             TEXT,                          -- comparison form of `department`; every department filter / "for your department" match uses this
+  course_key                 TEXT,                          -- comparison form of `course` ('CSC305'); every course filter / search uses this
 
   created_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at                 TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX idx_resources_file_hash ON resources (file_hash) WHERE file_hash IS NOT NULL;
 CREATE INDEX idx_resources_content_fp ON resources (content_fp) WHERE content_fp IS NOT NULL;
+CREATE INDEX idx_resources_status_deptkey ON resources (status, department_key);
+CREATE INDEX idx_resources_status_coursekey ON resources (status, course_key);
 
 -- ----------------------------------------------------------------------------
 -- upload_intents — permits for direct browser -> Cloudinary uploads

@@ -11,6 +11,11 @@ const TTL_MS = 15 * 1000;
 const cache = new Map(); // userId -> { role, status, pwChangedSec, expiresAt }
 const MAX_CACHE_ENTRIES = 2000;
 
+// "Last active" is recorded at most once per hour per student, piggy-backing on the auth lookup this middleware
+// already does (a cache miss), so it costs one small UPDATE an hour, not one per request. Before this, "inactive"
+// meant "has not LOGGED IN for 7 days" - but a login lasts 7 days, so someone using the site daily looked inactive.
+const ACTIVITY_TOUCH_MS = 60 * 60 * 1000;
+
 function cacheGet(userId) {
   const entry = cache.get(userId);
   if (!entry) return null;
@@ -63,15 +68,24 @@ export async function protect(c, next) {
 
   let info = cacheGet(decoded.id);
   if (!info) {
-    const user = await c.env.DB.prepare("SELECT role, account_status, password_changed_at FROM users WHERE id = ?")
+    const user = await c.env.DB.prepare("SELECT role, account_status, password_changed_at, last_active_at, last_login_at FROM users WHERE id = ?")
       .bind(decoded.id)
       .first();
     if (!user) return reject(c, "User no longer exists");
+    const lastSeenMs = Math.max(Date.parse(user.last_active_at || "") || 0, Date.parse(user.last_login_at || "") || 0);
     info = {
       role: user.role,
       status: user.account_status,
       pwChangedSec: user.password_changed_at ? Math.floor(Date.parse(user.password_changed_at) / 1000) : 0,
     };
+    // Suspended accounts never reach a handler, so don't record activity for them.
+    if (user.account_status !== "suspended" && Date.now() - lastSeenMs > ACTIVITY_TOUCH_MS) {
+      const touch = c.env.DB.prepare("UPDATE users SET last_active_at = ? WHERE id = ?")
+        .bind(new Date().toISOString(), decoded.id)
+        .run()
+        .catch((err) => console.error("protect: could not record activity:", err?.message));
+      try { c.executionCtx.waitUntil(touch); } catch { await touch; }
+    }
     cacheSet(decoded.id, info);
   }
 

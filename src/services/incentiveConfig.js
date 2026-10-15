@@ -79,3 +79,32 @@ export async function adminDisplayName(DB, adminId) {
 
 // Courses are matched ignoring case, spaces and punctuation: "csc 305" == "CSC-305" == "CSC305".
 export const courseKey = (course) => String(course || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+// ---- "Wanted" requests (bounties) vs resources ----------------------------------------------------
+// A bounty is stored in the admin's vocabulary ('Past Questions', '300 Level'); a resource is stored in
+// the upload form's vocabulary ('Past Question', '300'). They were never reconciled, so only the course
+// was ever compared and an upload of ANY type or level for that course could claim the reward.
+// This is the one place that translates between the two; every bounty check goes through it.
+const BOUNTY_TYPE_TO_RESOURCE_TYPE = {
+  "Past Questions": "Past Question",
+  "Lecture Notes": "Lecture Note",
+  "Revision Sheet": "Revision Sheet",
+};
+export const bountyTypeToResourceType = (t) => BOUNTY_TYPE_TO_RESOURCE_TYPE[t] ?? null;
+export const bountyLevelToResourceLevel = (l) => {
+  const m = /^(\d{3})(?:\s*level)?$/i.exec(String(l ?? "").trim());
+  return m ? m[1] : null;
+};
+
+// bounty: { course_key, type, level }   target: { course, type, level } (a resource row or upload metadata)
+export function bountyMatches(bounty, target) {
+  if (!bounty || !target) return false;
+  const wantType = bountyTypeToResourceType(bounty.type);
+  const wantLevel = bountyLevelToResourceLevel(bounty.level);
+  if (!wantType || !wantLevel) return false; // an unrecognised bounty can never be claimed by accident
+  return (
+    bounty.course_key === courseKey(target.course) &&
+    wantType === target.type &&
+    wantLevel === String(target.level ?? "").trim()
+  );
+}

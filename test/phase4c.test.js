@@ -154,7 +154,7 @@ async function run() {
     check("complete: size recorded from Cloudinary, not trusted from the client", row.file_size_bytes === 5000);
     check("complete: pages is the placeholder 1 until review", row.pages === 1);
     check("complete: preview_type none until review, no snippet", row.preview_type === "none" && row.preview_snippet === "");
-    check("complete: metadata + uploader copied from the permit", row.title === "CSC301 Notes" && row.course === "CSC301" && row.uploader_id === "u1" && row.status === "pending");
+    check("complete: metadata + uploader copied from the permit (course stored canonical: CSC301 -> CSC 301, with its key)", row.title === "CSC301 Notes" && row.course === "CSC 301" && row.course_key === "CSC301" && row.uploader_id === "u1" && row.status === "pending");
     check("complete: cloudinary_public_id stored (used for later deletion)", row.cloudinary_public_id === p.upload.fields.public_id && row.cloudinary_resource_type === "raw");
     const n = DB._raw.prepare("SELECT * FROM notifications WHERE resource_id = ?").get(p.intentId);
     check("complete: admin notification created", n && n.recipient_id === null && n.type === "new_upload");

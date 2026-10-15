@@ -10,6 +10,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
   var editNameInput = document.getElementById("editName");
   var editDeptInput = document.getElementById("editDept");
+  // Type-ahead of the department spellings already in use (suggestions only; the server normalises whatever is typed).
+  if (window.SharefAcademic) SharefAcademic.loadOptions().then(function (o) { SharefAcademic.fillDatalist(document.getElementById("departmentSuggestions"), o.departments); });
   var editLevelInput = document.getElementById("editLevel");
   var editUniversityInput = document.getElementById("editUniversity");
   var editFacultyInput = document.getElementById("editFaculty");
@@ -222,6 +224,11 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
           }
 
+          // Prefer what the server STORED (normalised) over what was typed.
+          var saved = data.profile || {};
+          if (saved.fullName) name = saved.fullName;
+          if (saved.department) dept = saved.department;
+          if (saved.university) university = saved.university;
           if (nameHeading && name) nameHeading.textContent = name;
           if (deptLevelText) {
             deptLevelText.textContent = (dept && levelDigits)

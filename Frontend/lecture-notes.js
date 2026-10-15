@@ -2,6 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Real data — fetched from GET /api/resources?type=Lecture Note
     let mockNotes = [];
+    let deptByKey = {}; // departmentKey -> the one spelling shown for it
 
     function timeAgoLabel(isoDate) {
         const diffMs = Date.now() - new Date(isoDate).getTime();
@@ -24,7 +25,9 @@ document.addEventListener('DOMContentLoaded', () => {
             id: r.id,
             title: r.title,
             course: r.course,
+            courseKey: r.courseKey,
             dept: r.department,
+            deptKey: r.departmentKey,
             level: r.level,
             semester: r.semester,
             pages: r.pages,
@@ -153,7 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const res = await authFetch(`${API_BASE}/users/me`);
             const data = await res.json();
-            return data.success ? data.user : null;
+            return data.success ? data.user : null; // includes departmentKey, used by applyProfilePrefill
         } catch (err) {
             console.error('Could not load profile for filter prefill:', err);
             return null;
@@ -164,14 +167,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!profile) return;
 
         if (profile.department) {
-            const hasOption = Array.from(deptFilter.options).some(opt => opt.value === profile.department);
+            // Resolve the profile's department through the shared KEY so "computer science" on the profile selects the
+            // "Computer Science" the notes use, rather than adding a new option that matches nothing.
+            const department = SharefAcademic.displayForProfile(profile, deptByKey);
+            const hasOption = Array.from(deptFilter.options).some(opt => opt.value === department);
             if (!hasOption) {
                 const opt = document.createElement('option');
-                opt.value = profile.department;
-                opt.textContent = profile.department;
+                opt.value = department;
+                opt.textContent = department;
                 deptFilter.appendChild(opt);
             }
-            deptFilter.value = profile.department;
+            deptFilter.value = department;
             deptFilterEnhanced.refresh();
         }
         if (profile.level) {
@@ -186,6 +192,9 @@ document.addEventListener('DOMContentLoaded', () => {
     Promise.all([fetchAllLectureNotes(), fetchProfile()])
         .then(([notes, profile]) => {
             mockNotes = notes;
+            // One spelling per department / course key (each is listed once, and the equality filters just work).
+            deptByKey = SharefAcademic.canonicalizeByKey(mockNotes, 'dept', 'deptKey');
+            SharefAcademic.canonicalizeByKey(mockNotes, 'course', 'courseKey');
             populateDeptOptions();
             populateCourseOptions();
             applyProfilePrefill(profile); // runs after populate, so its added option/selection survives
@@ -236,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const sort = sortOrder.value;
 
         let filtered = mockNotes.filter(note => {
-            const matchSearch = note.title.toLowerCase().includes(query) || note.course.toLowerCase().includes(query);
+            const matchSearch = SharefAcademic.matchesSearch([note.title, note.course], query); // "csc305" finds "CSC 305"
             const matchDept = selectedDept === 'all' || note.dept === selectedDept;
             const matchLevel = selectedLevel === 'all' || note.level === selectedLevel;
             const matchSem = selectedSemester === 'all' || note.semester === selectedSemester;

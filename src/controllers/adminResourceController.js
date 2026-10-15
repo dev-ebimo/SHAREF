@@ -1,3 +1,8 @@
+import { formatFileSize } from "../utils/resourceShape.js";
+import { pageParams } from "../utils/pagination.js";
+import { lagosDayRangeIso } from "../utils/lagosDay.js";
+import { resolveDepartment, courseKey } from "../utils/academic.js";
+import { addDepartmentFilter, addCourseFilter, addSearchFilter, distinctDepartments, distinctCourses } from "../utils/resourceFilters.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { incentiveCascadeForResource } from "../services/referralService.js";
 import { reverseRewardsForResource } from "../services/rewardReversal.js";
@@ -6,15 +11,8 @@ import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
 import { updateResourceMetadataSchema, formatZodErrors } from "../validators/resourceValidators.js";
 
-const REJECTION_REASONS = [
-  "duplicate", "wrong_course", "wrong_dept", "poor_quality",
-  "incomplete", "corrupted", "unsupported", "not_academic", "spam", "other",
-];
+import { REJECTION_REASONS, REJECTION_REASON_LABELS } from "../utils/rejectionReasons.js";
 
-function formatFileSize(bytes) {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -51,17 +49,19 @@ async function shapeAdminResource(c, r, extra = {}) {
 // them — new departments/courses show up automatically as they're uploaded.
 export async function getFilterOptions(c) {
   try {
-    const [{ results: deptRows }, { results: courseRows }] = await Promise.all([
-      c.env.DB.prepare("SELECT DISTINCT department FROM resources WHERE status IN ('approved', 'rejected') ORDER BY department").all(),
-      c.env.DB.prepare("SELECT DISTINCT course FROM resources WHERE status IN ('approved', 'rejected') ORDER BY course").all(),
+    // One entry per department / course regardless of how many spellings exist in the data (grouped by key).
+    const [departments, courses] = await Promise.all([
+      distinctDepartments(c.env.DB, ["approved", "rejected"]),
+      distinctCourses(c.env.DB, ["approved", "rejected"]),
     ]);
 
     return c.json({
       success: true,
-      departments: deptRows.map((r) => r.department),
-      courses: courseRows.map((r) => r.course),
+      departments,
+      courses,
       types: ["Lecture Note", "Past Question", "Assignment Material", "Textbook", "Revision Sheet", "Other"],
       rejectionReasons: REJECTION_REASONS,
+      rejectionReasonLabels: REJECTION_REASON_LABELS,
     });
   } catch (err) {
     console.error("adminResourceController error:", err?.message);
@@ -69,12 +69,6 @@ export async function getFilterOptions(c) {
   }
 }
 
-function dateRangeIso(dateStr) {
-  const start = new Date(dateStr);
-  const end = new Date(dateStr);
-  end.setDate(end.getDate() + 1);
-  return [start.toISOString(), end.toISOString()];
-}
 
 // @route GET /api/admin/resources/approved
 export async function getApprovedResources(c) {
@@ -85,20 +79,20 @@ export async function getApprovedResources(c) {
     const course = c.req.query("course") || "";
     const approvalDate = c.req.query("approvalDate") || "";
     const sort = c.req.query("sort") || "newest";
-    const page = Number(c.req.query("page")) || 1;
-    const limit = Number(c.req.query("limit")) || 20;
+    const { page, limit } = pageParams(c, { defaultLimit: 20, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const conditions = ["r.status = 'approved'"];
     const params = [];
-    if (search) { conditions.push("(r.title LIKE ? OR r.course LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
-    if (department) { conditions.push("r.department = ?"); params.push(department); }
+    addSearchFilter(conditions, params, search);
+    addDepartmentFilter(conditions, params, department);
     if (type) { conditions.push("r.type = ?"); params.push(type); }
-    if (course) { conditions.push("r.course = ?"); params.push(course); }
+    addCourseFilter(conditions, params, course);
     if (approvalDate) {
-      const [start, end] = dateRangeIso(approvalDate);
+      const range = lagosDayRangeIso(approvalDate);
+      if (!range) return c.json({ success: false, message: "approvalDate must be a real date in YYYY-MM-DD format" }, 400);
       conditions.push("r.reviewed_at >= ? AND r.reviewed_at < ?");
-      params.push(start, end);
+      params.push(range[0], range[1]);
     }
     const where = conditions.join(" AND ");
 
@@ -142,20 +136,20 @@ export async function getRejectedResources(c) {
     const reason = c.req.query("reason") || "";
     const rejectionDate = c.req.query("rejectionDate") || "";
     const sort = c.req.query("sort") || "newest";
-    const page = Number(c.req.query("page")) || 1;
-    const limit = Number(c.req.query("limit")) || 20;
+    const { page, limit } = pageParams(c, { defaultLimit: 20, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const conditions = ["r.status = 'rejected'"];
     const params = [];
-    if (search) { conditions.push("(r.title LIKE ? OR r.course LIKE ?)"); params.push(`%${search}%`, `%${search}%`); }
-    if (department) { conditions.push("r.department = ?"); params.push(department); }
+    addSearchFilter(conditions, params, search);
+    addDepartmentFilter(conditions, params, department);
     if (type) { conditions.push("r.type = ?"); params.push(type); }
     if (reason) { conditions.push("r.rejection_reason = ?"); params.push(reason); }
     if (rejectionDate) {
-      const [start, end] = dateRangeIso(rejectionDate);
+      const range = lagosDayRangeIso(rejectionDate);
+      if (!range) return c.json({ success: false, message: "rejectionDate must be a real date in YYYY-MM-DD format" }, 400);
       conditions.push("r.reviewed_at >= ? AND r.reviewed_at < ?");
-      params.push(start, end);
+      params.push(range[0], range[1]);
     }
     const where = conditions.join(" AND ");
     const orderBy = sort === "oldest" ? "r.reviewed_at ASC" : "r.reviewed_at DESC";
@@ -250,6 +244,16 @@ export async function updateResourceMetadata(c) {
       }, 400);
     }
 
+    // The validator has already normalised course / session / level / semester / type. Department is resolved
+    // here because it reuses the spelling already in the database (so an admin typing "comp sci" can't create a
+    // second "Computer Science" that students then fail to match).
+    let deptKey = null;
+    if (incoming.department !== undefined) {
+      const dept = await resolveDepartment(c.env.DB, incoming.department);
+      incoming.department = dept.name;
+      deptKey = dept.key;
+    }
+
     // Only write what actually changed.
     const sets = [];
     const values = [];
@@ -260,6 +264,9 @@ export async function updateResourceMetadata(c) {
       sets.push(`${column} = ?`);
       values.push(incoming[key]);
       changedFields.push(key);
+      // Keep the comparison keys in step with the text they are derived from.
+      if (key === "department") { sets.push("department_key = ?"); values.push(deptKey); }
+      if (key === "course") { sets.push("course_key = ?"); values.push(courseKey(incoming.course)); }
     }
 
     const loadShaped = async () => {
@@ -382,6 +389,19 @@ export async function permanentlyDeleteResource(c) {
     const resource = await c.env.DB.prepare("SELECT * FROM resources WHERE id = ?").bind(id).first();
     if (!resource) return c.json({ success: false, message: "Resource not found" }, 404);
 
+    // Take back any reward paid for this resource FIRST, exactly as "Remove" does. The cascade below nulls the
+    // ledger's link to the resource, so doing this afterwards would be impossible, and deleting an approved
+    // resource used to leave the student's reward standing for material that no longer exists. If the reversal
+    // itself fails we stop here (nothing deleted): the admin can retry, and no money is left in limbo.
+    const user = c.get("user");
+    const undone = await reverseRewardsForResource(c.env.DB, {
+      resourceId: id,
+      adminId: user.id,
+      adminName: await adminDisplayName(c.env.DB, user.id),
+      reason: "Resource permanently deleted by an admin",
+      ts: new Date().toISOString(),
+    });
+
     // Must match the resource_type the file was actually uploaded with —
     // destroying with the wrong type silently no-ops on Cloudinary and
     // leaves the file orphaned. Always "raw" for the main file (see
@@ -409,7 +429,10 @@ export async function permanentlyDeleteResource(c) {
       c.env.DB.prepare("DELETE FROM resources WHERE id = ?").bind(id),
     ]);
 
-    return c.json({ success: true, message: "Resource permanently deleted" });
+    return c.json({
+      success: true,
+      message: undone.count > 0 ? `Resource permanently deleted. ${undone.count} reward(s) paid for it were taken back automatically.` : "Resource permanently deleted",
+    });
   } catch (err) {
     console.error("adminResourceController error:", err?.message);
     return c.json({ success: false, message: "Could not delete resource", error: sanitizeError(c.env, err) }, 500);

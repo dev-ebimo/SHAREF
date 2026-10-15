@@ -1,10 +1,10 @@
+import { formatFileSize } from "../utils/resourceShape.js";
+import { departmentKey, courseKey } from "../utils/academic.js";
+import { rejectionReasonLabel } from "../utils/rejectionReasons.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { rewardChipsForUploads } from "../services/uploadRewards.js";
+import { addDepartmentFilter, addCourseFilter, addSearchFilter, canonicalFilter } from "../utils/resourceFilters.js";
 
-function formatFileSize(bytes) {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 // r.uploader_full_name comes from the JOIN in each query below — D1 has no
 // populate(), so the uploader's name is fetched via an explicit join
@@ -15,7 +15,9 @@ function formatResource(r) {
     title: r.title,
     type: r.type,
     department: r.department,
+    departmentKey: departmentKey(r.department),
     course: r.course,
+    courseKey: courseKey(r.course),
     level: r.level,
     semester: r.semester,
     session: r.session,
@@ -51,13 +53,15 @@ export async function getResources(c) {
 
     const conditions = ["r.status = 'approved'"];
     const params = [];
-    if (department) { conditions.push("r.department = ?"); params.push(department); }
-    if (course) { conditions.push("r.course = ?"); params.push(course); }
-    if (level) { conditions.push("r.level = ?"); params.push(level); }
-    if (semester) { conditions.push("r.semester = ?"); params.push(semester); }
-    if (type) { conditions.push("r.type = ?"); params.push(type); }
-    if (session) { conditions.push("r.session = ?"); params.push(session); }
-    if (search) { conditions.push("r.title LIKE ?"); params.push(`%${search.trim()}%`); }
+    // department / course are matched on their stored KEYS, so every spelling of the same department or course
+    // finds the same resources; level / semester / type / session are normalised to the stored canonical form.
+    addDepartmentFilter(conditions, params, department);
+    addCourseFilter(conditions, params, course);
+    if (level) { conditions.push("r.level = ?"); params.push(canonicalFilter.level(level)); }
+    if (semester) { conditions.push("r.semester = ?"); params.push(canonicalFilter.semester(semester)); }
+    if (type) { conditions.push("r.type = ?"); params.push(canonicalFilter.type(type)); }
+    if (session) { conditions.push("r.session = ?"); params.push(canonicalFilter.session(session)); }
+    addSearchFilter(conditions, params, search);
 
     const orderBy = sort === "popular" ? "r.downloads DESC" : "r.created_at DESC";
     const where = conditions.join(" AND ");
@@ -125,7 +129,7 @@ export async function getMyUploads(c) {
       total,
       page,
       totalPages: Math.max(1, Math.ceil(total / limit)),
-      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: r.rejection_reason, ...(chips.has(r.id) ? { reward: chips.get(r.id) } : {}) })),
+      resources: results.map((r) => ({ ...formatResource(r), rejectionReason: rejectionReasonLabel(r.rejection_reason), ...(chips.has(r.id) ? { reward: chips.get(r.id) } : {}) })),
     });
   } catch (err) {
     console.error("resourceController error:", err?.message);

@@ -1,20 +1,30 @@
+import { pageParams } from "../utils/pagination.js";
+import { distinctStudentDepartments } from "../utils/resourceFilters.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { invalidateAuthCache } from "../middleware/protect.js";
+import { departmentKey, likeContains, normalizeLevel, normalizeMatric, searchTerm } from "../utils/academic.js";
 const ACTIVE_WINDOW_DAYS = 7;
 
 function activeSinceIso() {
   return new Date(Date.now() - ACTIVE_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
 }
 
+// A student's last activity: the later of their last login and their last authenticated request (recorded by
+// protect.js, at most hourly). A login alone is NOT activity - sessions last 7 days.
+const LAST_ACTIVITY_SQL = `NULLIF(MAX(COALESCE(u.last_active_at, ''), COALESCE(u.last_login_at, '')), '')`;
+
 // Same rule everywhere it appears (here and in adminTransactionController.js):
 // suspension (an explicit admin action) always wins; otherwise a student
-// who hasn't logged in within the active window is "inactive". Computed
-// on read rather than stored, so it's never stale — accountStatus itself
+// with no activity within the active window is "inactive". Computed
+// on read rather than stored, so it's never stale - accountStatus itself
 // never actually holds "inactive", nothing else in the app writes that value.
+// 'deleted' only appears where users is LEFT JOINed (a transaction whose account was later deleted keeps its
+// money history but its user_id is NULL); it never applies to a row that has a user.
 const EFFECTIVE_STATUS_CASE = `
   CASE
+    WHEN u.id IS NULL THEN 'deleted'
     WHEN u.account_status = 'suspended' THEN 'suspended'
-    WHEN u.last_login_at IS NULL OR u.last_login_at < ? THEN 'inactive'
+    WHEN ${LAST_ACTIVITY_SQL} IS NULL OR ${LAST_ACTIVITY_SQL} < ? THEN 'inactive'
     ELSE 'active'
   END
 `;
@@ -29,10 +39,9 @@ function formatShortDate(date) {
 // @route GET /api/admin/users/filter-options
 export async function getUserFilterOptions(c) {
   try {
-    const { results } = await c.env.DB.prepare(
-      "SELECT DISTINCT department FROM users WHERE role = 'student' AND department IS NOT NULL ORDER BY department"
-    ).all();
-    return c.json({ success: true, departments: results.map((r) => r.department) });
+    // One entry per department however many spellings exist (grouped by key).
+    const departments = await distinctStudentDepartments(c.env.DB);
+    return c.json({ success: true, departments });
   } catch (err) {
     console.error("adminUserController error:", err?.message);
     return c.json({ success: false, message: "Could not fetch filter options", error: sanitizeError(c.env, err) }, 500);
@@ -47,18 +56,19 @@ export async function getUsers(c) {
     const level = c.req.query("level") || "";
     const status = c.req.query("status") || "";
     const contribution = c.req.query("contribution") || "";
-    const page = Number(c.req.query("page")) || 1;
-    const limit = Number(c.req.query("limit")) || 20;
+    const { page, limit } = pageParams(c, { defaultLimit: 20, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const baseConditions = ["u.role = 'student'"];
     const baseParams = [];
-    if (search) {
-      baseConditions.push("(u.full_name LIKE ? OR u.email LIKE ? OR u.matric_number LIKE ?)");
-      baseParams.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    if (searchTerm(search)) {
+      // LIKE wildcards escaped; matric numbers are stored upper-case with no spaces, so match the term that way too.
+      baseConditions.push("(u.full_name LIKE ? ESCAPE '\\' OR u.email LIKE ? ESCAPE '\\' OR u.matric_number LIKE ? ESCAPE '\\')");
+      baseParams.push(likeContains(search), likeContains(search), likeContains(normalizeMatric(search)));
     }
-    if (department) { baseConditions.push("u.department = ?"); baseParams.push(department); }
-    if (level) { baseConditions.push("u.level = ?"); baseParams.push(level); }
+    // Department is matched on its KEY so every spelling of a department lands in the same filter.
+    if (departmentKey(department)) { baseConditions.push("u.department_key = ?"); baseParams.push(departmentKey(department)); }
+    if (level) { baseConditions.push("u.level = ?"); baseParams.push(normalizeLevel(level)); }
 
     // A CTE, rather than filtering on the computed effective_status/
     // uploads_count directly in WHERE — SQLite doesn't reliably support
@@ -92,7 +102,7 @@ export async function getUsers(c) {
       c.env.DB.prepare(dataSql).bind(activeSince, ...baseParams, ...outerParams, limit, skip).all(),
       c.env.DB.prepare(countSql).bind(activeSince, ...baseParams, ...outerParams).first(),
       c.env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student'").first(),
-      c.env.DB.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'student' AND last_login_at >= ?").bind(activeSince).first(),
+      c.env.DB.prepare(`SELECT COUNT(*) AS n FROM users u WHERE u.role = 'student' AND ${LAST_ACTIVITY_SQL} >= ?`).bind(activeSince).first(),
       c.env.DB.prepare("SELECT COUNT(DISTINCT uploader_id) AS n FROM resources").first(),
     ]);
 
@@ -101,7 +111,7 @@ export async function getUsers(c) {
       success: true,
       users: results.map((u) => ({
         id: u.id, fullName: u.full_name, email: u.email, department: u.department, level: u.level,
-        accountStatus: u.account_status, effectiveStatus: u.effective_status, lastLoginAt: u.last_login_at,
+        accountStatus: u.account_status, effectiveStatus: u.effective_status, lastLoginAt: u.last_login_at, lastActiveAt: u.last_active_at,
         uploadsCount: u.uploads_count, approvedCount: u.approved_count, rejectedCount: u.rejected_count,
       })),
       stats: { totalUsers: totalUsersRow.n, activeThisWeek: activeThisWeekRow.n, contributors: contributorsRow.n },
@@ -129,8 +139,9 @@ export async function getUserProfile(c) {
     const totalDownloads = uploads.reduce((sum, u) => sum + (u.downloads || 0), 0);
 
     const activeSince = activeSinceIso();
+    const lastActivity = [user.last_active_at, user.last_login_at].filter(Boolean).sort().pop() || null;
     const effectiveStatus =
-      user.account_status === "suspended" ? "suspended" : (!user.last_login_at || user.last_login_at < activeSince) ? "inactive" : "active";
+      user.account_status === "suspended" ? "suspended" : (!lastActivity || lastActivity < activeSince) ? "inactive" : "active";
 
     // Only successful transactions count toward these totals — a pending
     // or failed deposit was never actually money in the wallet, and a
@@ -147,7 +158,7 @@ export async function getUserProfile(c) {
       success: true,
       user: {
         id: user.id, fullName: user.full_name, email: user.email, department: user.department, level: user.level,
-        accountStatus: user.account_status, effectiveStatus, lastLoginAt: user.last_login_at,
+        accountStatus: user.account_status, effectiveStatus, lastLoginAt: user.last_login_at, lastActiveAt: user.last_active_at,
         joinedDate: formatJoinDate(user.created_at),
         uploadsCount, approvedCount, rejectedCount, approvalRate, totalDownloads,
         totalDeposited: depositRow.total, totalSpent: purchaseRow.total,
@@ -217,8 +228,7 @@ export async function reactivateUser(c) {
 // since nothing here can be looked up live anymore.
 export async function getDeletedAccountLogs(c) {
   try {
-    const page = Number(c.req.query("page")) || 1;
-    const limit = Number(c.req.query("limit")) || 20;
+    const { page, limit } = pageParams(c, { defaultLimit: 20, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const [{ results }, countRow] = await Promise.all([

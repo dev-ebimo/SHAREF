@@ -1,28 +1,38 @@
 import { z } from "zod";
+import { collapse, normalizeCourse, normalizeSession, normalizeLevel, normalizeSemester, normalizeResourceType, LEVELS, SEMESTERS, RESOURCE_TYPES } from "../utils/academic.js";
+
+// Everything typed by hand is normalised here, once, so every writer (student upload, admin edit) stores the same
+// canonical text and every filter/search can rely on it. Department is canonicalised in the controller because it
+// reuses the spelling already in the database.
+const sessionField = z
+  .string()
+  .trim()
+  .min(1, "Session is required")
+  .transform(normalizeSession)
+  .refine((v) => v !== null, { message: "Session must look like 2024/2025" });
 
 export const uploadResourceSchema = z.object({
-  title: z.string().trim().min(1, "Title is required"),
+  title: z.string().trim().min(1, "Title is required").max(300, "Title is too long (300 characters max)").transform(collapse),
   type: z
     .string()
     .trim()
     .min(1, "Resource type is required")
-    .pipe(
-      z.enum(["Lecture Note", "Past Question", "Assignment Material", "Textbook", "Revision Sheet", "Other"], {
-        message: "Please select a valid resource type",
-      })
-    ),
-  department: z.string().trim().min(1, "Department is required"),
-  course: z.string().trim().min(1, "Course is required"),
+    .transform(normalizeResourceType)
+    .pipe(z.enum(RESOURCE_TYPES, { message: "Please select a valid resource type" })),
+  department: z.string().trim().min(1, "Department is required").max(150, "Department is too long").transform(collapse),
+  course: z.string().trim().min(1, "Course is required").max(60, "Course is too long").transform(normalizeCourse),
   level: z
     .string()
     .min(1, "Level is required")
-    .pipe(z.enum(["100", "200", "300", "400", "500", "600"], { message: "Please select a valid level" })),
+    .transform(normalizeLevel)
+    .pipe(z.enum(LEVELS, { message: "Please select a valid level" })),
   semester: z
     .string()
     .min(1, "Semester is required")
-    .pipe(z.enum(["First", "Second"], { message: "Please select a valid semester" })),
-  session: z.string().trim().min(1, "Session is required"),
-  description: z.string().trim().optional(),
+    .transform(normalizeSemester)
+    .pipe(z.enum(SEMESTERS, { message: "Please select a valid semester" })),
+  session: sessionField,
+  description: z.string().trim().max(5000, "Description is too long (5000 characters max)").optional(),
 });
 
 // Admin edit of an uploaded resource's metadata (pending, approved or rejected).
@@ -34,10 +44,6 @@ export const uploadResourceSchema = z.object({
 export const MAX_EDIT_PAGES = 1000;
 export const updateResourceMetadataSchema = uploadResourceSchema
   .extend({
-    title: z.string().trim().min(1, "Title is required").max(300, "Title is too long (300 characters max)"),
-    department: z.string().trim().min(1, "Department is required").max(150, "Department is too long"),
-    course: z.string().trim().min(1, "Course is required").max(60, "Course is too long"),
-    session: z.string().trim().min(1, "Session is required").max(30, "Session is too long"),
     description: z.string().trim().max(5000, "Description is too long (5000 characters max)"),
     pages: z
       .number({ message: "Page count must be a number" })

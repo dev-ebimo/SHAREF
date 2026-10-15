@@ -1,3 +1,4 @@
+import { rejectionReasonLabel } from "../utils/rejectionReasons.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 function shape(n) {
   if (n.type === "announcement") {
@@ -16,7 +17,7 @@ function shape(n) {
     title: n.r_title,
     course: n.r_course,
     type: n.type,
-    rejectionReason: n.type === "resource_rejected" ? n.r_rejection_reason : undefined,
+    rejectionReason: n.type === "resource_rejected" ? rejectionReasonLabel(n.r_rejection_reason) : undefined,
     unread: !!n.unread,
     createdAt: n.created_at,
   };

@@ -32,6 +32,12 @@ document.addEventListener("DOMContentLoaded", function () {
     el.setAttribute("aria-checked", isOn ? "true" : "false");
   }
 
+  // Type-ahead: offer the department spellings already in use, so a student picks "Computer Science" instead of
+  // inventing "comp. sci". Suggestions only - anything can still be typed, and the server normalises it.
+  SharefAcademic.loadOptions().then(function (o) {
+    SharefAcademic.fillDatalist(document.getElementById("departmentSuggestions"), o.departments);
+  });
+
   function loadSettings() {
     authFetch(API_BASE + "/users/me")
       .then(function (res) { return res.json(); })
@@ -131,7 +137,12 @@ document.addEventListener("DOMContentLoaded", function () {
         // Reflect the server's verdict on whether the email actually
         // changed (and therefore needs re-verification), not just our own
         // client-side guess.
-        window.__settingsOriginalEmail = payload.email;
+        // Show what was actually STORED (the server normalises email, department, name...), not what was typed.
+        var saved = data.profile || {};
+        if (saved.email && emailInput0) emailInput0.value = saved.email;
+        if (saved.department && departmentInput) departmentInput.value = saved.department;
+        if (saved.fullName && fullNameInput) fullNameInput.value = saved.fullName;
+        window.__settingsOriginalEmail = saved.email || payload.email;
         if (emailStatus && emailStatusText) {
           emailStatus.classList.toggle("is-unverified", !!data.emailChanged);
           emailStatusText.textContent = data.emailChanged ? "Unverified — check your inbox" : "Verified";

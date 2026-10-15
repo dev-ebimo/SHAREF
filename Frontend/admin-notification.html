@@ -243,6 +243,24 @@
                     <input type="number" id="qrPages" min="1" max="1000" step="1" inputmode="numeric" disabled />
                 </div>
                 <p class="review-pages-note" id="qrPagesNote">Counting pages…</p>
+
+                <div class="review-pages-row">
+                    <label for="qrReason">Reason (needed only to reject)</label>
+                    <select id="qrReason">
+                        <option value="">Select a reason…</option>
+                        <option value="duplicate">Duplicate resource</option>
+                        <option value="wrong_course">Wrong course code</option>
+                        <option value="wrong_dept">Wrong department</option>
+                        <option value="poor_quality">Poor quality</option>
+                        <option value="incomplete">Incomplete material</option>
+                        <option value="corrupted">Corrupted or unreadable file</option>
+                        <option value="unsupported">Unsupported file type</option>
+                        <option value="not_academic">Not academic material</option>
+                        <option value="spam">Spam or irrelevant</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <p class="review-pages-note">The student is shown this reason.</p>
             </div>
 
             <div class="sticky-action-bar">

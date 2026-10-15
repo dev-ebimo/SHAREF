@@ -229,7 +229,7 @@ async function run() {
     const token = await tokenFor(env, "s1");
 
     const wrongRes = await patchAuthed("/api/users/me/password", { currentPassword: "wrongpassword", newPassword: "newpassword2" }, token, env);
-    check("change password: wrong current password -> 401", wrongRes.status === 401);
+    check("change password: wrong current password -> 400 (not 401, which would log the user out)", wrongRes.status === 400);
 
     const res = await patchAuthed("/api/users/me/password", { currentPassword: "oldpassword1", newPassword: "newpassword2" }, token, env);
     check("change password: 200 status", res.status === 200);

@@ -55,9 +55,11 @@ document.addEventListener("DOMContentLoaded", () => {
     toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 3000);
   }
 
-  /* ---- Populate department options dynamically (reuses the resources filter-options endpoint) ---- */
+  /* ---- Populate department options dynamically ----
+     From the STUDENTS' departments (one entry per department however it was typed), not from the resources list:
+     a department that has students but no uploaded resources yet must still be targetable. */
   const deptSelect = document.getElementById("annDepartments");
-  authFetch(`${API_BASE}/admin/resources/filter-options`)
+  authFetch(`${API_BASE}/admin/users/filter-options`)
     .then((res) => res.json())
     .then((data) => {
       if (!data.success) return;

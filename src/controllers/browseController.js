@@ -1,6 +1,9 @@
+import { pageParams } from "../utils/pagination.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { shapeResource } from "../utils/resourceShape.js";
 import { buildPdfHalfPagePreviewUrl } from "../utils/cloudinaryPreview.js";
+import { departmentKey } from "../utils/academic.js";
+import { addSearchFilter, canonicalFilter } from "../utils/resourceFilters.js";
 
 // @route GET /api/resources/recent
 // Powers the "Recently Added" feed on the dashboard — only resources
@@ -9,7 +12,7 @@ import { buildPdfHalfPagePreviewUrl } from "../utils/cloudinaryPreview.js";
 // so "Recently Added" doesn't quietly become "Added at some point".
 export async function getRecentFeed(c) {
   try {
-    const limit = Number(c.req.query("limit")) || 10;
+    const { limit } = pageParams(c, { defaultLimit: 10, maxLimit: 50 });
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
     const { results } = await c.env.DB.prepare(
@@ -41,18 +44,24 @@ export async function getRecommended(c) {
     if (!me?.department || !me?.level) {
       return c.json({ success: true, resources: [] });
     }
+    // Match on the department KEY (not the typed text), so "computer science", "Computer  Science" and
+    // "Computer Science Dept." are all the same department: a student is never shown an empty list just because
+    // they spelled their department differently from whoever uploaded the material.
+    // Derived from the text in code (not read from the stored column) so it always follows the current alias rules.
+    const myDepartmentKey = departmentKey(me.department);
+    const myLevel = canonicalFilter.level(me.level);
 
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { results } = await c.env.DB.prepare(
       `SELECT r.*, COALESCE(dl.recent_downloads, 0) AS recentDownloads
          FROM resources r
          LEFT JOIN (
-           SELECT resource_id, COUNT(*) AS recent_downloads
+           SELECT resource_id, COUNT(DISTINCT user_id) AS recent_downloads
              FROM download_logs
             WHERE created_at >= ?
             GROUP BY resource_id
          ) dl ON dl.resource_id = r.id
-        WHERE r.status = 'approved' AND r.department = ? AND r.level = ?
+        WHERE r.status = 'approved' AND r.department_key = ? AND r.level = ?
           AND NOT EXISTS (
             SELECT 1 FROM transactions t
              WHERE t.user_id = ? AND t.resource_id = r.id
@@ -61,7 +70,7 @@ export async function getRecommended(c) {
         ORDER BY recentDownloads DESC, r.created_at DESC
         LIMIT ?`
     )
-      .bind(since, me.department, me.level, user.id, limit)
+      .bind(since, myDepartmentKey, myLevel, user.id, limit)
       .all();
 
     const resources = results.map((r) => ({ ...shapeResource(r), recentDownloads: r.recentDownloads }));
@@ -81,12 +90,12 @@ export async function getRecommended(c) {
 // that aren't theirs.
 export async function getTrending(c) {
   try {
-    const limit = Number(c.req.query("limit")) || 6;
+    const { limit } = pageParams(c, { defaultLimit: 6, maxLimit: 24 });
     const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
     const user = c.get("user");
 
     const requester = await c.env.DB.prepare("SELECT department FROM users WHERE id = ?").bind(user.id).first();
-    const department = requester?.department;
+    const department = requester?.department ? departmentKey(requester.department) : null;
 
     if (!department) {
       return c.json({ success: true, resources: [] });
@@ -100,10 +109,10 @@ export async function getTrending(c) {
       `SELECT r.*, dl.recent_downloads AS recentDownloads
        FROM resources r
        JOIN (
-         SELECT resource_id, COUNT(*) AS recent_downloads
+         SELECT resource_id, COUNT(DISTINCT user_id) AS recent_downloads
          FROM download_logs
          WHERE created_at >= ?
-           AND resource_id IN (SELECT id FROM resources WHERE status = 'approved' AND department = ?)
+           AND resource_id IN (SELECT id FROM resources WHERE status = 'approved' AND department_key = ?)
          GROUP BY resource_id
        ) dl ON dl.resource_id = r.id
        WHERE r.status = 'approved'
@@ -134,21 +143,19 @@ export async function searchPastQuestions(c) {
     const conditions = ["status = 'approved'", "type = 'Past Question'"];
     const params = [];
 
-    if (search) {
-      conditions.push("(course LIKE ? OR title LIKE ?)");
-      params.push(`%${search}%`, `%${search}%`);
-    }
+    // Title or course; "csc305", "CSC 305" and "csc-305" all find course CSC 305 (matched on the course key).
+    addSearchFilter(conditions, params, search, "");
     if (session !== "all") {
       conditions.push("session = ?");
-      params.push(session);
+      params.push(canonicalFilter.session(session));
     }
     if (semester !== "all") {
       conditions.push("semester = ?");
-      params.push(semester);
+      params.push(canonicalFilter.semester(semester));
     }
     if (level !== "all") {
       conditions.push("level = ?");
-      params.push(level);
+      params.push(canonicalFilter.level(level));
     }
 
     let orderBy = "created_at DESC"; // newest first (default)

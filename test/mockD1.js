@@ -8,6 +8,26 @@ export function createMockD1(schemaSql) {
   const raw = new DatabaseSync(":memory:");
   raw.exec(schemaSql);
 
+  // TEST-ONLY convenience: many seeders insert rows with raw SQL and know nothing about the comparison-key
+  // columns (department_key / course_key). This fills them with the SIMPLE form for such rows only
+  // (WHEN the key is NULL). Application code always sets the exact keys itself, and the consistency tests use
+  // deliberately messy input ("  Computer   SCIENCE ") so a missing explicit key can't hide behind this.
+  raw.exec(`
+    CREATE TRIGGER test_fill_resource_keys AFTER INSERT ON resources
+    WHEN NEW.department_key IS NULL OR NEW.course_key IS NULL
+    BEGIN
+      UPDATE resources SET
+        department_key = COALESCE(NEW.department_key, lower(trim(NEW.department))),
+        course_key = COALESCE(NEW.course_key, upper(replace(replace(NEW.course, ' ', ''), '-', '')))
+      WHERE id = NEW.id;
+    END;
+    CREATE TRIGGER test_fill_user_keys AFTER INSERT ON users
+    WHEN NEW.department IS NOT NULL AND NEW.department_key IS NULL
+    BEGIN
+      UPDATE users SET department_key = lower(trim(NEW.department)) WHERE id = NEW.id;
+    END;
+  `);
+
   return {
     prepare(sql) {
       return {

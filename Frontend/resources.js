@@ -21,7 +21,9 @@ document.addEventListener("DOMContentLoaded", function () {
       title: r.title,
       courseCode: r.course,
       courseName: r.course,
+      courseKey: r.courseKey,
       department: r.department,
+      departmentKey: r.departmentKey,
       semester: r.semester,
       type: r.type,
       fileType: (r.fileExtension || "").toUpperCase(),
@@ -130,6 +132,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // 2. DEPARTMENT -> COURSE MAP (keeps the Course filter relevant)
   // ==========================================================================
   var coursesByDepartment = {};
+  var deptByKey = {};
   function buildCourseMap() {
     coursesByDepartment = {};
     RESOURCES.forEach(function (r) {
@@ -196,10 +199,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (state.type !== "all" && r.type !== state.type) return false;
       if (state.view === "recent" && r.uploadedDaysAgo > 7) return false;
 
-      if (query) {
-        var haystack = (r.title + " " + r.courseCode + " " + r.courseName + " " + r.type).toLowerCase();
-        if (haystack.indexOf(query) === -1) return false;
-      }
+      // Spacing/punctuation-tolerant: "csc305" finds "CSC 305".
+      if (query && !SharefAcademic.matchesSearch([r.title, r.courseCode, r.courseName, r.type], query)) return false;
       return true;
     });
 
@@ -623,13 +624,19 @@ document.addEventListener("DOMContentLoaded", function () {
     try {
       var res = await authFetch(API_BASE + "/users/me");
       var data = await res.json();
-      return (data.success && data.user.department) ? data.user.department : null;
+      // Return the whole profile so the department can be matched by KEY (see applyDepartmentPrefill).
+      return (data.success && data.user.department) ? data.user : null;
     } catch (err) {
       return null;
     }
   }
 
-  function applyDepartmentPrefill(department) {
+  function applyDepartmentPrefill(profile) {
+    if (!profile) return;
+    // The profile department may be spelled differently from the one the resources use ("computer science" vs
+    // "Computer Science"). Resolve it through the shared key so the student lands on THEIR department's resources
+    // instead of a new, empty option.
+    var department = SharefAcademic.displayForProfile(profile, deptByKey);
     if (!department) return;
     var hasOption = Array.prototype.some.call(departmentSelect.options, function (opt) {
       return opt.value === department;
@@ -655,6 +662,10 @@ document.addEventListener("DOMContentLoaded", function () {
       RESOURCES = results[0];
       bookmarkedIds = results[1];
       var profileDepartment = results[2];
+      // One spelling per department / course key, so each shows once in the filters and equality filters just work.
+      deptByKey = SharefAcademic.canonicalizeByKey(RESOURCES, "department", "departmentKey");
+      SharefAcademic.canonicalizeByKey(RESOURCES, "courseCode", "courseKey");
+      RESOURCES.forEach(function (r) { r.courseName = r.courseCode; });
       buildCourseMap();
       populateDepartmentOptions();
       departmentSelectEnhanced.refresh();

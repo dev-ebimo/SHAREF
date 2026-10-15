@@ -264,13 +264,16 @@ export async function paystackWebhook(c) {
   }
 }
 
+// A repeat download of something the student already owns. It is logged (the "downloaded on" date in My Downloads
+// comes from this log) but it does NOT bump the resource's public `downloads` counter: that number means "how many
+// students have this", so one student re-downloading their own copy ten times used to make a resource look ten
+// times as popular and skewed Popular sorting. The counter goes up once, when the purchase/first download happens
+// (see chargeForDownload).
 export async function recordDownloadOnly(c, resourceId, userId) {
   const ts = nowIso();
-  await c.env.DB.batch([
-    c.env.DB.prepare("UPDATE resources SET downloads = downloads + 1, updated_at = ? WHERE id = ?").bind(ts, resourceId),
-    c.env.DB.prepare("INSERT INTO download_logs (id, user_id, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-      .bind(generateId(), userId, resourceId, ts, ts),
-  ]);
+  await c.env.DB.prepare("INSERT INTO download_logs (id, user_id, resource_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+    .bind(generateId(), userId, resourceId, ts, ts)
+    .run();
 }
 
 async function ownedResponse(c, resourceId, userId) {

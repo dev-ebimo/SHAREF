@@ -6,6 +6,7 @@ import { inspectRemoteFile, matchesMagic } from "../utils/fileChecks.js";
 import { purgeStaleUploads } from "../jobs/purgeStaleUploads.js";
 import { formatFileSize } from "../utils/resourceShape.js";
 import { resolveBountyForUpload } from "../services/bountyService.js";
+import { resolveDepartment, departmentKey, courseKey } from "../utils/academic.js";
 
 // Direct-to-Cloudinary upload, in two cheap Worker calls:
 //   1. POST /api/resources/upload/permit   -> validate metadata, hand back a signed permit
@@ -20,6 +21,10 @@ const MAX_UPLOAD_BYTES = 8 * 1024 * 1024; // comfortably under Cloudinary's free
 const MAX_ORIGINAL_BYTES = 200 * 1024 * 1024; // sanity bound on the (informational) pre-compression size
 const PERMIT_TTL_MINUTES = 30;
 const MAX_LIVE_PERMITS_PER_USER = 3;
+// A permit that is still unfinished this long after it was issued is treated as abandoned (an upload of the
+// biggest allowed file takes a few minutes at worst), so a few failed attempts can't lock a student out for the
+// full 30-minute permit lifetime.
+const ABANDONED_AFTER_MINUTES = 10;
 
 function extOf(fileName) {
   const i = fileName.lastIndexOf(".");
@@ -77,9 +82,21 @@ export async function requestUploadPermit(c) {
 
     // Bound how many unfinished uploads one account can have in flight, so a
     // permit can't be farmed to fill our Cloudinary storage with junk.
-    const live = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM upload_intents WHERE user_id = ? AND expires_at >= ?")
-      .bind(user.id, nowIso)
-      .first();
+    const countLive = () =>
+      c.env.DB.prepare("SELECT COUNT(*) AS n FROM upload_intents WHERE user_id = ? AND expires_at >= ?").bind(user.id, nowIso).first();
+    let live = await countLive();
+    if (live.n >= MAX_LIVE_PERMITS_PER_USER) {
+      // Failed or abandoned attempts (closed tab, dropped connection) used to hold their slot until the permit
+      // expired 30 minutes later, locking the student out of uploading. Reclaim the ones that are clearly stale.
+      const staleBefore = new Date(now.getTime() - ABANDONED_AFTER_MINUTES * 60 * 1000).toISOString();
+      const { results: stale } = await c.env.DB.prepare(
+        "SELECT id, public_id FROM upload_intents WHERE user_id = ? AND created_at < ? ORDER BY created_at LIMIT ?"
+      )
+        .bind(user.id, staleBefore, MAX_LIVE_PERMITS_PER_USER)
+        .all();
+      for (const intent of stale || []) await rejectIntent(c, intent);
+      if ((stale || []).length) live = await countLive();
+    }
     if (live.n >= MAX_LIVE_PERMITS_PER_USER) {
       return c.json(
         { success: false, message: "You already have uploads in progress. Please finish them or wait a few minutes, then try again." },
@@ -88,8 +105,13 @@ export async function requestUploadPermit(c) {
     }
 
     // Optional: the request ("bounty") this upload answers. Silently dropped unless valid.
-    const bountyId = await resolveBountyForUpload(c.env.DB, body.bountyId, parsed.data.course);
-    const metadata = bountyId ? { ...parsed.data, bountyId } : parsed.data;
+    const bountyId = await resolveBountyForUpload(c.env.DB, body.bountyId, { course: parsed.data.course, type: parsed.data.type, level: parsed.data.level });
+
+    // Canonical department spelling (reusing the one already in use) and the comparison keys every filter,
+    // search and "for your department" match is based on. Stored with the intent so completion needs no recompute.
+    const dept = await resolveDepartment(c.env.DB, parsed.data.department);
+    const canonical = { ...parsed.data, department: dept.name, departmentKey: dept.key, courseKey: courseKey(parsed.data.course) };
+    const metadata = bountyId ? { ...canonical, bountyId } : canonical;
 
     const id = generateId();
     // The public_id (storage path) is chosen here, never by the client. For raw
@@ -189,12 +211,14 @@ export async function completeUpload(c) {
           `INSERT INTO resources
             (id, title, type, department, course, level, semester, session, description, uploader_id,
              file_name, file_url, cloudinary_public_id, cloudinary_resource_type, file_size_bytes, file_extension,
-             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id, original_size_bytes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?, ?)`
+             pages, preview_type, preview_snippet, preview_message, created_at, updated_at, bounty_id, original_size_bytes,
+             department_key, course_key)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'raw', ?, ?, 1, 'none', '', '', ?, ?, ?, ?, ?, ?)`
         ).bind(
           intent.id, meta.title, meta.type, meta.department, meta.course, meta.level, meta.semester, meta.session,
           meta.description || "", user.id, intent.file_name, buildRawFileUrl(c.env, intent.public_id), intent.public_id,
-          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null, intent.original_size ?? null
+          info.size, intent.file_extension, timestamp, timestamp, meta.bountyId || null, intent.original_size ?? null,
+          meta.departmentKey ?? departmentKey(meta.department), meta.courseKey ?? courseKey(meta.course)
         ),
         c.env.DB.prepare(
           "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, NULL, 'new_upload', 1, ?, ?)"
@@ -212,5 +236,25 @@ export async function completeUpload(c) {
   } catch (err) {
     console.error("completeUpload failed:", err?.message);
     return c.json({ success: false, message: "Could not finish the upload", error: sanitizeError(c.env, err) }, 500);
+  }
+}
+
+// @route POST /api/resources/upload/cancel   { intentId }
+// The browser calls this when the direct-to-Cloudinary upload fails, so the half-finished permit (and any partial
+// file) is released immediately instead of occupying one of the student's three slots until it expires.
+// Idempotent and safe to call twice: it only ever touches the caller's own, not-yet-completed intents.
+export async function cancelUpload(c) {
+  try {
+    const body = await c.req.json().catch(() => null);
+    const intentId = body && typeof body.intentId === "string" ? body.intentId : "";
+    if (!intentId) return c.json({ success: false, message: "intentId is required" }, 400);
+
+    const user = c.get("user");
+    const intent = await c.env.DB.prepare("SELECT id, public_id FROM upload_intents WHERE id = ? AND user_id = ?").bind(intentId, user.id).first();
+    if (intent) await rejectIntent(c, intent);
+    return c.json({ success: true });
+  } catch (err) {
+    console.error("cancelUpload failed:", err?.message);
+    return c.json({ success: false, message: "Could not cancel the upload", error: sanitizeError(c.env, err) }, 500);
   }
 }

@@ -1,19 +1,20 @@
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { normalizeEmail } from "../utils/normalizeEmail.js";
+import { collapse, canonicalName, normalizeMatric, normalizeLevel, normalizeGender, LEVELS } from "../utils/academic.js";
 
 // Every field optional (this is a partial-update endpoint), but if a field
 // IS sent, it has to actually be non-empty/valid — matches the original's
 // `.optional().trim().notEmpty()` combination exactly.
 export const updateProfileSchema = z.object({
-  fullName: z.string().trim().min(1, "Full name cannot be empty").optional(),
+  fullName: z.string().trim().min(1, "Full name cannot be empty").max(120, "Full name is too long").transform(collapse).optional(),
   email: z.string().trim().email("Please enter a valid email address").transform(normalizeEmail).optional(),
-  department: z.string().trim().min(1, "Department cannot be empty").optional(),
-  level: z.enum(["100", "200", "300", "400", "500", "600"], { message: "Please select a valid level" }).optional(),
-  university: z.string().trim().min(1, "University cannot be empty").optional(),
-  faculty: z.string().trim().min(1, "Faculty cannot be empty").optional(),
-  matricNumber: z.string().trim().min(1, "Matric number cannot be empty").optional(),
-  gender: z.enum(["Male", "Female", "Other"], { message: "Please select a valid gender" }).optional(),
+  department: z.string().trim().min(1, "Department cannot be empty").max(150, "Department is too long").transform(collapse).optional(), // canonical spelling resolved in the controller
+  level: z.string().trim().transform(normalizeLevel).pipe(z.enum(LEVELS, { message: "Please select a valid level" })).optional(),
+  university: z.string().trim().min(1, "University cannot be empty").max(150, "University is too long").transform(canonicalName).optional(),
+  faculty: z.string().trim().min(1, "Faculty cannot be empty").max(150, "Faculty is too long").transform(canonicalName).optional(),
+  matricNumber: z.string().trim().min(1, "Matric number cannot be empty").max(40, "Matric number is too long").transform(normalizeMatric).optional(),
+  gender: z.string().trim().transform(normalizeGender).pipe(z.enum(["Male", "Female", "Other"], { message: "Please select a valid gender" })).optional(),
 });
 
 export const changePasswordSchema = z.object({

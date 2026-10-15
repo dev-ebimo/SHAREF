@@ -228,6 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Approving needs a confirmed page count, so lock it until analysis is done.
     qrPagesInput.value = '';
+    document.getElementById('qrReason').value = ''; // a rejection reason is chosen fresh for every review
     qrPagesInput.disabled = true;
     qrApproveBtn.disabled = true;
     qrPagesNote.classList.remove('warn');
@@ -322,10 +323,18 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('qrReject').addEventListener('click', () => {
     if (!currentReviewId) return;
     const id = currentReviewId;
+    // A reason is required: the student is shown it, and there is no way to add one afterwards.
+    const reasonSelect = document.getElementById('qrReason');
+    const reason = reasonSelect.value;
+    if (!reason) {
+      alert('Choose a reason for rejecting this upload — the student will see it.');
+      reasonSelect.focus();
+      return;
+    }
     authFetch(`${API_BASE}/admin/notifications/${id}/reject`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}), // reason is optional from the quick-review flow — logged properly from Rejected Resources
+      body: JSON.stringify({ reason: reason }),
     })
       .then(res => res.json().then(data => ({ status: res.status, data })))
       .then(({ data }) => {
@@ -335,7 +344,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         notifications = notifications.filter(n => n.id !== id);
         quickReviewModal.classList.add('hidden');
-        alert('Resource rejected. Head to Rejected Resources to log a reason.');
+        alert('Resource rejected. The student has been told why.');
         renderFeed();
       })
       .catch(err => {

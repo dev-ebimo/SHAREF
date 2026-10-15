@@ -134,6 +134,14 @@ const consistent = (DB) => all(DB, "SELECT id FROM users").every(({ id }) => {
   pend(DB, "m1", { course: "CSC 305", bountyId: "WRONG" });
   check("request: a request for a DIFFERENT course is never paid (standard instead)", (await approve(env, A1, "m1", { rewardTier: "bounty" })).body.reward.amount === 100);
   seedBounty(DB, { id: "LATE", course: "CSC 400", reward: 180, expires: iso(1) }); // closed yesterday
+  seedBounty(DB, { id: "WLVL", course: "CSC 307", level: "200 Level", reward: 777, max: 1, expires: iso(-5) });
+  seedBounty(DB, { id: "WTYP", course: "CSC 308", type: "Lecture Notes", reward: 777, max: 1, expires: iso(-5) });
+  pend(DB, "wl1", { course: "CSC 307", bountyId: "WLVL" }); // upload is level 300, request wants 200
+  pend(DB, "wt1", { course: "CSC 308", bountyId: "WTYP" }); // upload is a Past Question, request wants Lecture Notes
+  const wl = await approve(env, A1, "wl1", { rewardTier: "bounty" });
+  const wt = await approve(env, A1, "wt1", { rewardTier: "bounty" });
+  check("request: same course but WRONG LEVEL never earns the request reward (standard instead), slot untouched", wl.body.reward.amount === 100 && rows(DB, "resource_id='wl1'")[0].tier === "standard" && one(DB, "SELECT paid FROM bounties WHERE id='WLVL'").paid === 0);
+  check("request: same course but WRONG TYPE never earns the request reward (standard instead), slot untouched", wt.body.reward.amount === 100 && rows(DB, "resource_id='wt1'")[0].tier === "standard" && one(DB, "SELECT paid FROM bounties WHERE id='WTYP'").paid === 0);
   pend(DB, "l1", { course: "CSC 400", bountyId: "LATE", createdAt: iso(3) }); // uploaded while it was still open
   check("request: judged on UPLOAD time, so a slow moderator can't make a student miss the deadline", (await approve(env, A1, "l1", { rewardTier: "bounty" })).body.reward.amount === 180);
   seedBounty(DB, { id: "LATE2", course: "CSC 401", reward: 180, expires: iso(1) });

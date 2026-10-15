@@ -7,6 +7,8 @@ import { generateId } from "../utils/id.js";
 import { sendVerificationEmail } from "../services/emailService.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryUpload.js";
 import { invalidateAuthCache } from "../middleware/protect.js";
+import { resolveDepartment, departmentKey } from "../utils/academic.js";
+import { normalizeEmail } from "../utils/normalizeEmail.js";
 
 const OTP_EXPIRY_MINUTES = 10;
 
@@ -36,7 +38,8 @@ export async function getMyProfile(c) {
       user: {
         id: user.id, fullName: user.full_name, email: user.email, isVerified: !!user.is_verified,
         matricNumber: user.matric_number, university: user.university, faculty: user.faculty,
-        department: user.department, level: user.level, gender: user.gender, role: user.role,
+        department: user.department, departmentKey: user.department ? departmentKey(user.department) : null,
+        level: user.level, gender: user.gender, role: user.role,
         preferences,
       },
     });
@@ -47,54 +50,82 @@ export async function getMyProfile(c) {
 }
 
 // @route PATCH /api/users/me
+// Uses the VALIDATED body (c.req.valid), never the raw one. The validator is what normalises the email
+// (lower-case, Gmail dots/+tags), trims text and canonicalises matric number / university / faculty; reading
+// the raw body here used to store whatever was typed, so an email saved as "John.Doe@Gmail.com" could no
+// longer log in (login looks up the normalised form).
 export async function updateMyProfile(c) {
   try {
-    const body = await c.req.json();
-    const { fullName, email, department, level, university, faculty, matricNumber, gender } = body;
+    const { fullName, email, department, level, university, faculty, matricNumber, gender } = c.req.valid("json");
     const userId = c.get("user").id;
 
     const user = await c.env.DB.prepare("SELECT * FROM users WHERE id = ?").bind(userId).first();
     if (!user) return c.json({ success: false, message: "User not found" }, 404);
 
     if (matricNumber && matricNumber !== user.matric_number) {
-      const existing = await c.env.DB.prepare("SELECT id FROM users WHERE matric_number = ? AND id != ?").bind(matricNumber, userId).first();
+      const existing = await c.env.DB.prepare("SELECT id FROM users WHERE upper(replace(matric_number, ' ', '')) = ? AND id != ?").bind(matricNumber, userId).first();
       if (existing) return c.json({ success: false, message: "That matric number is already registered to another account" }, 409);
     }
 
+    // "Changed" means changed AFTER normalisation. A legacy row stored as "John@Gmail.com" saving its own
+    // address again is not a change (and is quietly healed to the normalised form, without re-verification).
     let emailChanged = false;
     let otp = null;
     let otpHash = null;
+    let nextEmail = user.email;
     if (email && email !== user.email) {
       const existing = await c.env.DB.prepare("SELECT id FROM users WHERE email = ? AND id != ?").bind(email, userId).first();
       if (existing) return c.json({ success: false, message: "That email is already in use" }, 409);
-      emailChanged = true;
-      otp = generateOTP();
-      otpHash = await hashOtp(c.env, userId, "verify", otp);
+      nextEmail = email;
+      if (email !== normalizeEmail(user.email)) {
+        emailChanged = true;
+        otp = generateOTP();
+        otpHash = await hashOtp(c.env, userId, "verify", otp);
+      }
+    }
+
+    // Department: canonical spelling (reusing the one already in use) + the key every filter matches on.
+    let nextDepartment = user.department;
+    let nextDepartmentKey = user.department ? departmentKey(user.department) : null;
+    if (department) {
+      const dept = await resolveDepartment(c.env.DB, department);
+      nextDepartment = dept.name;
+      nextDepartmentKey = dept.key;
     }
 
     const timestamp = nowIso();
-    await c.env.DB.prepare(
-      `UPDATE users SET
-        full_name = ?, department = ?, level = ?, university = ?, faculty = ?, gender = ?, matric_number = ?,
-        email = ?, is_verified = ?, verification_otp = ?, verification_otp_expires = ?, verification_otp_attempts = 0, updated_at = ?
-       WHERE id = ?`
-    )
-      .bind(
-        fullName || user.full_name,
-        department || user.department,
-        level || user.level,
-        university || user.university,
-        faculty || user.faculty,
-        gender || user.gender,
-        matricNumber || user.matric_number,
-        emailChanged ? email : user.email,
-        emailChanged ? 0 : user.is_verified,
-        emailChanged ? otpHash : user.verification_otp,
-        emailChanged ? new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString() : user.verification_otp_expires,
-        timestamp,
-        userId
+    try {
+      await c.env.DB.prepare(
+        `UPDATE users SET
+          full_name = ?, department = ?, department_key = ?, level = ?, university = ?, faculty = ?, gender = ?, matric_number = ?,
+          email = ?, is_verified = ?, verification_otp = ?, verification_otp_expires = ?, verification_otp_attempts = 0, updated_at = ?
+         WHERE id = ?`
       )
-      .run();
+        .bind(
+          fullName || user.full_name,
+          nextDepartment,
+          nextDepartmentKey,
+          level || user.level,
+          university || user.university,
+          faculty || user.faculty,
+          gender || user.gender,
+          matricNumber || user.matric_number,
+          nextEmail,
+          emailChanged ? 0 : user.is_verified,
+          emailChanged ? otpHash : user.verification_otp,
+          emailChanged ? new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000).toISOString() : user.verification_otp_expires,
+          timestamp,
+          userId
+        )
+        .run();
+    } catch (err) {
+      // Lost a race against another account taking the same email / matric number between our check and the write.
+      if (/UNIQUE constraint failed/i.test(String(err?.message))) {
+        const field = /matric/i.test(String(err.message)) ? "matric number" : "email";
+        return c.json({ success: false, message: `That ${field} is already registered to another account` }, 409);
+      }
+      throw err;
+    }
 
     if (emailChanged) {
       c.executionCtx.waitUntil(
@@ -110,6 +141,18 @@ export async function updateMyProfile(c) {
         ? "Profile updated. Your new email needs verification — check your inbox for a code."
         : "Profile updated successfully",
       emailChanged,
+      // What was actually STORED (normalised), so the page can show the canonical values instead of what was typed.
+      profile: {
+        fullName: fullName || user.full_name,
+        email: nextEmail,
+        department: nextDepartment,
+        departmentKey: nextDepartmentKey,
+        level: level || user.level,
+        university: university || user.university,
+        faculty: faculty || user.faculty,
+        matricNumber: matricNumber || user.matric_number,
+        gender: gender || user.gender,
+      },
     });
   } catch (err) {
     console.error("userSettingsController error:", err?.message);
@@ -185,7 +228,14 @@ export async function changeMyPassword(c) {
     if (!user) return c.json({ success: false, message: "User not found" }, 404);
 
     const { ok } = await verifyPassword(c.env, currentPassword, user.password);
-    if (!ok) return c.json({ success: false, message: "Current password is incorrect" }, 401);
+    // 400, NOT 401: the frontend's authFetch treats every 401 as "session expired" and logs the user
+    // out. A mistyped current password is a validation problem, not an authentication failure.
+    if (!ok) {
+      return c.json(
+        { success: false, message: "Current password is incorrect", errors: [{ field: "currentPassword", message: "Current password is incorrect" }] },
+        400
+      );
+    }
 
     const hashedPassword = await hashPassword(c.env, newPassword);
     const ts = nowIso();

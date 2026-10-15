@@ -1,6 +1,6 @@
 import { generateId } from "../utils/id.js";
 import { startOfMonthInLagos, startOfTodayInLagos } from "../utils/lagosDay.js";
-import { getIncentiveConfig, paidStatuses, courseKey } from "./incentiveConfig.js";
+import { getIncentiveConfig, paidStatuses, bountyMatches } from "./incentiveConfig.js";
 import { loadUploaderRisk } from "./uploaderRisk.js";
 
 // The payout engine: decides and records the reward for one approved upload.
@@ -108,7 +108,7 @@ async function loadContext(DB, { resource, adminId, cfg, now }) {
         ).bind(resource.id, resource.file_hash ?? null, resource.file_hash ?? null, resource.content_fp ?? null, resource.content_fp ?? null).first()
       : Promise.resolve(null),
     resource.bounty_id
-      ? DB.prepare("SELECT id, reward, course_key FROM bounties WHERE id = ? AND status = 'open' AND paid < max_payouts AND expires_at >= ?")
+      ? DB.prepare("SELECT id, reward, course_key, type, level FROM bounties WHERE id = ? AND status = 'open' AND paid < max_payouts AND expires_at >= ?")
           .bind(resource.bounty_id, resource.created_at).first()
       : Promise.resolve(null),
     loadUploaderRisk(DB, resource.uploader_id, nowMs),
@@ -119,9 +119,10 @@ async function loadContext(DB, { resource, adminId, cfg, now }) {
     ).bind(resource.uploader_id).first(),
   ]);
 
-  // An upload only counts toward a request for the SAME course, and it's judged on when it was
-  // uploaded, so a slow moderator can't make a student miss the deadline.
-  const validBounty = bounty && bounty.course_key === courseKey(resource.course) ? bounty : null;
+  // An upload only counts toward a request for the SAME course, resource type and level (an admin may have
+  // edited the resource since upload), and it's judged on when it was uploaded, so a slow moderator can't
+  // make a student miss the deadline.
+  const validBounty = bounty && bountyMatches(bounty, resource) ? bounty : null;
 
   return {
     uploader, earned7d, paidMonth, adminToday, riskLevel: risk.level, referral,

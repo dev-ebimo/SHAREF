@@ -1,7 +1,9 @@
 # Sharef API — Cloudflare Workers + D1
 
-Phase 1–2 of the migration: project skeleton, schema, and a verified D1
-binding. Auth and the rest of the routes come in the next phase.
+Hono API on Cloudflare Workers with D1 (SQLite), a vanilla HTML/JS frontend (`Frontend/`), Cloudinary for files,
+Paystack for payments and SendGrid for email. The backend is code-complete and covered by `npm test`
+(27 files, 1,300+ checks). See `GO-LIVE.md` for the deployment checklist and `CHANGES-CONSISTENCY.md` for the
+latest round of fixes.
 
 ## First-time setup
 
@@ -138,7 +140,7 @@ wrangler picks this up automatically — no browser step needed.
   clearly commented in `schema.sql`, so that financial and audit history can outlive
   the account itself rather than being deleted or blocked by the deletion.
 
-**The entire backend is now code-complete — every route from all 12 of the original
+**History - the migration notes below are kept for context. The entire backend is code-complete — every route from all 12 of the original
 Express route files has a tested D1/Workers equivalent.** 385 tests pass across 9 test
 files, with no known gaps. What's left is no longer "port more code" — it's the two
 steps that turn this from a parallel implementation into the live site:
@@ -196,34 +198,45 @@ the one part of the app where getting that wrong silently would actually
 cost money. It uses the well-documented `meta.changes`/`meta.rows_written`
 pattern instead, at the cost of one extra query per successful claim.
 
-Run all tests:
+## Running the tests
+
+```bash
+npm test                      # every file, one line each + a total
+npm test -- consistency       # only files whose name contains "consistency"
+node --experimental-sqlite --no-warnings test/consistency.test.js    # one file directly
+node test/academic.test.js    # the pure-function suites need no flags
 ```
-node --experimental-sqlite test/auth.test.js
-node --experimental-sqlite test/phase4a.test.js
-node --experimental-sqlite test/phase4b.test.js
-node --experimental-sqlite test/phase4c.test.js
-node --experimental-sqlite test/phase4d.test.js
-node --experimental-sqlite test/phase4e-i.test.js
-node --experimental-sqlite test/phase4e-ii.test.js
-node --experimental-sqlite test/phase4e-iii.test.js
-node --experimental-sqlite test/phase4f.test.js
-node --experimental-sqlite test/phase5a-payments.test.js
-node --experimental-sqlite test/phase5b-security.test.js
-node test/doc-analyzer.test.js
-```
+
+Needs Node 22+ (the tests run real controllers against the real `schema.sql` in Node's built-in SQLite, via
+`test/mockD1.js`). No Cloudflare account or network is needed.
+
+## Data consistency (department, course, matric number, session...)
+
+Department, course, matric number and session are typed by hand, so the same thing used to be stored many ways
+("computer science" / "Computer  Science" / "Computer Science Dept."), and exact-match filters then showed a student
+nothing. The rules now live in **one place**, `src/utils/academic.js`:
+
+- **Write time** - everything is stored in a canonical form: department `Computer Science`, course `CSC 305`,
+  matric `CSC/2019/001`, session `2024/2025`, level `300`, semester `First`, type `Past Question`.
+  Validators accept the obvious variants (`300 Level`, `1st`, `2024-25`, `past questions`, `csc305`) and normalise them.
+- **Match time** - every filter, search, "For you" row, trending list and announcement audience compares
+  **keys** (`departments.department_key`, `resources.course_key`), never the typed text, so even a legacy row stored
+  in another style still matches.
+- **Entry time** - the Settings, Profile and Upload forms suggest the spellings already in use
+  (`GET /api/meta/options`). Anything can still be typed (new departments must be possible).
+
+To teach it a new shorthand, add it to `DEPARTMENT_ALIASES` in `academic.js` (and add a test line).
 
 ## Project layout
 
 ```
 src/
-  index.js          Hono app entry, CORS, route mounting, error handling
-  routes/            (empty for now — filled in during the auth slice)
-  middleware/         "
-  utils/               "
-  db/schema.sql       The validated D1 schema
-test/
-  mockD1.js          Dev-only D1 mock (real SQLite) for testing without wrangler
-  skeleton.test.js   Verifies the app boots, D1 binding works, CORS behaves
+  index.js            Hono app entry, CORS, route mounting, error handling, cron
+  routes/ controllers/ services/ middleware/ jobs/
+  utils/              academic.js (canonical data), pagination.js, resourceFilters.js, rejectionReasons.js, ...
+  db/schema.sql       Schema for a BRAND-NEW database (not re-runnable on an existing one)
+  db/migrations/      One file per change for an EXISTING database (apply in order; 007 is the latest)
+Frontend/             Static pages (deployed on Vercel); academic.js is shared by Resources/Lecture Notes/Upload/Settings
+test/                 run-all.mjs, mockD1.js, *.test.js
+docs/archive/         Old phase patches and notes (history only)
 ```
-
-Run the test file directly with `node --experimental-sqlite test/skeleton.test.js`.

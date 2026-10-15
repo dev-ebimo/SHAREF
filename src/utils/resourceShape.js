@@ -3,6 +3,8 @@
 // the original browseController.js's shapeResource/formatFileSize exactly,
 // just reading D1's snake_case columns instead of a Mongoose document.
 
+import { departmentKey, courseKey } from "./academic.js";
+
 export function formatFileSize(bytes) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -15,6 +17,9 @@ export function shapeResource(r) {
     course: r.course,
     type: r.type,
     department: r.department,
+    // Comparison keys: pages group and filter on these so every spelling of a department/course is one entry.
+    departmentKey: departmentKey(r.department),
+    courseKey: courseKey(r.course),
     level: r.level,
     semester: r.semester,
     session: r.session,

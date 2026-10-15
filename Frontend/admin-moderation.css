@@ -1347,6 +1347,21 @@ button {
 .review-pages-row input:disabled {
   opacity: 0.5;
 }
+/* Reason picker used by the quick-review Reject (the full queue has its own radio list). */
+.review-pages-row select {
+  min-width: 190px;
+  max-width: 60%;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hair);
+  background: var(--surface-02);
+  color: var(--text-pure);
+  font: inherit;
+}
+.review-pages-row select:focus {
+  outline: none;
+  border-color: var(--purple);
+}
 .review-pages-note {
   font-size: 0.78rem;
   color: var(--text-muted);

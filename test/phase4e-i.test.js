@@ -265,12 +265,12 @@ async function run() {
     const token = await tokenFor(env, "admin1", "admin");
     installMocks();
 
-    const res = await postAuthed("/api/admin/moderation/r1/reject", { reason: "Blurry scan" }, token, env);
+    const res = await postAuthed("/api/admin/moderation/r1/reject", { reason: "poor_quality" }, token, env);
     check("reject: 200 status", res.status === 200);
 
     const row = DB._raw.prepare("SELECT * FROM resources WHERE id = 'r1'").get();
     check("reject: status flipped to rejected", row.status === "rejected");
-    check("reject: rejection_reason stored", row.rejection_reason === "Blurry scan");
+    check("reject: rejection_reason stored (as the code)", row.rejection_reason === "poor_quality");
 
     const notif = DB._raw.prepare("SELECT * FROM notifications WHERE recipient_id = 'uploader1'").get();
     check("reject: uploader notified with resource_rejected type", notif.type === "resource_rejected");
@@ -312,7 +312,7 @@ async function run() {
     check("approve: snippet capped at ~1000 chars", r2.preview_snippet.length <= 1001, String(r2.preview_snippet.length));
   }
   {
-    // reason is optional (quick-reject flow)
+    // a reason is REQUIRED: the student is always shown why (no more empty reasons from quick-reject)
     const { env, DB } = freshEnv();
     seedUser(DB, { id: "admin1", role: "admin" });
     seedUser(DB, { id: "uploader1", preferences: fullPrefs({ email: false }) });
@@ -320,10 +320,14 @@ async function run() {
     const token = await tokenFor(env, "admin1", "admin");
     installMocks();
 
-    const res = await postAuthed("/api/admin/moderation/r1/reject", null, token, env);
-    check("reject: no reason still succeeds (quick-reject)", res.status === 200);
-    const row = DB._raw.prepare("SELECT rejection_reason FROM resources WHERE id = 'r1'").get();
-    check("reject: rejection_reason defaults to empty string", row.rejection_reason === "");
+    const noReason = await postAuthed("/api/admin/moderation/r1/reject", null, token, env);
+    check("reject: no reason -> 400 (a reason is required)", noReason.status === 400);
+    const junk = await postAuthed("/api/admin/moderation/r1/reject", { reason: "Blurry scan" }, token, env);
+    check("reject: a reason that is not one of the known codes -> 400", junk.status === 400);
+    const ctorProbe = await postAuthed("/api/admin/moderation/r1/reject", { reason: "constructor" }, token, env);
+    check("reject: prototype keys are not accepted as reasons", ctorProbe.status === 400);
+    const stillPending = DB._raw.prepare("SELECT status, rejection_reason FROM resources WHERE id = 'r1'").get();
+    check("reject: a refused rejection leaves the resource pending and untouched", stillPending.status === "pending" && !stillPending.rejection_reason);
     restoreFetch();
   }
 

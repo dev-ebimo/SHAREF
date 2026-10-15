@@ -1,6 +1,20 @@
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { generateId } from "../utils/id.js";
 import { sendAnnouncementEmail } from "../services/emailService.js";
+import { z } from "zod";
+import { collapse, departmentKey, normalizeLevel, LEVELS } from "../utils/academic.js";
+import { formatZodErrors } from "../validators/resourceValidators.js";
+
+// Same validation discipline as every other write endpoint. Previously the raw body was destructured directly:
+// malformed JSON, a string where a list belongs, or an enormous list (D1 allows only 100 bound parameters per
+// query) all surfaced as a generic 500, and levels were never checked against the real list of levels.
+const MAX_TARGET_DEPARTMENTS = 40;
+const announcementSchema = z.object({
+  title: z.string({ message: "Title and message are required" }).trim().min(1, "Title and message are required").max(150, "Title is too long (150 characters max)").transform(collapse),
+  message: z.string({ message: "Title and message are required" }).trim().min(1, "Title and message are required").max(5000, "Message is too long (5000 characters max)"),
+  departments: z.array(z.string().trim().min(1).max(150).transform(collapse), { message: "departments must be a list" }).max(MAX_TARGET_DEPARTMENTS, `Pick at most ${MAX_TARGET_DEPARTMENTS} departments`).default([]),
+  levels: z.array(z.string().trim().transform(normalizeLevel).pipe(z.enum(LEVELS, { message: "Please select valid levels" })), { message: "levels must be a list" }).max(LEVELS.length).default([]),
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -9,17 +23,29 @@ function nowIso() {
 // @route POST /api/admin/announcements
 export async function createAnnouncement(c) {
   try {
-    const body = await c.req.json();
-    const { title, message, departments = [], levels = [] } = body;
-    if (!title || !message) {
-      return c.json({ success: false, message: "Title and message are required" }, 400);
+    const body = await c.req.json().catch(() => null);
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return c.json({ success: false, message: "Send the announcement as JSON" }, 400);
     }
+    const parsed = announcementSchema.safeParse(body);
+    if (!parsed.success) {
+      const errors = formatZodErrors(parsed.error);
+      return c.json({ success: false, message: errors[0]?.message || "Invalid announcement", errors }, 400);
+    }
+    const { title, message } = parsed.data;
+    // One entry per department however many spellings were sent; matching is on the department KEY.
+    const departmentsByKey = new Map();
+    for (const d of parsed.data.departments) if (departmentKey(d)) departmentsByKey.set(departmentKey(d), d);
+    const departments = [...departmentsByKey.values()];
+    const levels = [...new Set(parsed.data.levels)];
 
-    const conditions = ["role = 'student'"];
+    // Verified, non-suspended students only: an unverified address may belong to someone else entirely (a typo
+    // at signup), and a suspended account can't see the in-app copy anyway.
+    const conditions = ["role = 'student'", "is_verified = 1", "account_status != 'suspended'"];
     const params = [];
     if (departments.length > 0) {
-      conditions.push(`department IN (${departments.map(() => "?").join(",")})`);
-      params.push(...departments);
+      conditions.push(`department_key IN (${[...departmentsByKey.keys()].map(() => "?").join(",")})`);
+      params.push(...departmentsByKey.keys());
     }
     if (levels.length > 0) {
       conditions.push(`level IN (${levels.map(() => "?").join(",")})`);

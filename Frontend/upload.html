@@ -487,11 +487,11 @@
                     name="resourceFile"
                     id="fileInput"
                     class="drop-zone__input"
-                    accept=".pdf,.docx,.pptx,.zip"
+                    accept=".pdf,.docx,.pptx,.zip,.jpg,.jpeg,.png"
                     required
                   />
                   <p class="drop-zone__support-text">
-                    Supported: PDF, DOCX, PPTX (up to 40MB, shrunk automatically to fit 8MB) or ZIP (max 8MB)
+                    Supported: PDF, DOCX, PPTX (up to 40MB, shrunk automatically to fit 8MB), or ZIP, JPG, PNG (max 8MB)
                   </p>
                 </div>
                 <!-- File Preview (Hidden by default) -->
@@ -588,12 +588,14 @@
                 <div class="input-row">
                   <div class="input-group">
                     <label for="department">Department</label>
-                    <input type="text" id="department" placeholder="e.g. Computer Science" required />
+                    <input type="text" id="department" placeholder="e.g. Computer Science" required list="departmentSuggestions" autocomplete="off" />
+                    <datalist id="departmentSuggestions"></datalist>
                     <span class="error-msg">Department is required.</span>
                   </div>
                   <div class="input-group">
                     <label for="course">Course</label>
-                    <input type="text" id="course" placeholder="e.g. CSC 201" required />
+                    <input type="text" id="course" placeholder="e.g. CSC 201" required list="courseSuggestions" autocomplete="off" />
+                    <datalist id="courseSuggestions"></datalist>
                     <span class="error-msg">Course is required.</span>
                   </div>
                 </div>
@@ -714,6 +716,7 @@
 
     <script src="api-config.js"></script>
     <script src="auth-guard.js"></script>
+    <script src="academic.js"></script>
     <script src="dashboard.js"></script>
     <script src="incentives.js"></script>
     <script src="upload-compress.js"></script>

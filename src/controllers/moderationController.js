@@ -1,10 +1,13 @@
+import { formatFileSize } from "../utils/resourceShape.js";
+import { pageParams } from "../utils/pagination.js";
 import { sanitizeError } from "../utils/sanitizeError.js";
 import { buildDownloadStreamUrl } from "../utils/downloadToken.js";
 import { startOfTodayInLagos } from "../utils/lagosDay.js";
 import { timeAgo } from "../utils/timeAgo.js";
 import { sendResourceStatusEmail } from "../services/emailService.js";
 import { generateId } from "../utils/id.js";
-import { getIncentiveConfig, paidStatuses } from "../services/incentiveConfig.js";
+import { getIncentiveConfig, paidStatuses, bountyMatches } from "../services/incentiveConfig.js";
+import { isRejectionReason, rejectionReasonLabel, REJECTION_REASON_LABELS } from "../utils/rejectionReasons.js";
 import { uploaderRiskFrom } from "../services/uploaderRisk.js";
 import { awardForApproval, previewAward, sumRewards } from "../services/rewardEngine.js";
 import { startOfMonthInLagos } from "../utils/lagosDay.js";
@@ -12,10 +15,6 @@ import { startOfMonthInLagos } from "../utils/lagosDay.js";
 const AGED_THRESHOLD_DAYS = 4;
 const REWARD_TIERS = ["bounty", "standard", "high", "rare", "none"];
 
-function formatFileSize(bytes) {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function nowIso() {
   return new Date().toISOString();
@@ -29,7 +28,7 @@ function nowIso() {
 function rewardFieldsFor(x, nowMs, rctx) {
   if (!x) return {};
   const out = {};
-  if (x.bounty_id && x.bounty_status === "open" && x.bounty_expires > new Date(nowMs).toISOString() && x.bounty_paid < x.bounty_max) {
+  if (x.bounty_id && bountyMatches({ course_key: x.bounty_course_key, type: x.bounty_type, level: x.bounty_level }, { course: x.rcourse, type: x.rtype, level: x.rlevel }) && x.bounty_status === "open" && x.bounty_expires > new Date(nowMs).toISOString() && x.bounty_paid < x.bounty_max) {
     out.bounty = { id: x.bounty_id, reward: x.bounty_reward };
   }
   out.uploaderRisk = uploaderRiskFrom(x, nowMs);
@@ -48,8 +47,7 @@ export async function getModerationQueue(c) {
     // 25 matches moderation.itemsPerPage's own schema default, so a
     // request with no explicit limit (or an admin who's never saved this
     // preference) still gets a sensible, genuinely paginated page size.
-    const limit = Number(c.req.query("limit")) || 25;
-    const page = Math.max(1, Number(c.req.query("page")) || 1);
+    const { page, limit } = pageParams(c, { defaultLimit: 25, maxLimit: 100 });
     const skip = (page - 1) * limit;
 
     const { results } = await c.env.DB.prepare(
@@ -76,8 +74,8 @@ export async function getModerationQueue(c) {
         sumRewards(c.env.DB, { since: startOfMonthInLagos().toISOString(), counted }),
         sumRewards(c.env.DB, { approverId: admin.id, since: startOfTodayInLagos().toISOString(), counted }),
         c.env.DB.prepare(
-          `SELECT r.id AS rid, r.uploader_id AS uploader_id, r.type AS rtype,
-                  b.id AS bounty_id, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
+          `SELECT r.id AS rid, r.uploader_id AS uploader_id, r.type AS rtype, r.course AS rcourse, r.level AS rlevel,
+                  b.id AS bounty_id, b.course_key AS bounty_course_key, b.type AS bounty_type, b.level AS bounty_level, b.reward AS bounty_reward, b.status AS bounty_status, b.expires_at AS bounty_expires,
                   b.paid AS bounty_paid, b.max_payouts AS bounty_max,
                   u.created_at AS acct_created, u.rewards_frozen AS frozen,
                   (SELECT COUNT(*) FROM resources x WHERE x.uploader_id = r.uploader_id AND x.status = 'rejected' AND x.reviewed_at >= ?) AS rejected_14d,
@@ -145,36 +143,53 @@ export async function getModerationQueue(c) {
 // uploader per their own saved preferences, then clears the shared
 // admin-feed "new_upload" notification for this resource now that it's
 // been actioned.
+// Telling the uploader (in-app + email) is a courtesy that happens AFTER the decision is already saved, so it must
+// never be able to undo, fail or delay that decision: a bad preferences blob or a failed insert used to throw out
+// of the approve handler, so the admin saw a 500 for an already-approved resource AND the reward (which runs
+// right after) was skipped. Every step here is isolated and best-effort.
 async function notifyUploaderOfDecision(c, resource, type, reason) {
-  const uploader = await c.env.DB.prepare("SELECT id, email, full_name, preferences FROM users WHERE id = ?")
-    .bind(resource.uploader_id)
-    .first();
-  if (!uploader) return;
-
-  const prefs = JSON.parse(uploader.preferences || "{}");
-  const wantsInApp = prefs.notifications?.uploadStatus?.inApp ?? true;
-  const wantsEmail = prefs.notifications?.uploadStatus?.email ?? true;
-
-  if (wantsInApp) {
-    const timestamp = nowIso();
-    await c.env.DB.prepare(
-      "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)"
-    )
-      .bind(generateId(), resource.id, uploader.id, type, timestamp, timestamp)
-      .run();
-  }
-  if (wantsEmail) {
-    const status = type === "resource_approved" ? "approved" : "rejected";
-    c.executionCtx.waitUntil(
-      sendResourceStatusEmail(c.env, uploader.email, uploader.full_name, resource.title, status, reason).catch((err) => {
-        console.error(`Failed to send status email to ${uploader.email}:`, err.message);
-      })
-    );
+  // The admins' "new upload" feed entries for this resource are done with either way.
+  try {
+    await c.env.DB.prepare("DELETE FROM notifications WHERE resource_id = ? AND recipient_id IS NULL").bind(resource.id).run();
+  } catch (err) {
+    console.error("notify: could not clear admin feed entries:", err?.message);
   }
 
-  await c.env.DB.prepare("DELETE FROM notifications WHERE resource_id = ? AND recipient_id IS NULL")
-    .bind(resource.id)
-    .run();
+  try {
+    const uploader = await c.env.DB.prepare("SELECT id, email, full_name, preferences FROM users WHERE id = ?")
+      .bind(resource.uploader_id)
+      .first();
+    if (!uploader) return;
+
+    let prefs = {};
+    try { prefs = JSON.parse(uploader.preferences || "{}") || {}; } catch { prefs = {}; }
+    const wantsInApp = prefs.notifications?.uploadStatus?.inApp ?? true;
+    const wantsEmail = prefs.notifications?.uploadStatus?.email ?? true;
+
+    if (wantsInApp) {
+      try {
+        const timestamp = nowIso();
+        await c.env.DB.prepare(
+          "INSERT INTO notifications (id, resource_id, recipient_id, type, unread, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)"
+        )
+          .bind(generateId(), resource.id, uploader.id, type, timestamp, timestamp)
+          .run();
+      } catch (err) {
+        console.error("notify: could not store in-app notification:", err?.message);
+      }
+    }
+    if (wantsEmail) {
+      const status = type === "resource_approved" ? "approved" : "rejected";
+      c.executionCtx.waitUntil(
+        // Students get the human label ("Poor quality"), never the stored code ("poor_quality").
+        sendResourceStatusEmail(c.env, uploader.email, uploader.full_name, resource.title, status, rejectionReasonLabel(reason)).catch((err) => {
+          console.error(`Failed to send status email to ${uploader.email}:`, err.message);
+        })
+      );
+    }
+  } catch (err) {
+    console.error("notify: uploader notification failed:", err?.message);
+  }
 }
 
 const MAX_PAGES = 1000;
@@ -289,6 +304,15 @@ export async function approveResource(c) {
 export async function rejectResourceById(c, id, reason) {
   const user = c.get("user");
 
+  // A rejection always carries a reason the student will be shown. The code list is the single source in
+  // utils/rejectionReasons.js; there is no "log it later" path, so we never accept an empty one.
+  if (!isRejectionReason(reason)) {
+    return c.json(
+      { success: false, message: "Choose a reason for rejecting this upload", reasons: REJECTION_REASON_LABELS },
+      400
+    );
+  }
+
   const result = await c.env.DB.prepare(
     "UPDATE resources SET status = 'rejected', rejection_reason = ?, reviewed_by = ?, reviewed_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'"
   )
@@ -307,8 +331,8 @@ export async function rejectResourceById(c, id, reason) {
 }
 
 // @route POST /api/admin/moderation/:id/reject
-// reason is optional — quick-review from the notifications panel skips it;
-// the full moderation queue's reject modal always sends one (required client-side).
+// `reason` is REQUIRED and must be one of the codes in utils/rejectionReasons.js (both the moderation queue and the
+// notifications quick-review send one). The student sees its label.
 export async function rejectResource(c) {
   try {
     const body = await c.req.json().catch(() => ({}));

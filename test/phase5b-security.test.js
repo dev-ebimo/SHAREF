@@ -106,7 +106,7 @@ async function run() {
     check("revoke: fresh token works", (await call("GET", "/api/wallet/balance", { token: b.token, env })).status === 200);
     check("revoke: stored hash is pbkdf2", row(DB, "u1").password.startsWith("pbkdf2-sha256$"));
     const wrong = await call("PATCH", "/api/users/me/password", { body: { currentPassword: "WRONG-pass1", newPassword: "another12345" }, token: b.token, env });
-    check("revoke: wrong current password -> 401", wrong.status === 401);
+    check("revoke: wrong current password -> 400 (not 401, which would log the user out)", wrong.status === 400);
   }
 
   // ======================= login: legacy upgrade, lockout =======================

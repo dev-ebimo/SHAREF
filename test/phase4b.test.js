@@ -1,3 +1,4 @@
+import { departmentKey, courseKey } from "../src/utils/academic.js";
 import fs from "node:fs";
 import { sign } from "hono/jwt";
 import app from "../src/index.js";
@@ -52,10 +53,10 @@ function seedResource(DB, opts) {
       `INSERT INTO resources
        (id, title, type, department, course, level, semester, session, uploader_id,
         file_name, file_url, cloudinary_public_id, file_size_bytes, file_extension,
-        status, downloads, created_at, preview_type, preview_snippet, preview_message)
-       VALUES (?, ?, ?, ?, ?, '300', ?, ?, ?, 'f.pdf', 'https://x/f.pdf', 'pub', 102400, 'pdf', ?, ?, ?, ?, ?, ?)`
+        status, downloads, created_at, preview_type, preview_snippet, preview_message, department_key, course_key)
+       VALUES (?, ?, ?, ?, ?, '300', ?, ?, ?, 'f.pdf', 'https://x/f.pdf', 'pub', 102400, 'pdf', ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .run(id, title, type, department, course, semester, session, uploader, status, downloads, createdAt, previewType, previewSnippet, previewMessage);
+    .run(id, title, type, department, course, semester, session, uploader, status, downloads, createdAt, previewType, previewSnippet, previewMessage, departmentKey(department), courseKey(course));
 }
 
 function seedDownload(DB, { id, user, resource, createdAt = new Date().toISOString() }) {
@@ -103,14 +104,18 @@ async function run() {
     seedResource(DB, { id: "eng-r1", department: "Engineering" });
     // eng-r1 gets 5 downloads, cs-r1 gets 2 — but only cs-r1 should show for a CS student
     for (let i = 0; i < 5; i++) seedDownload(DB, { id: `d-eng-${i}`, user: "someone", resource: "eng-r1", createdAt: isoDaysAgo(1) });
-    for (let i = 0; i < 2; i++) seedDownload(DB, { id: `d-cs-${i}`, user: "someone", resource: "cs-r1", createdAt: isoDaysAgo(1) });
+    // trending counts distinct STUDENTS: two students, one of whom downloaded it again, is still 2
+    seedUser(DB, { id: "other" });
+    seedDownload(DB, { id: "d-cs-0", user: "someone", resource: "cs-r1", createdAt: isoDaysAgo(1) });
+    seedDownload(DB, { id: "d-cs-1", user: "other", resource: "cs-r1", createdAt: isoDaysAgo(1) });
+    seedDownload(DB, { id: "d-cs-2", user: "someone", resource: "cs-r1", createdAt: isoDaysAgo(1) });
 
     const token = await tokenFor(env, "u1");
     const res = await getAuthed("/api/resources/trending", token, env);
     const body = await res.json();
     check("trending: department-scoped, cross-dept resource excluded even with more downloads",
       body.resources.length === 1 && body.resources[0].id === "cs-r1", JSON.stringify(body));
-    check("trending: recentDownloads count correct", body.resources[0].recentDownloads === 2);
+    check("trending: recentDownloads counts distinct students (a re-download is not a second download)", body.resources[0].recentDownloads === 2);
   }
   {
     // downloads outside the 3-day window don't count

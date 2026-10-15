@@ -34,6 +34,20 @@ const world = () => { const w = freshEnv(); seedUser(w.DB, "admin1", { name: "Ad
   check("bounty: junk (missing, number, object, huge string) → null, never throws", [undefined, null, 7, {}, "", "x".repeat(500)].every((v) => true) && (await Promise.all([undefined, null, 7, {}, "", "x".repeat(500)].map((v) => resolveBountyForUpload(DB, v, "CSC 305")))).every((x) => x === null));
 }
 
+// ============ bounty type / level are enforced (previously only the course was compared)
+{
+  const { DB } = world();
+  seedBounty(DB, { id: "PQ300", course: "CSC 305", type: "Past Questions", level: "300 Level" });
+  seedBounty(DB, { id: "LN400", course: "CSC 305", type: "Lecture Notes", level: "400 Level" });
+  const t = (o) => ({ course: "CSC 305", type: "Past Question", level: "300", ...o });
+  check("bounty: same course + type + level → accepted", (await resolveBountyForUpload(DB, "PQ300", t({}))) === "PQ300");
+  check("bounty: wrong resource TYPE (Textbook for a Past Questions request) → null", (await resolveBountyForUpload(DB, "PQ300", t({ type: "Textbook" }))) === null);
+  check("bounty: 'Other' type can no longer claim a request", (await resolveBountyForUpload(DB, "PQ300", t({ type: "Other" }))) === null);
+  check("bounty: wrong LEVEL → null", (await resolveBountyForUpload(DB, "PQ300", t({ level: "200" }))) === null);
+  check("bounty: 'Lecture Notes' request ↔ 'Lecture Note' upload (plural/singular mapped)", (await resolveBountyForUpload(DB, "LN400", t({ type: "Lecture Note", level: "400" }))) === "LN400");
+  check("bounty: course still matched ignoring case/spacing alongside type+level", (await resolveBountyForUpload(DB, "PQ300", t({ course: "csc-305" }))) === "PQ300");
+}
+
 // ============ upload permit + complete (executes the modified INSERT for real)
 {
   const { env, DB } = world();
@@ -74,7 +88,7 @@ const world = () => { const w = freshEnv(); seedUser(w.DB, "admin1", { name: "Ad
   const rejected = (uid, daysAgo) => seedResource(DB, { id: "rj" + ++k, uploader: uid, status: "rejected", reviewedAt: iso(daysAgo) });
   [1, 2, 3].forEach((d) => rejected("rej3", d)); rejected("rej1", 5); rejected("old-rej", 20);
   seedBounty(DB, { id: "BOK", reward: 120 }); seedBounty(DB, { id: "BCL", status: "closed" }); seedBounty(DB, { id: "BEX", expires: iso(1) }); seedBounty(DB, { id: "BFU", max: 1, paid: 1 });
-  const pend = (id, uploader, bountyId = null, createdAt = iso(0.5)) => seedResource(DB, { id, status: "pending", uploader, bountyId, createdAt });
+  const pend = (id, uploader, bountyId = null, createdAt = iso(0.5)) => seedResource(DB, { id, status: "pending", uploader, bountyId, createdAt, course: "CSC 305" });
   pend("q-clean", "clean"); pend("q-flag", "flagged"); pend("q-rej3", "rej3"); pend("q-rej1", "rej1"); pend("q-oldrej", "old-rej"); pend("q-new", "newbie");
   pend("q-tw1", "tw1"); pend("q-solo", "solo"); pend("q-bok", "clean", "BOK"); pend("q-bcl", "clean", "BCL"); pend("q-bex", "clean", "BEX"); pend("q-bfu", "clean", "BFU");
 
@@ -126,8 +140,8 @@ const world = () => { const w = freshEnv(); seedUser(w.DB, "admin1", { name: "Ad
 {
   const { env, DB } = world();
   seedUser(DB, "me");
-  const mk = (id, status, type = "Past Question", bountyId = null, createdAt = iso(1)) => seedResource(DB, { id, status, type, uploader: "me", bountyId, createdAt });
-  seedBounty(DB, { id: "B200", reward: 200 }); seedBounty(DB, { id: "BCLOSED", reward: 200, status: "closed" });
+  const mk = (id, status, type = "Past Question", bountyId = null, createdAt = iso(1)) => seedResource(DB, { id, status, type, uploader: "me", bountyId, createdAt, course: bountyId ? "CSC 305" : undefined });
+  seedBounty(DB, { id: "B200", reward: 200, type: "Lecture Notes" }); seedBounty(DB, { id: "BCLOSED", reward: 200, status: "closed" });
   mk("pend-pq", "pending"); mk("pend-ln-bounty", "pending", "Lecture Note", "B200"); mk("pend-ln-closed", "pending", "Lecture Note", "BCLOSED"); mk("pend-other", "pending", "Other");
   mk("ap-paid", "approved"); mk("ap-clear", "approved"); mk("ap-rev", "approved"); mk("ap-shadow", "approved"); mk("rej", "rejected");
   seedLedger(DB, { user: "me", amount: 100, status: "pending", resource: "ap-paid", tier: "standard" });

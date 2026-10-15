@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const stateSuccess = document.getElementById('uploadStateSuccess');
     
     const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB — the size of the file that is actually STORED; must match the server
-    const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip'];
+    const ALLOWED_TYPES = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', 'application/zip', 'image/jpeg', 'image/png'];
 
     let currentFile = null;   // what the student picked (the original)
     let uploadFile = null;    // what will actually be sent: the optimized copy, or the original if nothing was gained
@@ -116,9 +116,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Validate Type (basic check)
         const fileExt = file.name.split('.').pop().toLowerCase();
-        const validExts = ['pdf', 'docx', 'pptx', 'zip'];
-        if (!validExts.includes(fileExt) && !ALLOWED_TYPES.includes(file.type)) {
-            showFileError('Invalid file type. Please upload a PDF, DOCX, PPTX, or ZIP.');
+        // Same list as the server (uploadController.js ALLOWED_EXTENSIONS) - the picker used to offer fewer types than
+        // the server accepts. The EXTENSION decides (the server stores and verifies by it); a lenient browser-reported
+        // MIME type must not let a wrongly-named file through, so it is not an alternative any more.
+        const validExts = ['pdf', 'docx', 'pptx', 'zip', 'jpg', 'jpeg', 'png'];
+        if (!validExts.includes(fileExt)) {
+            showFileError('Invalid file type. Please upload a PDF, DOCX, PPTX, ZIP, JPG, or PNG.');
             return;
         }
 
@@ -302,6 +305,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // informational — the server re-checks that the bounty is open and that
     // the course matches. The id travels in the upload *permit* request.
     var activeBounty = null;
+
+    // Type-ahead for the free-text boxes: the department / course spellings already in use, so a student picks the
+    // existing "Computer Science" / "CSC 305" instead of inventing a variant. Suggestions only; the server normalises
+    // whatever is typed (and matches by key), so a brand-new department or course can still be entered.
+    (function wireSuggestions() {
+        var deptInput = document.getElementById('department');
+        var deptList = document.getElementById('departmentSuggestions');
+        var courseList = document.getElementById('courseSuggestions');
+        function load(dept) {
+            SharefAcademic.loadOptions(dept).then(function (o) {
+                if (!dept) SharefAcademic.fillDatalist(deptList, o.departments);
+                SharefAcademic.fillDatalist(courseList, o.courses);
+            });
+        }
+        load('');
+        if (deptInput) deptInput.addEventListener('change', function () { load(deptInput.value.trim()); });
+    })();
     (function loadBounty() {
         var id = new URLSearchParams(location.search).get('bounty');
         var banner = document.getElementById('bountyBanner');
@@ -310,12 +330,45 @@ document.addEventListener('DOMContentLoaded', () => {
             var q = (d.requests || []).filter(function (r) { return String(r.id) === String(id); })[0];
             if (!q) return;
             activeBounty = q;
-            banner.innerHTML = 'You are uploading <strong>' + escapeHtml(q.course) + ' ' + escapeHtml(q.type) + '</strong>. Earn ' + window.SharefRewards.naira(q.reward) + ' if a moderator approves it.';
+            banner.innerHTML = 'You are uploading <strong>' + escapeHtml(q.course) + ' ' + escapeHtml(q.type) + '</strong>. Earn ' + window.SharefRewards.naira(q.reward) + ' if a moderator approves it.' +
+                '<div id="bountyMismatch" class="hidden" style="margin-top:6px;font-weight:600"></div>';
             banner.classList.remove('hidden');
+            // Pre-fill what the request is for, using the upload form's own wording ("Past Questions" -> "Past Question",
+            // "300 Level" -> "300"). The server only attaches the request when course, type AND level all match.
             var course = document.getElementById('course');
+            var typeSel = document.getElementById('resourceType');
+            var levelSel = document.getElementById('level');
             if (course && !course.value) course.value = q.course;
+            var wantType = SharefAcademic.bountyTypeToResourceType(q.type);
+            var wantLevel = SharefAcademic.bountyLevelToResourceLevel(q.level);
+            if (typeSel && !typeSel.value && wantType) typeSel.value = wantType;
+            if (levelSel && !levelSel.value && wantLevel) levelSel.value = wantLevel;
+            [course, typeSel, levelSel].forEach(function (el) { if (el) { el.addEventListener('input', updateBountyMatch); el.addEventListener('change', updateBountyMatch); } });
+            updateBountyMatch();
         }).catch(function () {});
     })();
+
+    // Tells the student, before they submit, when the form doesn't match the request - otherwise the upload would
+    // simply not count for the reward and they would not know why.
+    function updateBountyMatch() {
+        var note = document.getElementById('bountyMismatch');
+        if (!note || !activeBounty) return;
+        var wantType = SharefAcademic.bountyTypeToResourceType(activeBounty.type);
+        var wantLevel = SharefAcademic.bountyLevelToResourceLevel(activeBounty.level);
+        var course = document.getElementById('course').value;
+        var type = document.getElementById('resourceType').value;
+        var level = document.getElementById('level').value;
+        var problems = [];
+        if (course && SharefAcademic.compact(course) !== SharefAcademic.compact(activeBounty.course)) problems.push('course ' + activeBounty.course);
+        if (type && wantType && type !== wantType) problems.push('type ' + wantType);
+        if (level && wantLevel && level !== wantLevel) problems.push('level ' + wantLevel);
+        if (problems.length) {
+            note.textContent = 'This request is for ' + problems.join(', ') + '. Your upload will still be reviewed, but it will not earn this reward unless these match.';
+            note.classList.remove('hidden');
+        } else {
+            note.classList.add('hidden');
+        }
+    }
 
     // Sends the file STRAIGHT to Cloudinary using the signed permit our API
     // issued. The file never passes through our server (it runs on a tiny CPU
@@ -433,6 +486,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // 2) the file itself, straight to Cloudinary
         const sent = await sendToCloudinary(permit.upload, uploadFile);
         if (!sent.ok) {
+            // Release the permit now (best effort) so failed attempts don't use up the student's upload slots.
+            authFetch(`${API_BASE}/resources/upload/cancel`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ intentId: permit.intentId }),
+            }).catch(() => {});
             showUploadError(sent.message);
             return;
         }
