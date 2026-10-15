@@ -1,0 +1,80 @@
+[33mcommit 5818d9022b216503d50ba3ed3788924f6d8bc72b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: dev-ebimo <shadrackebimotimi@gmail.com>
+Date:   Thu Oct 15 12:35:47 2026 +0100
+
+    Added consistency to search, and fix some other minor backend issues
+
+ CHANGES-CONSISTENCY.md                             | 144 [32m+++++++[m
+ Frontend/academic.js                               | 106 [32m+++++[m
+ Frontend/admin-announcements.js                    |   6 [32m+[m[31m-[m
+ Frontend/admin-moderation.css                      |  15 [32m+[m
+ Frontend/admin-notification.html                   |  18 [32m+[m
+ Frontend/admin-notification.js                     |  13 [32m+[m[31m-[m
+ Frontend/lecture-notes.html                        |   1 [32m+[m
+ Frontend/lecture-notes.js                          |  21 [32m+[m[31m-[m
+ Frontend/profile.html                              |   4 [32m+[m[31m-[m
+ Frontend/profile.js                                |   7 [32m+[m
+ Frontend/resources.html                            |   1 [32m+[m
+ Frontend/resources.js                              |  23 [32m+[m[31m-[m
+ Frontend/settings.html                             |   4 [32m+[m[31m-[m
+ Frontend/settings.js                               |  13 [32m+[m[31m-[m
+ Frontend/upload.html                               |  11 [32m+[m[31m-[m
+ Frontend/upload.js                                 |  69 [32m+++[m[31m-[m
+ GO-LIVE.md                                         |  20 [32m+[m
+ README.md                                          |  67 [32m++[m[31m--[m
+ README-PHASE2.md => docs/archive/README-PHASE2.md  |   0
+ README-PHASE3.md => docs/archive/README-PHASE3.md  |   0
+ .../archive/README-STEP1-2.md                      |   0
+ phase1.patch => docs/archive/phase1.patch          |   0
+ phase2.patch => docs/archive/phase2.patch          |   0
+ phase3.patch => docs/archive/phase3.patch          |   0
+ package.json                                       |   5 [32m+[m[31m-[m
+ src/controllers/adminMaintenanceController.js      | 148 [32m+++++++[m
+ src/controllers/adminResourceController.js         |  89 [32m+++[m[31m--[m
+ src/controllers/adminTransactionController.js      |  24 [32m+[m[31m-[m
+ src/controllers/adminUserController.js             |  50 [32m++[m[31m-[m
+ src/controllers/announcementController.js          |  40 [32m+[m[31m-[m
+ src/controllers/authController.js                  |  22 [32m+[m[31m-[m
+ src/controllers/browseController.js                |  37 [32m+[m[31m-[m
+ src/controllers/metaController.js                  |  22 [32m++[m
+ src/controllers/moderationController.js            | 102 [32m+++[m[31m--[m
+ src/controllers/resourceController.js              |  28 [32m+[m[31m-[m
+ src/controllers/studentNotificationController.js   |   3 [32m+[m[31m-[m
+ src/controllers/uploadController.js                |  60 [32m++[m[31m-[m
+ src/controllers/userSettingsController.js          | 108 [32m+++[m[31m--[m
+ src/controllers/walletController.js                |  13 [32m+[m[31m-[m
+ src/db/migrations/007_academic_consistency.sql     |  44 [32m+++[m
+ src/db/schema.sql                                  |   8 [32m+[m
+ src/index.js                                       |   4 [32m+[m
+ src/middleware/protect.js                          |  16 [32m+[m[31m-[m
+ src/routes/adminMaintenanceRoutes.js               |   8 [32m+[m
+ src/routes/metaRoutes.js                           |   7 [32m+[m
+ src/routes/resourceRoutes.js                       |   3 [32m+[m[31m-[m
+ src/services/bountyService.js                      |  17 [32m+[m[31m-[m
+ src/services/incentiveConfig.js                    |  29 [32m++[m
+ src/services/rewardEngine.js                       |  11 [32m+[m[31m-[m
+ src/services/uploadRewards.js                      |  11 [32m+[m[31m-[m
+ src/utils/academic.js                              | 239 [32m+++++++++++[m
+ src/utils/lagosDay.js                              |  12 [32m+[m
+ src/utils/pagination.js                            |  17 [32m+[m
+ src/utils/rejectionReasons.js                      |  26 [32m++[m
+ src/utils/resourceFilters.js                       | 127 [32m++++++[m
+ src/utils/resourceShape.js                         |   5 [32m+[m
+ src/validators/authValidators.js                   |  24 [32m+[m[31m-[m
+ src/validators/resourceValidators.js               |  38 [32m+[m[31m-[m
+ src/validators/userValidators.js                   |  15 [32m+[m[31m-[m
+ test/academic.test.js                              |  79 [32m++++[m
+ test/consistency.test.js                           | 435 [32m+++++++++++++++++++++[m
+ test/frontend-academic.test.js                     |  58 [32m+++[m
+ test/mockD1.js                                     |  20 [32m+[m
+ test/phase4b.test.js                               |  15 [32m+[m[31m-[m
+ test/phase4c.test.js                               |   2 [32m+[m[31m-[m
+ test/phase4d.test.js                               |   4 [32m+[m[31m-[m
+ test/phase4e-i.test.js                             |  18 [32m+[m[31m-[m
+ test/phase4e-ii.test.js                            |   9 [32m+[m[31m-[m
+ test/phase4f.test.js                               |   2 [32m+[m[31m-[m
+ test/phase5b-security.test.js                      |   2 [32m+[m[31m-[m
+ test/phase6b-incentives-hooks.test.js              |  20 [32m+[m[31m-[m
+ test/phase6c-incentives-engine.test.js             |   8 [32m+[m
+ test/run-all.mjs                                   |  24 [32m++[m
+ 73 files changed, 2340 insertions(+), 311 deletions(-)
