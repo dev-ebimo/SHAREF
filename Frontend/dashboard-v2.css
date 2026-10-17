@@ -1,0 +1,440 @@
+/* ==========================================================================
+   DASHBOARD (student landing page)
+   Loaded after sharef-theme.css. Layout and components that only exist here.
+
+   The page is three kinds of content, and each gets the shape that suits it
+   instead of one card repeated fourteen times:
+     - the hero         a ruled notebook sheet; the search box is the headline
+     - "for you"        index cards (a small shelf you pick from)
+     - trending         a ranked list (rank is real information)
+     - just added       a timeline (time is real information)
+   Rows and timeline entries are the SAME markup dashboard.js has always
+   produced (.resource-card and its data-action buttons); only CSS changes the
+   shape, so previews, downloads and bookmarks keep working untouched.
+   ========================================================================== */
+
+.main-workspace.dash-page {
+  max-width: 1180px;
+  padding: 1.75rem clamp(1rem, 3vw, 2.5rem) 6rem;
+}
+.resource-card.hidden { display: none !important; } /* "See more updates" toggles this */
+
+/* ==========================================================================
+   HERO: a ruled sheet with a red margin
+   ========================================================================== */
+.dash-hero {
+  --margin-x: clamp(2.1rem, 5.2vw, 4.4rem);
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16.5rem;
+  margin-bottom: 1.25rem;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(2.4rem - 1px), #e4e9f6 calc(2.4rem - 1px), #e4e9f6 2.4rem),
+    var(--sheet);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+}
+/* the margin line: drawn once on load, then it just sits there */
+.dash-hero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--margin-x);
+  width: 2px;
+  background: var(--margin);
+  opacity: 0.6;
+  transform-origin: top;
+  animation: margin-draw 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@keyframes margin-draw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+.dash-hero-main {
+  position: relative;
+  padding: clamp(1.6rem, 3.4vw, 2.7rem) clamp(1.25rem, 3vw, 2.5rem) clamp(1.6rem, 3vw, 2.5rem) calc(var(--margin-x) + clamp(1rem, 2.4vw, 2rem));
+  min-width: 0;
+}
+.dash-hero-main h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.15rem, 4.8vw, 3.7rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  text-wrap: balance;
+  max-width: 15ch;
+}
+.dash-sub {
+  margin: 0.85rem 0 1.5rem;
+  max-width: 40ch;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text-lead);
+}
+
+/* the search box is the headline-sized object on the page */
+.dash-search {
+  display: flex;
+  align-items: center;
+  background: var(--sheet);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 6px 6px 6px 1rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.dash-search:focus-within { border-color: var(--biro); box-shadow: 0 0 0 4px rgba(35, 56, 240, 0.16); }
+.dash-search svg { width: 20px; height: 20px; flex: none; color: var(--ink); }
+.dash-search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.2rem, 2.5vw, 1.6rem);
+  letter-spacing: -0.015em;
+  padding: 0.85rem 0.7rem;
+}
+.dash-search input::placeholder { color: var(--text-faint); font-weight: 600; }
+.dash-search-btn {
+  flex: none;
+  background: var(--biro);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.9rem 1.6rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.dash-search-btn:hover { background: var(--biro-deep); }
+
+.dash-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem; min-height: 2rem; }
+.dash-chips-label { font-size: 0.88rem; color: var(--text-muted); margin-right: 0.15rem; }
+.dash-chips .trend-chip { padding: 0.32rem 0.8rem; }
+
+/* the wallet: on the tear-off strip at the edge of the page */
+.dash-wallet {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: clamp(1.25rem, 2.4vw, 2rem) 1.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  border-left: 2px dashed var(--rule);
+}
+.dw-label { font-size: 0.88rem; font-weight: 600; color: var(--text-muted); }
+.dw-balance {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 2.6rem;
+  line-height: 1.05;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  padding: 0 0.3rem;
+  margin: 0.1rem 0 0.1rem -0.3rem;
+  background: linear-gradient(transparent 58%, var(--highlighter) 58%, var(--highlighter) 92%, transparent 92%);
+}
+.dw-sub { font-size: 0.88rem; color: var(--text-muted); line-height: 1.45; margin-bottom: 0.6rem; }
+.dash-wallet .btn-primary-sm {
+  background: var(--sheet);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  text-align: center;
+  padding: 0.6rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.dash-wallet .btn-primary-sm:hover { background: var(--ink); color: #fff; }
+.dw-link { font-size: 0.88rem; font-weight: 600; color: var(--biro); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ==========================================================================
+   NUDGE + PROFILE PROMPT: highlighter lines, never a banner
+   ========================================================================== */
+.dash-nudge {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1.2rem;
+  border-radius: 10px;
+  background: #fff1b3;
+  border: 1px solid #f0d55a;
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+.dash-nudge strong { font-weight: 700; }
+.dash-nudge .btn-primary-sm { background: var(--ink); }
+.dash-nudge .btn-primary-sm:hover { background: var(--biro); }
+.dash-nudge.hidden, .dash-profile-cta.hidden, #forYouSection.hidden, .dash-contribute.hidden { display: none; }
+
+.dash-profile-cta {
+  display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap;
+  margin-bottom: 1.75rem; padding: 1rem 1.25rem;
+  border-radius: 10px; background: var(--sheet); border: 1.5px dashed var(--biro);
+}
+.dash-profile-cta strong { display: block; font-family: var(--font-display); font-size: 1.05rem; }
+.dash-profile-cta span { font-size: 0.9rem; color: var(--text-muted); }
+
+/* ==========================================================================
+   SECTIONS
+   ========================================================================== */
+.dashboard-section { margin-bottom: 2.5rem; }
+.dashboard-section .section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.2rem; }
+.dashboard-section .section-title > span { flex: 1 1 0; min-width: 0; }
+.dashboard-section .section-title .see-all-link { flex: none; white-space: nowrap; }
+.section-sub { font-size: 0.92rem; color: var(--text-muted); margin: 0 0 1rem; }
+
+.dash-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr);
+  gap: clamp(1.75rem, 3.5vw, 3.5rem);
+  align-items: start;
+  margin-top: 0.5rem;
+}
+
+/* Every resource card on this page lays itself out as a grid; the four inner
+   wrappers dissolve so their children become grid items we can place. */
+.dash-page .resource-card { display: grid; align-items: center; }
+.dash-page .card-top-meta,
+.dash-page .card-body-zone,
+.dash-page .card-bottom-metrics,
+.dash-page .card-hover-actions { display: contents; }
+.dash-page .resource-card .type-tag { grid-area: type; justify-self: start; }
+.dash-page .resource-card .icon-btn-badge { grid-area: mark; justify-self: end; }
+.dash-page .resource-card h3 { grid-area: title; }
+.dash-page .resource-card .course-code-sub { grid-area: code; }
+.dash-page .resource-card .metric-node { grid-area: metric; }
+.dash-page .resource-card .price-chip { grid-area: price; }
+.dash-page .resource-card [data-action="open"] { grid-area: open; }
+.dash-page .resource-card h3 {
+  font-size: 1rem; font-weight: 600; line-height: 1.3; letter-spacing: -0.005em;
+  display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.dash-page .resource-card .course-code-sub { font-variation-settings: "wdth" 85; letter-spacing: -0.02em; }
+.dash-page .resource-card .icon-btn-badge { padding: 0.35rem; border-color: transparent; }
+.dash-page .resource-card .icon-btn-badge.is-bookmarked { color: var(--biro); }
+.dash-page .resource-card .price-chip { font-size: 0.82rem; padding: 0.2rem 0.5rem; justify-self: end; }
+.dash-page .card-mini-btn { padding: 0.5rem 0.95rem; font-size: 0.85rem; white-space: nowrap; }
+
+/* ---- "for you": index cards ----------------------------------------------- */
+#forYouGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+#forYouGrid .resource-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "type mark" "code code" "title title" "metric price" "open open";
+  align-content: start;
+  gap: 0.35rem 0.5rem;
+  padding: 0.95rem 1.05rem 1.05rem;
+  border-radius: 14px;
+}
+#forYouGrid .course-code-sub { font-size: 2.25rem; font-weight: 800; line-height: 1; margin: 0.55rem 0 0.15rem; }
+#forYouGrid h3 { min-height: 2.6em; }
+#forYouGrid .metric-node { font-size: 0.82rem; }
+#forYouGrid .metric-node svg { display: none; }
+#forYouGrid .metric-node span::after { content: " this week"; }
+#forYouGrid [data-action="open"] { width: 100%; margin-top: 0.55rem; }
+
+/* ---- trending: a ranked list ---------------------------------------------- */
+/* Each row is its own grid, so every column has a FIXED width: that is what keeps the rows aligned. The code and
+   its type tag share the first text column; the title and its popularity bar share the second. */
+#trendingGrid { display: block; counter-reset: rank; border-top: 2px solid var(--ink); }
+#trendingGrid .resource-card {
+  counter-increment: rank;
+  grid-template-columns: 2rem 8.9rem minmax(0, 1fr) 4.1rem 2rem auto;
+  grid-template-areas:
+    "rank code title price mark open"
+    "rank type metric price mark open";
+  gap: 0.25rem 0.9rem;
+  padding: 0.95rem 0.5rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  transition: background 0.15s;
+}
+#trendingGrid .resource-card:hover { background: var(--sheet); }
+#trendingGrid .resource-card::before {
+  content: counter(rank);
+  grid-area: rank;
+  align-self: center;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.7rem;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text-faint);
+}
+#trendingGrid .resource-card:nth-child(-n + 3)::before { color: var(--ink); }
+#trendingGrid .course-code-sub { font-size: 1.45rem; font-weight: 800; line-height: 1; align-self: end; white-space: nowrap; }
+#trendingGrid h3 { align-self: end; }
+#trendingGrid .type-tag { align-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+#trendingGrid .metric-node { display: flex; align-items: center; gap: 0.6rem; font-size: 0.82rem; font-weight: 700; color: var(--ink); align-self: start; }
+#trendingGrid .metric-node svg { display: none; }
+#trendingGrid .metric-node span { min-width: 5.6rem; white-space: nowrap; }
+#trendingGrid .metric-node span::after { content: " this week"; font-weight: 400; color: var(--text-muted); }
+#trendingGrid .metric-node::after {
+  content: "";
+  flex: 1;
+  min-width: 2rem;
+  height: 5px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--biro) calc(var(--share, 0.1) * 100%), var(--rule) 0);
+}
+
+/* ---- just added: a timeline ------------------------------------------------ */
+.dash-rail .section-title { margin-bottom: 1rem; }
+#recentFeedStack {
+  display: flex; flex-direction: column;
+  position: relative;
+  margin: 0.3rem 0 0 0.45rem;
+  padding-left: 1.5rem;
+  border-left: 2px solid var(--rule);
+}
+#recentFeedStack.hidden { display: none; }
+#recentFeedStack .resource-card {
+  position: relative;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "metric mark" "title title" "code price" "type open";
+  gap: 0.2rem 0.6rem;
+  padding: 0 0 1.35rem;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+#recentFeedStack .resource-card:hover { background: transparent; }
+#recentFeedStack .resource-card::before {
+  content: "";
+  position: absolute;
+  left: calc(-1.5rem - 7px);
+  top: 0.2rem;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--paper);
+  border: 2px solid var(--biro);
+}
+#recentFeedStack .resource-card:first-child::before { background: var(--biro); box-shadow: 0 0 0 4px rgba(35, 56, 240, 0.16); }
+#recentFeedStack .metric-node { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); gap: 0.35rem; }
+#recentFeedStack .metric-node svg { width: 13px; height: 13px; }
+#recentFeedStack .course-code-sub { font-size: 1.05rem; font-weight: 800; }
+#recentFeedStack h3 { font-size: 0.98rem; margin: 0.1rem 0 0.15rem; }
+#recentFeedStack .type-tag { margin-top: 0.3rem; }
+#recentFeedStack [data-action="open"] { justify-self: end; margin-top: 0.3rem; padding: 0.38rem 0.8rem; font-size: 0.82rem; }
+.feed-more-trigger-container { margin-top: 0.25rem; padding-left: 0.45rem; }
+.feed-more-btn { font-size: 0.9rem; font-weight: 600; padding: 0.55rem 1rem; }
+
+.dash-page .empty-state { display: flex; flex-direction: column; padding: 1.75rem 1.5rem; text-align: left; align-items: flex-start; gap: 0.9rem; }
+.dash-page .empty-state.hidden { display: none; }
+.dash-page .empty-state h3 { font-family: var(--font-display); font-weight: 700; font-size: 1.25rem; margin: 0 0 0.25rem; }
+.dash-page .empty-state p { margin: 0; color: var(--text-muted); max-width: 40ch; }
+.empty-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.1rem; }
+.btn-quiet { font-weight: 600; font-size: 0.92rem; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1.5px; }
+.btn-quiet:hover { color: var(--biro); }
+
+/* Nothing is trending (a young library): the board is one column and the empty state becomes a wide, inviting row. */
+.dash-board.is-trending-empty { grid-template-columns: minmax(0, 1fr); }
+.dash-board.is-trending-empty .dash-rail { max-width: none; }
+.dash-board.is-trending-empty .empty-state {
+  flex-direction: row; align-items: center; flex-wrap: wrap; gap: 1rem 1.75rem; padding: 1.5rem 1.75rem;
+}
+.dash-board.is-trending-empty .empty-state .empty-copy { flex: 1 1 18rem; }
+.dash-board.is-trending-empty .empty-state .empty-icon { flex: none; margin: 0; }
+
+/* ==========================================================================
+   CONTRIBUTE: the one dark block on the page
+   ========================================================================== */
+.dash-contribute {
+  display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: clamp(1.5rem, 3vw, 2.25rem) clamp(1.25rem, 3vw, 2.5rem);
+  border-radius: 14px;
+  background: var(--ink);
+  color: #fff;
+}
+.dash-contribute h2 { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.35rem, 2.6vw, 1.85rem); letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 0.45rem; max-width: 22ch; }
+.dash-contribute p { font-size: 0.98rem; color: rgba(255, 255, 255, 0.78); max-width: 46ch; line-height: 1.5; }
+.dash-contribute .btn-primary-sm { background: var(--highlighter); color: var(--ink); padding: 0.85rem 1.4rem; font-family: var(--font-display); font-weight: 800; font-size: 1rem; }
+.dash-contribute .btn-primary-sm:hover { background: #ffe680; color: var(--ink); }
+
+#rewardsDashSection { margin-top: 0.5rem; }
+
+/* ==========================================================================
+   ONE ORCHESTRATED MOMENT ON LOAD: the margin draws (above) and the rules fade in
+   ========================================================================== */
+@keyframes rules-in { from { opacity: 0; } to { opacity: 1; } }
+.dash-hero { animation: rules-in 0.6s ease-out both; }
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 1180px) {
+  #forYouGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1040px) {
+  .dash-board { grid-template-columns: minmax(0, 1fr); }
+  .dash-rail { max-width: 38rem; }
+}
+/* The sidebar is still on screen down to 860px, so the hero stacks its wallet underneath well before that:
+   the search box is the page's main object and must never be squeezed. */
+@media (max-width: 1100px) {
+  .dash-hero { grid-template-columns: minmax(0, 1fr); }
+  .dash-wallet {
+    flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 1rem;
+    border-left: 0; border-top: 2px dashed var(--rule);
+    padding: 1rem 1.5rem 1.1rem calc(var(--margin-x) + 1.5rem);
+  }
+  .dw-label { flex-basis: 100%; }
+  .dw-balance { font-size: 2.1rem; }
+  .dw-sub { flex-basis: 100%; order: 3; margin: 0; }
+  .dash-wallet .btn-primary-sm { padding: 0.6rem 1.4rem; }
+}
+@media (max-width: 860px) {
+  .dash-wallet { padding: 1rem 1.25rem 1rem calc(var(--margin-x) + 1rem); }
+}
+@media (max-width: 700px) {
+  .dash-hero { --margin-x: 1.35rem; }
+  .dash-hero-main { padding-left: calc(var(--margin-x) + 1rem); }
+  .dash-search { flex-wrap: nowrap; }
+  .dash-search > svg { display: none; }
+  .dash-search input { padding-left: 0.6rem; }
+  .dash-search-btn { padding: 0.8rem 1.1rem; }
+
+  /* for-you becomes a swipeable shelf */
+  #forYouGrid {
+    display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 0.8rem;
+    margin-inline: calc(-1 * clamp(1rem, 3vw, 2.5rem)); padding: 0.25rem clamp(1rem, 3vw, 2.5rem) 0.75rem;
+    scrollbar-width: none;
+  }
+  #forYouGrid::-webkit-scrollbar { display: none; }
+  #forYouGrid .resource-card { flex: 0 0 min(76%, 17rem); scroll-snap-align: start; }
+
+  /* ranked rows restack: code and price lead, the title follows, then type / popularity / action */
+  #trendingGrid .resource-card {
+    grid-template-columns: 1.7rem minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "rank code  price mark"
+      "rank title title title"
+      "rank type  metric open";
+    gap: 0.3rem 0.65rem;
+    padding: 0.9rem 0.1rem;
+  }
+  #trendingGrid .resource-card::before { font-size: 1.35rem; align-self: start; }
+  #trendingGrid .course-code-sub { align-self: center; }
+  #trendingGrid h3 { align-self: start; }
+  #trendingGrid .metric-node { justify-self: end; font-weight: 500; color: var(--text-muted); }
+  #trendingGrid .metric-node span { min-width: 0; }
+  #trendingGrid .metric-node span::after { content: ""; }
+  #trendingGrid .metric-node::after { display: none; }
+  #trendingGrid .metric-node svg { display: block; width: 13px; height: 13px; }
+  .dash-contribute .btn-primary-sm { width: 100%; text-align: center; }
+}
+@media (max-width: 700px) {
+  .dashboard-section .section-title { font-size: 1.25rem; }
+  .dashboard-section .section-title .see-all-link { font-size: 0.85rem; }
+}
+@media (max-width: 380px) {
+  .dash-hero-main h1 { font-size: 1.95rem; }
+}

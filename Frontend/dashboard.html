@@ -4,15 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Dashboard | Sharef</title>
+    <meta name="theme-color" content="#f3f5fa" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Bricolage Grotesque: headlines, course codes, numbers. Instrument Sans: everything else. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="dashboard.css" />
     <link rel="stylesheet" href="earn.css" />
     <link rel="stylesheet" href="responsive.css" />
+    <link rel="stylesheet" href="sharef-theme.css" />
+    <link rel="stylesheet" href="dashboard-v2.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -437,107 +441,105 @@
         </header>
 
         <!-- MAIN CONTENT -->
-        <main class="main-workspace" id="main-content">
-          <!-- HERO: greeting, primary search, wallet -->
-          <header class="dash-hero">
-            <div class="dash-hero-main">
-              <h1 id="dashboardGreeting">Good evening.</h1>
-              <p class="dash-sub">Search for the past questions and notes you need. Most are ready to download in a few taps.</p>
-              <form class="dash-search" id="dashSearchForm" role="search">
-                <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                <input type="text" id="dashSearchInput" placeholder="Search a course code or topic, e.g. CSC 201" aria-label="Search resources" autocomplete="off" />
-                <button type="submit" class="dash-search-btn">Search</button>
-              </form>
-              <div class="dash-chips" id="dashChips" aria-label="Quick searches"></div>
-            </div>
-            <aside class="dash-wallet" aria-label="Study wallet">
-              <span class="dw-label">Study wallet</span>
-              <strong class="dw-balance" id="dwBalance">&hellip;</strong>
-              <span class="dw-sub" id="dwSub">Downloads start from &#8358;200.</span>
-              <button type="button" class="btn-primary-sm" id="dwFund">Add funds</button>
-              <a class="dw-link" id="dwRewards" href="earn.html" style="display: none"></a>
-            </aside>
-          </header>
+        <main class="main-workspace dash-page" id="main-content">
+        <!-- HERO: a ruled sheet. The search box is the headline-sized object. -->
+        <header class="dash-hero">
+          <div class="dash-hero-main">
+            <h1 id="dashboardGreeting">Good evening.</h1>
+            <p class="dash-sub">Type a course code to find its past questions and notes.</p>
+            <form class="dash-search" id="dashSearchForm" role="search">
+              <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+              <input type="text" id="dashSearchInput" placeholder="Try CSC 201" aria-label="Search by course code or topic" autocomplete="off" />
+              <button type="submit" class="dash-search-btn">Search</button>
+            </form>
+            <div class="dash-chips" id="dashChips" aria-label="Quick searches"></div>
+          </div>
+          <aside class="dash-wallet" aria-label="Study wallet">
+            <span class="dw-label">Study wallet</span>
+            <strong class="dw-balance" id="dwBalance">&hellip;</strong>
+            <span class="dw-sub" id="dwSub">Downloads start from &#8358;200.</span>
+            <button type="button" class="btn-primary-sm" id="dwFund">Add funds</button>
+            <a class="dw-link" id="dwRewards" href="earn.html" style="display: none"></a>
+          </aside>
+        </header>
 
-          <!-- ONE smart next step (wishlist / wallet), filled by dashboard-home.js -->
-          <div class="dash-nudge hidden" id="dashNudge" role="status"></div>
+        <!-- ONE smart next step (wishlist / wallet), filled by dashboard-home.js -->
+        <div class="dash-nudge hidden" id="dashNudge" role="status"></div>
 
-          <!-- PERSONALISED: matched to the student's level and department -->
-          <section class="dashboard-section hidden" id="forYouSection">
-            <h2 class="section-title"><span id="forYouTitle">For your level</span><a class="see-all-link" href="resources.html">Browse all</a></h2>
-            <div class="resource-grid" id="forYouGrid"></div>
-          </section>
-          <div class="dash-profile-cta hidden" id="forYouProfileCta">
-            <div><strong>Get resources picked for you</strong><span>Add your department and level to your profile and we will show what matches.</span></div>
-            <a class="btn-primary-sm" href="profile.html">Complete profile</a>
+        <!-- PERSONALISED: matched to the student's level and department -->
+        <section class="dashboard-section hidden" id="forYouSection">
+          <h2 class="section-title"><span id="forYouTitle">Picked for you</span><a class="see-all-link" href="resources.html">Browse all</a></h2>
+          <p class="section-sub">Matched to your level and department.</p>
+          <div class="resource-grid" id="forYouGrid"></div>
+        </section>
+        <div class="dash-profile-cta hidden" id="forYouProfileCta">
+          <div><strong>Get resources picked for you</strong><span>Add your department and level to your profile and we will show what matches.</span></div>
+          <a class="btn-primary-sm" href="profile.html">Complete profile</a>
+        </div>
+
+        <div class="dash-board">
+          <div class="dash-primary">
+            <section class="dashboard-section" id="trendingSection">
+              <h2 class="section-title">
+                Trending this week
+                <a class="see-all-link" href="resources.html">Browse all</a>
+              </h2>
+              <p class="section-sub">What students downloaded most in the last 7 days.</p>
+              <div class="resource-grid" id="trendingGrid">
+                <!-- Rows are rendered by dashboard.js from GET /api/resources/trending -->
+                <!-- Whole section is hidden by dashboard.js if no trending resources are found -->
+              </div>
+            </section>
           </div>
 
-          <section class="dashboard-section" id="trendingSection">
-            <h2 class="section-title">
-              Trending Today
-              <a class="see-all-link" href="resources.html">See all</a>
-            </h2>
-            <div class="resource-grid" id="trendingGrid">
-              <!-- Trending cards are rendered by dashboard.js from GET /api/resources/trending -->
-              <!-- Whole section is hidden by dashboard.js if no trending resources are found -->
-            </div>
-          </section>
-
-          <section class="dashboard-section">
-            <h2 class="section-title">Recently Added</h2>
-            <div class="feed-stack" id="recentFeedStack">
-              <!-- Feed items are rendered by dashboard.js from GET /api/resources/recent -->
-            </div>
-
-            <!-- Shown instead of the feed above when nothing was added in
-                 the last 7 days -->
-            <div class="empty-state hidden" id="recentFeedEmptyState">
-              <div class="empty-icon" aria-hidden="true">
-                <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
-                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
+          <aside class="dash-rail">
+            <section class="dashboard-section">
+              <h2 class="section-title">Just added</h2>
+              <div class="feed-stack" id="recentFeedStack">
+                <!-- Timeline entries are rendered by dashboard.js from GET /api/resources/recent -->
               </div>
-              <h3>You're up to date</h3>
-              <p>Browse for more resources to keep learning.</p>
-              <a href="resources.html" class="btn-primary-sm">Browse Resources</a>
-            </div>
+              <!-- Shown instead of the timeline when nothing was added in the last 7 days -->
+              <div class="empty-state hidden" id="recentFeedEmptyState">
+                <div class="empty-icon" aria-hidden="true">
+                  <svg fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                </div>
+                <div class="empty-copy">
+                  <h3>Nothing new this week</h3>
+                  <p>Browse everything on Sharef, or be the one to add the next resource.</p>
+                </div>
+                <div class="empty-actions">
+                  <a href="resources.html" class="btn-primary-sm">Browse resources</a>
+                </div>
+              </div>
+              <!-- See More interaction panel -->
+              <div class="feed-more-trigger-container">
+                <button class="feed-more-btn" id="feedMoreBtn" aria-label="Load more recently added items">
+                  <span>See more updates</span>
+                  <svg fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" /></svg>
+                </button>
+              </div>
+            </section>
+          </aside>
+        </div>
 
-            <!-- See More interaction panel -->
-            <div class="feed-more-trigger-container">
-              <button
-                class="feed-more-btn"
-                id="feedMoreBtn"
-                aria-label="Load more recently added items"
-              >
-                <span>See more updates</span>
-                <svg
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="2.5"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-            </div>
-          </section>
+        <section class="dashboard-section" id="rewardsDashSection" style="display: none">
+          <h2 class="section-title">
+            Earn Rewards
+            <a class="see-all-link" href="earn.html">Open</a>
+          </h2>
+          <div class="rw-strip" id="rewardsDashBody"></div>
+        </section>
 
-          <section class="dashboard-section" id="rewardsDashSection" style="display: none">
-            <h2 class="section-title">
-              Earn Rewards
-              <a class="see-all-link" href="earn.html">Open</a>
-            </h2>
-            <div class="rw-strip" id="rewardsDashBody"></div>
-          </section>
-
-          <section class="dash-contribute" id="dashContribute">
-            <div>
-              <h2>Have notes or past questions others need?</h2>
-              <p>Every upload helps a classmate and is checked before it goes live. Share what you have.</p>
-            </div>
-            <a class="btn-primary-sm" href="upload.html">Upload a resource</a>
-          </section>
-        </main>
+        <section class="dash-contribute" id="dashContribute">
+          <div>
+            <h2>Have notes or past questions others need?</h2>
+            <p>Every upload helps a classmate and is checked before it goes live.</p>
+          </div>
+          <a class="btn-primary-sm" href="upload.html">Upload a resource</a>
+        </section>
+      </main>
       </div>
     </div>
 

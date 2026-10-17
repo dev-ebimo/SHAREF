@@ -142,10 +142,9 @@ body {
    Must fit the *visible* viewport (dvh) and scroll internally, so Save /
    Cancel buttons are never pushed below the fold on short phones.
    -------------------------------------------------------------------------- */
-.wallet-modal, .edit-profile-modal, .preview-modal, .danger-modal,
-.profile-prompt-modal, .modal-surface {
-  max-width: 100%;
-}
+/* NOTE: a "max-width: 100%" rule used to sit here for every modal class. Because this file loads AFTER each page's
+   own stylesheet it silently cancelled their designed widths (400px, 420px...), so every modal stretched edge to
+   edge on desktop. The overlay already has padding, so a modal can never overflow the screen; the rule is gone. */
 @media (max-width: 700px) {
   .wallet-modal, .edit-profile-modal, .preview-modal, .danger-modal,
   .profile-prompt-modal, .modal-surface {

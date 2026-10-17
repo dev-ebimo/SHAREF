@@ -51,6 +51,21 @@ document.addEventListener("DOMContentLoaded", function () {
     var trigger = document.getElementById("accountMenuTrigger");
     if (trigger) trigger.setAttribute("aria-label", "Account menu for " + fullName);
 
+    // The line under the name in the account menu used to be hard-coded markup ("Computer Science • 200 Level")
+    // and so showed that for EVERY student on every page. Fill it from the student's real profile.
+    var subtitleEls = document.querySelectorAll(".account-dropdown-identity p");
+    if (subtitleEls.length) {
+      authFetch(API_BASE + "/users/me")
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          var u = data && data.success ? data.user : null;
+          var level = u && u.level ? String(u.level).replace(/\s*level$/i, "") + " Level" : "";
+          var text = [level, u && u.department].filter(Boolean).join(" ") || "Student";
+          subtitleEls.forEach(function (el) { el.textContent = text; });
+        })
+        .catch(function () { subtitleEls.forEach(function (el) { el.textContent = "Student"; }); });
+    }
+
     var greetingEl = document.getElementById("dashboardGreeting");
     if (greetingEl) {
       var hour = new Date().getHours();
@@ -282,13 +297,15 @@ document.addEventListener("DOMContentLoaded", function () {
     var metricIcon = opts.metricIcon ||
       '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>';
     var metricLabel = opts.metricLabel != null ? opts.metricLabel : "";
+    // Dense lists (ranked rows, timeline) say "Preview"; the roomier index cards say the full thing.
+    var openLabel = opts.openLabel || "Preview &amp; download";
 
     var card = document.createElement("article");
     card.className = "resource-card";
     card.dataset.resourceId = resource.id;
     card.innerHTML =
       '<div class="card-top-meta">' +
-        '<span class="type-tag pdf-type">' + escapeHtml(resource.type) + "</span>" +
+        '<span class="type-tag pdf-type" data-type="' + escapeHtml(resource.type) + '">' + escapeHtml(resource.type) + "</span>" +
         '<button class="icon-btn-badge' + (isBookmarked ? " is-bookmarked" : "") + '" style="padding: 0.2rem" aria-label="Bookmark this resource" data-action="bookmark">' +
           '<svg fill="' + (isBookmarked ? "currentColor" : "none") + '" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L7 21V5z"/></svg>' +
         "</button>" +
@@ -302,7 +319,7 @@ document.addEventListener("DOMContentLoaded", function () {
         (resource.pages ? '<span class="price-chip">\u20A6' + calculateResourceCost(Number(resource.pages)).toLocaleString("en-NG") + "</span>" : "") +
       "</div>" +
       '<div class="card-hover-actions">' +
-        '<button type="button" class="card-mini-btn is-primary" data-action="open">Preview &amp; Download</button>' +
+        '<button type="button" class="card-mini-btn is-primary" data-action="open">' + openLabel + "</button>" +
       "</div>";
     return card;
   }
@@ -337,6 +354,7 @@ document.addEventListener("DOMContentLoaded", function () {
         isBookmarked: (recentBookmarkedIds || []).indexOf(resource.id) !== -1,
         metricIcon: '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
         metricLabel: timeAgoLabel(resource.date),
+        openLabel: "Preview",
       });
       // Only the first 6 show until "See more updates" is clicked
       if (index >= 6) card.classList.add("hidden");
@@ -351,6 +369,10 @@ document.addEventListener("DOMContentLoaded", function () {
   function renderTrending(resources, bookmarkedIds) {
     if (!trendingGrid) return;
 
+    // With nothing trending the board has one column, not a ranked list beside an empty gap.
+    var board = document.querySelector(".dash-board");
+    if (board) board.classList.toggle("is-trending-empty", resources.length === 0);
+
     if (resources.length === 0) {
       if (trendingSection) trendingSection.style.display = "none";
       return;
@@ -360,12 +382,17 @@ document.addEventListener("DOMContentLoaded", function () {
     trendingGrid.innerHTML = "";
     bookmarkedIds = bookmarkedIds || [];
 
+    var leader = resources.reduce(function (m, r) { return Math.max(m, Number(r.recentDownloads) || 0); }, 0) || 1;
     resources.forEach(function (resource) {
       window.__dashboardResourceCache[resource.id] = resource;
-      trendingGrid.appendChild(buildResourceCard(resource, {
+      var row = buildResourceCard(resource, {
         isBookmarked: bookmarkedIds.indexOf(resource.id) !== -1,
         metricLabel: resource.recentDownloads,
-      }));
+        openLabel: "Preview",
+      });
+      // 0..1 share of the most-downloaded row: the bar under the number
+      row.style.setProperty("--share", Math.max(0.04, (Number(resource.recentDownloads) || 0) / leader).toFixed(3));
+      trendingGrid.appendChild(row);
     });
   }
 
