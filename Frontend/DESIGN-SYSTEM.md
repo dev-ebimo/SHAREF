@@ -1,65 +1,89 @@
-# Sharef design system: "the exercise book"
+# Sharef design system: "the exercise book" (light and dark)
 
 Sharef is where students find past questions and notes **by course code**, usually on a phone, usually before an exam.
-So the look is school stationery: cool white paper, navy ink, blue biro, yellow highlighter, a red margin line.
-Course codes (`CSC 201`) are the product's own vocabulary, so they are set as display type.
+The look is school stationery: cool white paper, navy ink, blue biro, yellow highlighter, a red margin line.
+Dark mode is the same notebook at night: a navy desk, midnight-blue sheets, the same highlighter.
 
-Everything lives in **`sharef-theme.css`** (site-wide) and **`dashboard-v2.css`** (this page only).
+**Status: all 32 pages use it.** The dashboard is the showcase (`dashboard-v2.css`); the other 31 get the theme
+(`sharef-theme.css`) plus their own stylesheet, converted to tokens.
 
-## The six colours
+## How a page is wired
 
-| Token | Value | Use it for | Never for |
+```html
+<head>
+  <meta name="viewport" ... />
+  <script src="theme.js"></script>                       <!-- first: applies the saved choice before paint -->
+  <link href="...Bricolage+Grotesque...&family=Instrument+Sans..." rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />         <!-- the page's own stylesheets -->
+  <link rel="stylesheet" href="responsive.css" />
+  <link rel="stylesheet" href="sharef-theme.css" />      <!-- LAST: it overrides, it does not replace -->
+</head>
+```
+
+## Light / dark / system
+
+- Light tokens live on `:root`. Dark tokens apply under `:root[data-theme="dark"]` **and** under
+  `@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) }`. Both dark blocks are generated from one table, so a token
+  can never exist in one mode and be missing in the other.
+- **System** (default) follows the phone/PC setting. **Light** and **Dark** are explicit and always beat the OS.
+  The choice is saved in `localStorage` (`sharef.theme`), shared between tabs, and applied before first paint (no white flash).
+- Where the user changes it: the account menu (every page that has one), **Settings > Appearance** (student and admin), and a small floating
+  button on pages with no menu (login, sign up, legal pages). `window.SharefTheme.set("dark" | "light" | "system")` does it from code.
+- `theme.js` also keeps `<meta name="theme-color">` in sync, so the browser's address bar matches.
+
+## Tokens (use these, never raw colours)
+
+| Token | Light | Dark | Use |
 |---|---|---|---|
-| `--paper` | `#f3f5fa` | page background (the desk) | cards |
-| `--sheet` | `#ffffff` | every surface that holds content | page background |
-| `--ink` | `#0c1633` | text; the **one** dark block per page; active nav | decoration |
-| `--biro` | `#2338f0` | anything you can act on: primary buttons, links, course codes | body text |
-| `--highlighter` | `#ffd84a` | money (prices, balance) and "look here" (nudges) | large areas |
-| `--margin` | `#e5484d` | the margin line, errors | success states |
-| `--rule` | `#d6ddee` | every hairline border and ruled line | text |
+| `--paper` | `#f3f5fa` | `#0a1020` | page background (the desk) |
+| `--sheet` | `#ffffff` | `#121a32` | every surface that holds content |
+| `--surface-02` | `#edf0f8` | `#1a2342` | hover / recessed areas |
+| `--rule` | `#d6ddee` | `#2a3660` | every hairline border |
+| `--ink` / `--text-pure` | `#0c1633` | `#e8ecf9` | text |
+| `--text-lead` / `--text-muted` / `--text-faint` | `#2a3557` / `#566180` / `#606b89` | `#c5cde6` / `#9aa6c6` / `#8e9abd` | secondary text (all >= 4.5:1) |
+| `--biro` | `#2338f0` | `#93a0ff` | accent **as text, border, icon, link** |
+| `--biro-fill` (= legacy `--purple`) | `#2338f0` | `#3b4ee8` | accent **as a background** (white text on top) |
+| `--highlighter` + `--on-hl` | `#ffd84a` + `#0c1633` | same | money, "new", the one thing to look at |
+| `--margin` / `--margin-text` | `#e5484d` / `#b3262c` | `#ff6b72` / `#ff8a90` | margin line / red text |
+| `--red --ok --amber --teal --info` (+ `-rgb`, `-fill`) | deep, readable on white | bright, readable on navy | status text and tints |
+| `--fill-ink` + `--on-fill-ink` | navy + white | pale + navy | inverse blocks (active nav pill, toast) |
+| `--feature-bg` + `--feature-fg` | navy + white | blue + white | the one feature block per page |
+| `--ink-rgb --biro-rgb --shadow-rgb --scrim-rgb ...` | | | for `rgba(var(--x-rgb), 0.12)` tints |
 
-Muted text is `--text-muted` (`#566180`, 5.6:1 on paper). Faded text is `--text-faint` (`#68738f`, 4.3:1+). Both pass WCAG AA.
-Do not introduce new colours. If something needs emphasis, use ink, biro or highlighter.
+**Why two blues?** On a dark surface no single blue can both hold white button text *and* be readable as link text; the contrast maths
+forbids it. So a *fill* (a background with white text on it) and an *accent* (text/border) are separate tokens.
+Rule: `background` -> `--biro-fill`; everything else -> `--biro`.
 
-## Type
+**The on-fill scope.** A container painted with a solid colour (the wishlist banner, the profile header) holds white text in both modes.
+Each stylesheet ends with a generated `ON-FILL SCOPE` block that re-declares the text tokens as white for those containers, so every
+descendant using `var(--text-*)` or `rgba(var(--ink-rgb), x)` follows automatically. When you add a new filled container, add its selector
+to that block (or set a literal `color: #fff`).
 
-- **Bricolage Grotesque** (700/800): headlines, section titles, **course codes**, prices, numbers. Tight tracking (`-0.02em` to `-0.04em`).
-  Course codes also use `font-variation-settings: "wdth" 85` to be slightly condensed.
-- **Instrument Sans** (400-700): everything else. 16px base.
-- Sentence case everywhere. No ALL-CAPS labels, no letter-spaced eyebrows.
-- Scale: 12.5 / 14 / 16 / 20 / 22 / 28 / 40 / 56-64px (the greeting is fluid: `clamp(2.15rem, 4.8vw, 3.7rem)`).
+## Type, shape, motion
 
-## Shape and space
-
-- Controls 8-10px radius, rows/inputs 12px, panels/modals 16px, the hero sheet 10px, tags are pills. Different jobs, different corners.
-- Hairline borders (`1px var(--rule)`) instead of shadows. The only shadows are on things that float (menus, modals, the upload button).
-- Page content max width 1180px, centered. Sections separated by space (2.5rem), not by boxes.
+- **Bricolage Grotesque** (700/800): headlines, section titles, **course codes**, prices, numbers. **Instrument Sans**: everything else.
+- Sentence case. No all-caps labels or letter-spaced eyebrows (tiny status badges excepted).
+- Radius: controls 8-10px, rows/inputs 12px, panels/modals 16px, tags are pills. Hairline borders, not shadows; shadows only on floating things.
+- One orchestrated motion per page (the dashboard's margin draws in). `prefers-reduced-motion` is honoured globally.
 
 ## Component recipes
 
-- **Primary action**: biro fill, white text, 10px radius. One per view. **Secondary**: white, 1px rule border (or 2px ink border for the wallet). **Quiet**: underlined text.
-- **Price**: highlighter chip, Bricolage 700. **Balance**: Bricolage 800 with a highlighter swipe behind the lower half of the numerals.
-- **Type tag** (by meaning, set via `data-type`): Past Question = ink outline, Lecture Note = biro tint, Revision Sheet = highlighter tint, Assignment Material = margin-red tint.
-- **Nudge / attention strip**: `#fff1b3` background, ink text, ink button. Never a coloured banner.
-- **The dark block**: ink background, white text, highlighter button. Once per page, at the end ("Upload a resource").
-- **Ranked list** (anything ordered by a number): numeral + code + title + inline bar + price + action; rows divided by hairlines.
-- **Timeline** (anything ordered by time): 2px rule down the left, 12px dot per entry, the newest filled in biro.
-- **Hero sheet** (use once, on the landing page only): ruled lines, a red margin line that draws in on load, a dashed "tear-off" edge.
+- **Primary action**: biro fill, white text, 10px radius; one per view. **Secondary**: sheet + 1px rule border. **Quiet**: underlined text.
+- **Price**: highlighter chip. **Balance**: Bricolage 800 with a highlighter swipe (`--swipe`) behind the lower half.
+- **Type tag** (via `data-type`): Past Question = ink outline, Lecture Note = biro tint, Revision Sheet = highlighter tint, Assignment Material = red tint.
+- **Ranked list** (ordered by a number) and **timeline** (ordered by time): see `dashboard-v2.css`.
+- **Hero sheet**: ruled lines + a red margin line; use once, on the app's landing page.
 
-## Rolling it out to another page
+## Adding or changing a page
 
-1. In `<head>`, replace the Poppins link with:
-   `https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap`
-2. Add `<link rel="stylesheet" href="sharef-theme.css" />` **after** the page's own stylesheet and `responsive.css`.
-3. That alone re-skins the shell (sidebar, top bar, search, menus), buttons, modals, toasts and tokens. Verified on `resources.html`.
-4. Then clean up what the page's own stylesheet hard-codes. Search it for `168, 85, 247`, `#a855f7`, `#8b5cf6`, `text-transform: uppercase` and replace
-   with `var(--biro)` / `rgba(35, 56, 240, 0.1)` / sentence case. Approximate counts of hard-coded purples left:
-   lecture-notes 12, past-questions 11, resources 10, help 8, upload 6, settings 6, profile 5, bookmarks 5, downloads 3, others 1-2.
-5. Pages that do **not** load `dashboard.css` (login, signup, verify, the admin pages) have their own shell and need their own pass.
+1. Use tokens. No `rgba(255,255,255,x)` surfaces, purple hex, or raw status colours.
+2. Text on a coloured fill: literal `color: #fff`, or add the container to the on-fill scope.
+3. A decorative overlay that must stay white (a button shine) stays `rgba(255, 255, 255, x)`; a translucent *surface* uses `rgba(var(--ink-rgb), x)`.
+4. Do not use `opacity` to "dim" text or a whole card: it lowers contrast below AA. Use `--text-muted`.
+5. Verify with the audit in `tools/` (loads every page in both modes and checks real contrast).
 
-## Rules of thumb
+## Tooling (`tools/`)
 
-- Spend boldness in **one** place per page (here: the hero search). Everything else stays flat and quiet.
-- Give each kind of content the shape that suits it (list, timeline, index card) instead of one card repeated.
-- Rank, time and money are information, so they get numerals, a timeline and a highlighter. Decoration does not.
-- Every motion respects `prefers-reduced-motion` (handled once, in the theme).
+- `convert_css.py`: the property-aware converter used for the roll-out (old dark-purple CSS -> tokens).
+- `qa.mjs`: loads every page in light and dark at any width and checks real WCAG contrast of every visible piece of text against its
+  composited background (gradients included), horizontal overflow, redirects and script errors; saves screenshots.

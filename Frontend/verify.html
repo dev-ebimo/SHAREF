@@ -3,12 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script src="theme.js"></script>
     <title>Verify Your Email | Sharef</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="verify.css">
     <link rel="stylesheet" href="responsive.css" />
+    <link rel="stylesheet" href="sharef-theme.css" />
 </head>
 <body>
     <div class="bg bg1" aria-hidden="true"></div>
@@ -80,7 +82,7 @@
                 </div>
 
                 <form action="confirm.html" method="POST" id="otp-form">
-                    <div class="status-toast" id="otp-error" style="display:none; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #f87171; line-height: 1.5;"></div>
+                    <div class="status-toast" id="otp-error" style="display:none; background: rgba(var(--red-rgb), 0.08); border: 1px solid rgba(var(--red-rgb), 0.25); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--red); line-height: 1.5;"></div>
 
                     <fieldset class="form-section">
                         <legend>Verification Code</legend>

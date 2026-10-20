@@ -39,7 +39,7 @@
 }
 .searchable-select-input:focus {
   outline: none;
-  border-color: var(--border-hover, var(--purple));
+  border-color: var(--border-hover, var(--biro));
   background: var(--surface-02);
 }
 
@@ -76,7 +76,7 @@
   background: var(--bg-void);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-md, 12px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 12px 32px rgba(var(--shadow-rgb), calc(0.45 * var(--sh)));
 }
 .searchable-select-list.hidden {
   display: none;

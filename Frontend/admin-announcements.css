@@ -54,8 +54,8 @@
 .form-row input:focus,
 .form-row textarea:focus,
 .form-row select:focus {
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: rgba(var(--biro-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 
 .form-row-split {
@@ -78,7 +78,7 @@
   gap: 0.35rem;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #34d399;
+  color: var(--ok);
   transition: opacity 0.3s ease;
 }
 .save-confirm svg { width: 14px; height: 14px; }
@@ -97,7 +97,7 @@
   cursor: pointer;
   transition: background 0.2s ease;
 }
-.settings-btn-primary:hover { background: #b55fe6; }
+.settings-btn-primary:hover { background: var(--biro-fill); }
 .settings-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ---- Sent history ---- */
@@ -154,14 +154,14 @@
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%) translateY(8px);
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   color: var(--text-pure);
   padding: 0.75rem 1.25rem;
   border-radius: 10px;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   z-index: 400;
   opacity: 0;
   pointer-events: none;
@@ -176,4 +176,19 @@
   .form-row-split {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.settings-btn-primary:hover {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

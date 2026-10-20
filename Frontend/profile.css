@@ -10,12 +10,8 @@
    1. PROFILE HEADER
    -------------------------------------------------------------------------- */
 .profile-header-card {
-  background: linear-gradient(
-    135deg,
-    rgba(168, 85, 247, 0.07) 0%,
-    rgba(99, 102, 241, 0.02) 100%
-  );
-  border: 1px solid rgba(168, 85, 247, 0.15);
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
+  border: 1px solid rgba(var(--biro-rgb), 0.15);
   border-radius: var(--radius-lg);
   padding: 2rem;
   margin-bottom: 2rem;
@@ -32,8 +28,8 @@
   height: 84px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
-  border: 3px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
+  border: 3px solid rgba(var(--ink-rgb), 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -87,10 +83,10 @@
   flex-shrink: 0;
   height: 40px;
   padding: 0 1.1rem;
-  background: var(--surface-02);
-  border: 1px solid var(--border-hair);
+  background: rgba(255, 255, 255, 0.16); /* sits on the blue profile header: glass white, not a light surface */
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 10px;
-  color: var(--text-pure);
+  color: #fff;
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 600;
@@ -98,8 +94,8 @@
   transition: all 0.2s ease;
 }
 .edit-profile-btn:hover {
-  border-color: var(--border-hover);
-  background: rgba(168, 85, 247, 0.08);
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.26);
 }
 .edit-profile-btn svg {
   width: 15px;
@@ -144,7 +140,7 @@
   transition: all 0.2s ease;
 }
 .stat-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
 }
 .timeline-item {
@@ -203,7 +199,7 @@
   transition: all 0.2s ease;
 }
 .upload-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
 }
 .upload-card-main h3 {
@@ -249,10 +245,10 @@
   top: calc(100% + 6px);
   right: 0;
   width: 170px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-md);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   padding: 0.4rem;
   display: none;
   flex-direction: column;
@@ -272,7 +268,7 @@
   height: 24px;
   flex-shrink: 0;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--ink-rgb), 0.08);
   border: none;
   position: relative;
   cursor: pointer;
@@ -332,7 +328,7 @@
   color: var(--purple-soft);
 }
 .all-settings-link:hover {
-  color: var(--purple);
+  color: var(--biro);
 }
 
 /* --------------------------------------------------------------------------
@@ -342,7 +338,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.65);
+  background: rgba(var(--scrim-rgb), 0.65);
   backdrop-filter: blur(3px);
   z-index: 300;
   opacity: 0;
@@ -362,10 +358,10 @@
   width: min(90vw, 440px);
   max-height: 85vh;
   overflow-y: auto;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 30px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh)));
   padding: 1.5rem;
   z-index: 301;
 }
@@ -430,16 +426,16 @@
   color-scheme: dark;
 }
 .modal-field select option {
-  background: #0f0e17;
+  background: var(--sheet);
   color: var(--text-pure);
 }
 .modal-field input:focus,
 .modal-field textarea:focus,
 .modal-field select:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 
 .modal-actions {
@@ -478,7 +474,7 @@
   transition: background 0.2s ease;
 }
 .modal-save-btn:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 
 /* ==========================================================================
@@ -517,4 +513,20 @@
 }
 
 @media (max-width: 480px) {
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.profile-header-card,
+.modal-save-btn:hover {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

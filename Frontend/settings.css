@@ -16,8 +16,8 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 1.5rem;
-  background: rgba(168, 85, 247, 0.05);
-  border: 1px solid rgba(168, 85, 247, 0.15);
+  background: rgba(var(--biro-rgb), 0.05);
+  border: 1px solid rgba(var(--biro-rgb), 0.15);
   border-radius: var(--radius-md);
   padding: 1rem 1.25rem;
   margin-bottom: 2rem;
@@ -33,7 +33,7 @@
 .status-item svg {
   width: 16px;
   height: 16px;
-  color: #34d399;
+  color: var(--ok);
   flex-shrink: 0;
 }
 .status-since {
@@ -85,7 +85,7 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
-  color: #34d399 !important;
+  color: var(--ok) !important;
   font-weight: 500;
 }
 .email-status svg {
@@ -104,14 +104,14 @@
   bottom: 2rem;
   left: 50%;
   transform: translateX(-50%) translateY(8px);
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   color: var(--text-pure);
   padding: 0.75rem 1.25rem;
   border-radius: 10px;
   font-size: 0.85rem;
   font-weight: 600;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   z-index: 400;
   opacity: 0;
   pointer-events: none;
@@ -152,14 +152,14 @@
   color-scheme: dark;
 }
 .settings-row-control select option {
-  background: #0f0e17;
+  background: var(--sheet);
   color: var(--text-pure);
 }
 .settings-row-control input:focus,
 .settings-row-control select:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: rgba(var(--biro-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 
 /* Native <select> popups often ignore your CSS and fall back to the OS
@@ -170,7 +170,7 @@
   color-scheme: dark;
 }
 .settings-row-control select option {
-  background-color: #0f0e17;
+  background-color: var(--sheet);
   color: var(--text-pure);
 }
 .readonly-value {
@@ -190,7 +190,7 @@
 .save-confirm {
   font-size: 0.8rem;
   font-weight: 600;
-  color: #34d399;
+  color: var(--ok);
   opacity: 1;
   transition: opacity 0.3s ease;
 }
@@ -217,7 +217,7 @@
   color: #fff;
 }
 .settings-btn-primary:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 .settings-btn-secondary {
   background: var(--surface-02);
@@ -228,8 +228,8 @@
   border-color: var(--border-hover);
 }
 .settings-btn-danger {
-  background: rgba(239, 68, 68, 0.12);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(var(--red-rgb), 0.12);
+  border: 1px solid rgba(var(--red-rgb), 0.3);
   color: var(--red);
 }
 .settings-btn-danger:hover:not(:disabled) {
@@ -280,7 +280,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--ink-rgb), 0.08);
   padding: 0.1rem 0.3rem;
   border-radius: 4px;
 }
@@ -317,7 +317,7 @@
   height: 24px;
   flex-shrink: 0;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--ink-rgb), 0.08);
   border: none;
   position: relative;
   cursor: pointer;
@@ -347,8 +347,8 @@
    DANGER ZONE
    -------------------------------------------------------------------------- */
 .danger-zone-card {
-  border-color: rgba(239, 68, 68, 0.2);
-  background: rgba(239, 68, 68, 0.03);
+  border-color: rgba(var(--red-rgb), 0.2);
+  background: rgba(var(--red-rgb), 0.03);
 }
 .danger-title {
   color: var(--red) !important;
@@ -362,7 +362,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.65);
+  background: rgba(var(--scrim-rgb), 0.65);
   backdrop-filter: blur(3px);
   z-index: 300;
   opacity: 0;
@@ -382,10 +382,10 @@
   width: min(90vw, 440px);
   max-height: 85vh;
   overflow-y: auto;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 30px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh)));
   padding: 1.5rem;
   z-index: 301;
 }
@@ -393,7 +393,7 @@
   display: block;
 }
 .edit-profile-modal.danger-modal {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(var(--red-rgb), 0.3);
 }
 
 .modal-header {
@@ -455,13 +455,13 @@
 .modal-field input:focus,
 .modal-field textarea:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 .danger-modal .modal-field input:focus {
-  border-color: rgba(239, 68, 68, 0.55);
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+  border-color: rgba(var(--red-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--red-rgb), 0.1);
 }
 
 /* Password field with an eye-icon show/hide toggle */
@@ -548,7 +548,7 @@
   transition: background 0.2s ease;
 }
 .modal-save-btn:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 
 /* ==========================================================================
@@ -574,4 +574,20 @@
   .notif-toggle-pair {
     align-self: flex-start;
   }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.settings-btn-primary:hover,
+.modal-save-btn:hover {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

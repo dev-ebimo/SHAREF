@@ -53,9 +53,9 @@
 }
 .search-container input:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.12);
 }
 
 /* --- Section spacing to match dashboard rhythm --- */
@@ -122,18 +122,18 @@
 /* Explicit option colors as a fallback/refinement for browsers (Chrome,
    Edge) that respect per-option styling on top of color-scheme. */
 .filter-group select option {
-  background-color: #14121f;
+  background-color: var(--sheet);
   color: var(--text-pure);
 }
 .filter-group select:hover {
   border-color: var(--border-hover);
 }
 .filter-group select:focus {
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
 }
 .sort-select {
-  border-left: 2px solid var(--purple) !important;
+  border-left: 2px solid var(--biro) !important;
 }
 
 .mobile-filter-header {
@@ -172,7 +172,7 @@
 .qf-btn.active {
   background: var(--purple);
   color: #fff;
-  border-color: var(--purple);
+  border-color: var(--biro);
 }
 
 /* --- Headers & context --- */
@@ -189,10 +189,10 @@
 .course-highlight-area {
   background: linear-gradient(
     135deg,
-    rgba(168, 85, 247, 0.07) 0%,
-    rgba(255, 255, 255, 0.01) 100%
+    rgba(var(--biro-rgb), 0.07) 0%,
+    rgba(var(--ink-rgb), 0.01) 100%
   );
-  border: 1px solid rgba(168, 85, 247, 0.18);
+  border: 1px solid rgba(var(--biro-rgb), 0.18);
   border-radius: var(--radius-lg);
   padding: 1.5rem;
   margin-bottom: 2rem;
@@ -239,7 +239,7 @@
 }
 .note-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(168, 85, 247, 0.35);
+  border-color: rgba(var(--biro-rgb), 0.35);
   background: var(--surface-02);
 }
 
@@ -253,7 +253,7 @@
   width: 30px;
   height: 30px;
   border-radius: 8px;
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   display: flex;
   align-items: center;
@@ -331,14 +331,14 @@
   border-color: var(--border-hover);
 }
 .btn-download {
-  background: rgba(168, 85, 247, 0.1);
-  border-color: rgba(168, 85, 247, 0.25);
+  background: rgba(var(--biro-rgb), 0.1);
+  border-color: rgba(var(--biro-rgb), 0.25);
   color: var(--purple-soft);
 }
 .btn-download:hover {
   background: var(--purple);
   color: #fff;
-  border-color: var(--purple);
+  border-color: var(--biro);
 }
 
 /* --- Skeleton loading state --- */
@@ -356,13 +356,7 @@
   bottom: 0;
   left: 0;
   transform: translateX(-100%);
-  background-image: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0) 0,
-    rgba(255, 255, 255, 0.03) 20%,
-    rgba(255, 255, 255, 0.07) 60%,
-    rgba(255, 255, 255, 0)
-  );
+  background-image: linear-gradient(to right, transparent, rgba(var(--ink-rgb), 0.08), transparent);
   animation: shimmer 1.5s infinite;
 }
 @keyframes shimmer {
@@ -476,7 +470,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: #0f0e17;
+    background: var(--sheet);
     z-index: 210;
     flex-direction: column;
     padding: 1.5rem;
@@ -484,7 +478,7 @@
     border-radius: 20px 20px 0 0;
     transform: translateY(100%);
     transition: transform 0.3s var(--ease-snap);
-    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 -10px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   }
   .filter-panel.open {
     transform: translateY(0);
@@ -535,7 +529,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.7);
+  background: rgba(var(--scrim-rgb), 0.7);
   backdrop-filter: blur(4px);
   z-index: 300;
   display: flex;
@@ -557,13 +551,13 @@
   position: relative;
   width: 100%;
   max-width: 460px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
   padding: 2rem;
   box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   transform: scale(0.95) translateY(8px);
   transition: transform 0.25s var(--ease-snap);
 }
@@ -603,7 +597,7 @@
   height: 64px;
   margin: 0 auto 1.25rem;
   border-radius: 14px;
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   display: flex;
   align-items: center;
@@ -625,7 +619,7 @@
   object-position: top;
   border-radius: 12px;
   border: 1px solid var(--border-hair);
-  background: rgba(168, 85, 247, 0.06);
+  background: rgba(var(--biro-rgb), 0.06);
   margin-bottom: 1.25rem;
   transition: opacity 0.2s ease;
 }

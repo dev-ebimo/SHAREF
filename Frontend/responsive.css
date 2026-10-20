@@ -199,8 +199,8 @@ body {
   table.is-stacked thead { display: none; }
   table.is-stacked tbody tr {
     display: block;
-    background: var(--surface-01, rgba(255,255,255,.02));
-    border: 1px solid var(--border-hair, rgba(255,255,255,.07));
+    background: var(--surface-01, rgba(var(--ink-rgb), 0.02));
+    border: 1px solid var(--border-hair, rgba(var(--ink-rgb), 0.07));
     border-radius: var(--radius-md, 12px);
     padding: 0.35rem 1rem;
     margin-bottom: 0.75rem;
@@ -212,7 +212,7 @@ body {
     gap: 1rem;
     padding: 0.6rem 0 !important;
     border: 0 !important;
-    border-bottom: 1px solid var(--border-hair, rgba(255,255,255,.07)) !important;
+    border-bottom: 1px solid var(--border-hair, rgba(var(--ink-rgb), 0.07)) !important;
     text-align: right;
     min-width: 0;
     width: auto !important;
@@ -224,9 +224,9 @@ body {
     max-width: 42%;
     font-size: 0.68rem;
     font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text-muted, #8b93a7);
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--text-muted, var(--text-muted));
     text-align: left;
   }
   /* Cells whose label is empty (avatar/primary column) lead the card. */

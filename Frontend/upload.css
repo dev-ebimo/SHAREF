@@ -6,7 +6,7 @@
    ========================================================================== */
 
 :root {
-  --success: #06d6a0;
+  --success: var(--teal);
 }
 
 /* Generic hidden utility — nothing on this page actually defined this,
@@ -107,8 +107,8 @@
 .input-group input:focus,
 .input-group select:focus,
 .input-group textarea:focus {
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: rgba(var(--biro-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 .input-group textarea {
   resize: vertical;
@@ -151,7 +151,7 @@
 .drop-zone:hover,
 .drop-zone.dragover {
   border-color: var(--border-hover);
-  background: rgba(168, 85, 247, 0.05);
+  background: rgba(var(--biro-rgb), 0.05);
 }
 .drop-zone__icon {
   width: 34px;
@@ -247,7 +247,7 @@
   transition: background 0.15s ease;
 }
 .btn-remove:hover {
-  background: rgba(248, 113, 113, 0.1);
+  background: rgba(var(--red-rgb), 0.1);
 }
 .btn-remove svg {
   width: 14px;
@@ -260,8 +260,8 @@
 .info-box {
   display: flex;
   gap: 0.75rem;
-  background: rgba(168, 85, 247, 0.08);
-  border: 1px solid rgba(168, 85, 247, 0.18);
+  background: rgba(var(--biro-rgb), 0.08);
+  border: 1px solid rgba(var(--biro-rgb), 0.18);
   padding: 1rem;
   border-radius: var(--radius-md);
   margin-bottom: 1.25rem;
@@ -298,7 +298,7 @@
   justify-content: center;
 }
 .btn-primary:hover:not(:disabled) {
-  background: #9333ea;
+  background: var(--biro-fill);
 }
 .btn-primary:disabled {
   opacity: 0.45;
@@ -320,7 +320,7 @@
 }
 .btn-outline:hover {
   background: var(--surface-02);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(var(--ink-rgb), 0.15);
 }
 .action-buttons {
   display: flex;
@@ -378,7 +378,7 @@
 }
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--purple), var(--pink));
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
   width: 0%;
   transition: width 0.2s ease;
 }
@@ -395,7 +395,7 @@
 .success-icon {
   width: 60px;
   height: 60px;
-  background: rgba(6, 214, 160, 0.1);
+  background: rgba(var(--teal-rgb), 0.1);
   color: var(--success);
   border-radius: 50%;
   display: flex;
@@ -453,8 +453,8 @@
   vertical-align: -0.05em;
   animation: compress-spin 0.8s linear infinite;
 }
-.compress-status.is-done { color: #5eead4; }
-.compress-status.is-warn { color: #fbbf24; }
+.compress-status.is-done { color: var(--teal); }
+.compress-status.is-warn { color: var(--amber); }
 @keyframes compress-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .compress-status.is-working::before { animation: none; } }
 /* On phones the card is narrow (the Remove button takes ~90px), so let long file names wrap instead of being cut to "A_lecture_p…" */
@@ -464,4 +464,19 @@
   /* Icon-only Remove button on phones (the text stays in the DOM for screen readers) to give the file name more room */
   .btn-remove { font-size: 0; gap: 0; padding: 0.55rem; min-width: 40px; min-height: 40px; justify-content: center; }
   .btn-remove svg { width: 18px; height: 18px; }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.btn-primary:hover:not(:disabled) {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

@@ -3,16 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <script src="theme.js"></script>
     <title>Settings | Sharef Admin</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="admin-moderation.css" />
     <link rel="stylesheet" href="admin-settings.css" />
     <link rel="stylesheet" href="responsive.css" />
+    <link rel="stylesheet" href="sharef-theme.css" />
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
@@ -434,7 +436,7 @@
             <div class="settings-row">
               <div class="settings-row-label">
                 <h3>Appearance</h3>
-                <p>Sharef currently ships with Dark mode only.</p>
+                <p>Match your device, or always use light or dark.</p>
               </div>
               <div class="settings-row-control">
                 <div
@@ -442,19 +444,9 @@
                   role="radiogroup"
                   aria-label="Appearance"
                 >
-                  <button type="button" class="segment-btn" disabled>
-                    System <span class="soon-badge">Soon</span>
-                  </button>
-                  <button type="button" class="segment-btn" disabled>
-                    Light <span class="soon-badge">Soon</span>
-                  </button>
-                  <button
-                    type="button"
-                    class="segment-btn is-active"
-                    aria-pressed="true"
-                  >
-                    Dark
-                  </button>
+                  <button type="button" class="segment-btn" data-theme-mode="system" aria-pressed="false">System</button>
+                  <button type="button" class="segment-btn" data-theme-mode="light" aria-pressed="false">Light</button>
+                  <button type="button" class="segment-btn" data-theme-mode="dark" aria-pressed="false">Dark</button>
                 </div>
               </div>
             </div>

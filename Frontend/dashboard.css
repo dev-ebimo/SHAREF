@@ -3,23 +3,23 @@
    ========================================================================== */
 :root {
   color-scheme: dark;
-  --bg-void: #07060d;
+  --bg-void: var(--paper);
   --surface-01: rgba(255, 255, 255, 0.02);
   --surface-02: rgba(255, 255, 255, 0.04);
-  --border-hair: rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(168, 85, 247, 0.35);
+  --border-hair: rgba(var(--ink-rgb), 0.07);
+  --border-hover: rgba(var(--biro-rgb), 0.35);
 
   --text-pure: #ffffff;
-  --text-lead: #cbd5e1;
-  --text-muted: #8b93a7;
-  --text-faint: rgba(255, 255, 255, 0.35);
+  --text-lead: var(--text-lead);
+  --text-muted: var(--text-muted);
+  --text-faint: rgba(var(--ink-rgb), 0.35);
 
-  --purple: #a855f7;
-  --purple-soft: #c084fc;
-  --indigo: #6366f1;
-  --pink: #d946ef;
-  --amber: #f5b942;
-  --red: #f87171;
+  --purple: var(--biro);
+  --purple-soft: var(--biro);
+  --indigo: var(--biro);
+  --pink: var(--biro);
+  --amber: var(--amber);
+  --red: var(--red);
 
   --sidebar-width: 252px;
   --topnav-height: 68px;
@@ -140,7 +140,7 @@ button {
 }
 
 .sidebar-panel {
-  background: rgba(9, 9, 11, 0.6);
+  background: rgba(var(--paper-rgb), 0.6);
   border-right: 1px solid var(--border-hair);
   backdrop-filter: blur(20px);
   padding: 1.75rem 1.1rem;
@@ -162,7 +162,7 @@ button {
   padding-left: 0.4rem;
 }
 .sidebar-panel .logo span {
-  color: var(--purple);
+  color: var(--biro);
 }
 .sidebar-close-btn {
   display: none;
@@ -185,20 +185,20 @@ button {
   background: transparent;
 }
 .menu-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--ink-rgb), 0.05);
   border-radius: 10px;
   transition: background 0.2s ease;
 }
 .menu-list:hover::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.2);
+  background: rgba(var(--biro-rgb), 0.2);
 }
 
 .menu-section-label {
   font-size: 0.65rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(255, 255, 255, 0.25);
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--ink-rgb), 0.25);
   margin: 1.1rem 0 0.4rem 0.6rem;
 }
 .menu-section-label:first-child {
@@ -223,7 +223,7 @@ button {
   background: var(--surface-02);
 }
 .menu-link[aria-current="page"] {
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   font-weight: 600;
 }
@@ -237,7 +237,7 @@ button {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.6);
+  background: rgba(var(--scrim-rgb), 0.6);
   backdrop-filter: blur(2px);
   z-index: 150;
   opacity: 0;
@@ -263,7 +263,7 @@ button {
   align-items: center;
   gap: 1rem;
   padding: 0 1.75rem;
-  background: rgba(9, 9, 11, 0.5);
+  background: rgba(var(--paper-rgb), 0.5);
   border-bottom: 1px solid var(--border-hair);
   backdrop-filter: blur(20px);
   position: sticky;
@@ -306,7 +306,7 @@ button {
   display: none;
 }
 .mobile-logo span {
-  color: var(--purple);
+  color: var(--biro);
 }
 
 .search-omnibar {
@@ -333,9 +333,9 @@ button {
 }
 .search-omnibar input:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 .search-omnibar svg.icon-search {
   position: absolute;
@@ -431,7 +431,7 @@ button {
   height: 6px;
   background: var(--red);
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.8);
+  box-shadow: 0 0 0 2px rgba(var(--paper-rgb), 0.8);
   display: none; /* shown only by dashboard.js, once it confirms a genuine unread notification exists */
 }
 .badge-dot.is-visible {
@@ -442,8 +442,8 @@ button {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
+  border: 2px solid rgba(var(--ink-rgb), 0.1);
   padding: 0;
   cursor: pointer;
   display: flex;
@@ -458,7 +458,7 @@ button {
     transform 0.2s ease;
 }
 .avatar-frame:hover {
-  border-color: rgba(168, 85, 247, 0.5);
+  border-color: rgba(var(--biro-rgb), 0.5);
 }
 
 /* ==========================================================================
@@ -473,12 +473,12 @@ button {
   top: calc(100% + 10px);
   right: 0;
   width: 250px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-md);
   box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   padding: 0.6rem;
   display: none;
   flex-direction: column;
@@ -489,7 +489,7 @@ button {
   display: flex;
 }
 .account-menu-wrapper.is-open .avatar-frame {
-  border-color: rgba(168, 85, 247, 0.6);
+  border-color: rgba(var(--biro-rgb), 0.6);
 }
 
 .account-dropdown-header {
@@ -502,7 +502,7 @@ button {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -611,7 +611,7 @@ button {
   transition: all 0.2s ease;
 }
 .stat-badge-link:hover {
-  background: rgba(168, 85, 247, 0.07);
+  background: rgba(var(--biro-rgb), 0.07);
   border-color: var(--border-hover);
   color: var(--text-pure);
   transform: translateY(-1px);
@@ -633,9 +633,9 @@ button {
 .section-title {
   font-size: 0.78rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.4);
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--ink-rgb), 0.4);
   margin-bottom: 1rem;
   display: flex;
   align-items: center;
@@ -675,13 +675,13 @@ button {
 }
 .action-strip-btn:hover {
   background: var(--surface-02);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(var(--ink-rgb), 0.15);
   color: var(--text-pure);
 }
 .action-strip-btn svg {
   width: 16px;
   height: 16px;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(var(--ink-rgb), 0.4);
 }
 
 .resource-grid {
@@ -717,11 +717,11 @@ button {
 }
 .card-mini-btn.is-primary {
   background: var(--purple);
-  border-color: var(--purple);
+  border-color: var(--biro);
   color: #fff;
 }
 .card-mini-btn.is-primary:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 @media (hover: none) {
   /* No hover on touch — keep the actions permanently visible so they're
@@ -750,12 +750,7 @@ button {
   height: 10px;
   border-radius: 5px;
   margin-bottom: 0.65rem;
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.04) 0px,
-    rgba(255, 255, 255, 0.09) 200px,
-    rgba(255, 255, 255, 0.04) 400px
-  );
+  background: linear-gradient(90deg, rgba(var(--ink-rgb), 0.05) 0, rgba(var(--ink-rgb), 0.1) 200px, rgba(var(--ink-rgb), 0.05) 400px);
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.4s infinite linear;
 }
@@ -778,7 +773,7 @@ button {
   cursor: pointer;
 }
 .resource-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
   transform: translateY(-2px);
 }
@@ -797,12 +792,12 @@ button {
   color: var(--text-lead);
 }
 .type-tag.pdf-type {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(var(--red-rgb), 0.1);
   color: var(--red);
 }
 .type-tag.exam-type {
-  background: rgba(59, 130, 246, 0.1);
-  color: #60a5fa;
+  background: rgba(var(--info-rgb), 0.1);
+  color: var(--info);
 }
 .card-body-zone h3 {
   font-size: 0.9rem;
@@ -812,7 +807,7 @@ button {
 }
 .course-code-sub {
   font-size: 0.72rem;
-  color: var(--purple);
+  color: var(--biro);
   font-weight: 600;
 }
 .card-bottom-metrics {
@@ -938,7 +933,7 @@ button {
   transition: background 0.2s ease, transform 0.2s var(--ease-snap);
 }
 .btn-primary-sm:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
   transform: translateY(-1px);
 }
 
@@ -994,14 +989,14 @@ button {
   align-items: center;
   gap: 0.5rem;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(168, 85, 247, 0.4);
+  box-shadow: 0 10px 25px rgba(var(--biro-rgb), 0.4);
   transition: all 0.2s var(--ease-snap);
   z-index: 90;
 }
 .fab-upload-node:hover {
   transform: translateY(-3px);
-  box-shadow: 0 12px 30px rgba(168, 85, 247, 0.5);
-  background: #b55fe6;
+  box-shadow: 0 12px 30px rgba(var(--biro-rgb), 0.5);
+  background: var(--biro-fill);
 }
 .fab-upload-node svg {
   width: 17px;
@@ -1036,7 +1031,7 @@ button {
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.28s var(--ease-snap);
-    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.4);
+    box-shadow: 20px 0 50px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
   }
   .sidebar-panel.is-open {
     transform: translateX(0);
@@ -1142,12 +1137,12 @@ button {
   top: calc(100% + 8px);
   left: 0;
   width: 100%;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-md);
   box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   padding: 1rem;
   display: none; /* Controlled via state */
   flex-direction: column;
@@ -1161,7 +1156,7 @@ button {
 }
 
 .search-wrapper.is-focused .search-omnibar input {
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
 }
 
@@ -1184,8 +1179,8 @@ button {
 .group-label {
   font-size: 0.65rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-faint);
   margin-bottom: 0.35rem;
   padding-left: 0.5rem;
@@ -1212,7 +1207,7 @@ button {
 }
 
 .dropdown-item:hover {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   color: var(--text-pure);
 }
 
@@ -1237,12 +1232,12 @@ button {
   flex-shrink: 0;
 }
 .badge-mini.pdf {
-  background: rgba(239, 68, 68, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 .badge-mini.doc {
-  background: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
+  background: rgba(var(--info-rgb), 0.12);
+  color: var(--info);
 }
 
 /* Inline layout chip matrices */
@@ -1265,7 +1260,7 @@ button {
 }
 
 .trend-chip:hover {
-  background: rgba(168, 85, 247, 0.08);
+  background: rgba(var(--biro-rgb), 0.08);
   border-color: var(--border-hover);
   color: var(--purple-soft);
 }
@@ -1286,8 +1281,8 @@ button {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  background: rgba(168, 85, 247, 0.1);
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(var(--biro-rgb), 0.1);
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   color: var(--purple-soft);
   font-family: inherit;
   font-size: 0.82rem;
@@ -1300,8 +1295,8 @@ button {
     border-color 0.2s ease;
 }
 .wallet-chip:hover {
-  background: rgba(168, 85, 247, 0.18);
-  border-color: rgba(168, 85, 247, 0.4);
+  background: rgba(var(--biro-rgb), 0.18);
+  border-color: rgba(var(--biro-rgb), 0.4);
 }
 .wallet-chip svg {
   width: 15px;
@@ -1313,7 +1308,7 @@ button {
 .wallet-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.7);
+  background: rgba(var(--scrim-rgb), 0.7);
   backdrop-filter: blur(4px);
   z-index: 500;
   display: flex;
@@ -1334,13 +1329,13 @@ button {
   position: relative;
   width: 100%;
   max-width: 400px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
   padding: 2rem;
   box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   transform: scale(0.95) translateY(8px);
   transition: transform 0.25s var(--ease-snap);
 }
@@ -1411,8 +1406,8 @@ button {
   font-size: 0.75rem;
   font-weight: 600;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
   margin-bottom: 0.5rem;
 }
 .wallet-amount-input {
@@ -1430,7 +1425,7 @@ button {
 }
 .wallet-amount-input:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
 }
 .wallet-hint {
@@ -1472,7 +1467,7 @@ button {
   margin: -10px 0 0 -10px;
   border-radius: 50%;
   border: 2px solid var(--border-hair);
-  border-top-color: var(--purple-accent, #a855f7);
+  border-top-color: var(--purple-accent, var(--biro));
   animation: sharef-preview-spin 0.7s linear infinite;
 }
 @keyframes sharef-preview-spin {
@@ -1547,7 +1542,7 @@ button {
   color: #fff;
 }
 .btn-wallet-primary:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 .btn-wallet-secondary {
   background: none;
@@ -1565,13 +1560,13 @@ button {
   left: 50%;
   bottom: 2rem;
   transform: translate(-50%, 20px);
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: 10px;
   padding: 0.75rem 1.25rem;
   font-size: 0.85rem;
   color: var(--text-pure);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
   opacity: 0;
   pointer-events: none;
   transition: all 0.25s ease;
@@ -1630,8 +1625,8 @@ button {
 }
 .download-stats-grid .stat-item .label {
   font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-faint);
 }
 .download-stats-grid .stat-item .val {
@@ -1668,7 +1663,7 @@ button {
 .profile-prompt-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.7);
+  background: rgba(var(--scrim-rgb), 0.7);
   backdrop-filter: blur(4px);
   z-index: 600;
   display: flex;
@@ -1689,13 +1684,13 @@ button {
   position: relative;
   width: 100%;
   max-width: 420px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
   padding: 2rem;
   box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.55),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   transform: scale(0.95) translateY(8px);
   transition: transform 0.25s var(--ease-snap);
 }
@@ -1707,8 +1702,8 @@ button {
   width: 52px;
   height: 52px;
   border-radius: 14px;
-  background: rgba(168, 85, 247, 0.12);
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(var(--biro-rgb), 0.12);
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   color: var(--purple-soft);
   display: flex;
   align-items: center;
@@ -1786,3 +1781,21 @@ button {
 
 /* The dashboard's own layout (hero, ranked list, timeline) now lives in dashboard-v2.css,
    and the look of the whole app in sharef-theme.css. */
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.card-mini-btn.is-primary:hover,
+.btn-primary-sm:hover,
+.fab-upload-node:hover,
+.btn-wallet-primary:hover {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
+}

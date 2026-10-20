@@ -40,7 +40,7 @@
 }
 .tab-btn.is-active {
   color: var(--purple-soft);
-  border-bottom-color: var(--purple);
+  border-bottom-color: var(--biro);
 }
 .tab-panel.hidden {
   display: none;
@@ -72,9 +72,9 @@
   font-weight: 700;
   color: var(--text-pure);
 }
-.category-card.active .status-badge { background: rgba(45, 212, 191, 0.12); color: var(--teal); }
-.category-card.suspended .status-badge { background: rgba(248, 113, 113, 0.12); color: var(--red); }
-.category-card.inactive .status-badge { background: rgba(245, 185, 66, 0.14); color: var(--amber); }
+.category-card.active .status-badge { background: rgba(var(--teal-rgb), 0.12); color: var(--teal); }
+.category-card.suspended .status-badge { background: rgba(var(--red-rgb), 0.12); color: var(--red); }
+.category-card.inactive .status-badge { background: rgba(var(--amber-rgb), 0.14); color: var(--amber); }
 
 .category-card-volume {
   font-size: 1.5rem;
@@ -112,11 +112,11 @@
   color: var(--red);
 }
 .status-badge.successful {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(var(--teal-rgb), 0.12);
   color: var(--teal);
 }
 .status-badge.failed {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 
@@ -135,8 +135,8 @@
   text-align: left;
   font-size: 0.68rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
   background: var(--surface-02);
   padding: 0.85rem 1rem;
@@ -170,7 +170,7 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
   color: #fff;
   display: flex;
   align-items: center;
@@ -203,21 +203,21 @@
 
 /* ---- Status badge variants specific to accounts ---- */
 .status-badge.active {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(var(--teal-rgb), 0.12);
   color: var(--teal);
 }
 .status-badge.suspended {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 .status-badge.pending {
-  background: rgba(245, 185, 66, 0.14);
+  background: rgba(var(--amber-rgb), 0.14);
   color: var(--amber);
 }
 
 /* ---- btn-view (table action) ---- */
 .btn-view {
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   border: none;
   font-family: inherit;
@@ -229,7 +229,7 @@
   transition: background 0.2s ease;
 }
 .btn-view:hover {
-  background: rgba(168, 85, 247, 0.2);
+  background: rgba(var(--biro-rgb), 0.2);
 }
 
 /* ==========================================================================
@@ -251,9 +251,9 @@
   width: 420px;
   max-width: 100%;
   height: 100%;
-  background: #0f0e17;
+  background: var(--sheet);
   border-left: 1px solid var(--border-hair);
-  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.5);
+  box-shadow: -20px 0 50px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   padding: 1.75rem;
   overflow-y: auto;
 }
@@ -308,8 +308,8 @@
 
 /* ---- Contribution score card ---- */
 .admin-score-card {
-  background: rgba(168, 85, 247, 0.08);
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(var(--biro-rgb), 0.08);
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   border-radius: var(--radius-md);
   padding: 1rem;
   display: flex;
@@ -325,8 +325,8 @@
   font-size: 0.68rem;
   color: var(--purple-soft);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .score-rank {
   font-size: 0.85rem;
@@ -422,9 +422,9 @@
 .suspend-form {
   margin-top: 1.25rem;
   padding: 1rem;
-  background: rgba(248, 113, 113, 0.08);
+  background: rgba(var(--red-rgb), 0.08);
   border-radius: var(--radius-md);
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  border: 1px solid rgba(var(--red-rgb), 0.25);
 }
 .suspend-form label {
   display: block;

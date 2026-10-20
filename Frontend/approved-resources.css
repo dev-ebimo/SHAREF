@@ -70,14 +70,14 @@
 }
 /* Add below '.filter-group select' to style the options and focus states */
 .filter-group select option {
-  background-color: #0f0e17;
+  background-color: var(--sheet);
   color: var(--text-pure);
 }
 
 .filter-group select:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: rgba(var(--biro-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 .filter-group select:hover,
 .filter-group input[type="date"]:hover {
@@ -144,8 +144,8 @@
   text-align: left;
   font-size: 0.68rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
   background: var(--surface-02);
   padding: 0.85rem 1rem;
@@ -189,9 +189,9 @@
   width: 17px;
   height: 17px;
 }
-.file-icon.pdf { background: rgba(248, 113, 113, 0.12); color: var(--red); }
-.file-icon.doc { background: rgba(99, 102, 241, 0.14); color: var(--indigo); }
-.file-icon.img { background: rgba(45, 212, 191, 0.12); color: var(--teal); }
+.file-icon.pdf { background: rgba(var(--red-rgb), 0.12); color: var(--red); }
+.file-icon.doc { background: rgba(var(--biro-rgb), 0.14); color: var(--indigo); }
+.file-icon.img { background: rgba(var(--teal-rgb), 0.12); color: var(--teal); }
 
 .file-icon.large {
   width: 56px;
@@ -223,7 +223,7 @@
   flex-shrink: 0;
 }
 .status-badge.approved {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(var(--teal-rgb), 0.12);
   color: var(--teal);
 }
 .status-badge.inactive {
@@ -262,7 +262,7 @@
   border-color: var(--border-hover);
 }
 .btn-view {
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   border: none;
   font-family: inherit;
@@ -274,7 +274,7 @@
   transition: background 0.2s ease;
 }
 .btn-view:hover {
-  background: rgba(168, 85, 247, 0.2);
+  background: rgba(var(--biro-rgb), 0.2);
 }
 
 /* ---- Pagination ---- */
@@ -363,8 +363,8 @@
 .profile-section h3 {
   font-size: 0.72rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
   margin-bottom: 0.6rem;
 }
@@ -409,7 +409,7 @@
   height: 14px;
 }
 .history-icon.success {
-  background: rgba(45, 212, 191, 0.14);
+  background: rgba(var(--teal-rgb), 0.14);
   color: var(--teal);
 }
 .history-text {
@@ -468,11 +468,11 @@
 }
 .suspend-form select:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  border-color: rgba(var(--biro-rgb), 0.55);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 .suspend-form select option {
-  background-color: #0f0e17;
+  background-color: var(--sheet);
   color: var(--text-pure);
 }
 .confirm-btn {

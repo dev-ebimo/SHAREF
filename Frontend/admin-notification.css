@@ -46,7 +46,7 @@
   color: #fff;
 }
 .tab-btn .tab-count {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.2);
   font-size: 0.7rem;
   font-weight: 700;
   padding: 0.05rem 0.45rem;
@@ -106,25 +106,25 @@
   transition: all 0.2s ease;
 }
 .notif-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
 }
 .notif-card.is-unread {
-  border-left-color: var(--purple);
-  background: rgba(168, 85, 247, 0.05);
+  border-left-color: var(--biro);
+  background: rgba(var(--biro-rgb), 0.05);
 }
 .notif-card.is-unread:hover {
-  background: rgba(168, 85, 247, 0.08);
+  background: rgba(var(--biro-rgb), 0.08);
 }
 .notif-card.is-read {
-  opacity: 0.72;
+  /* was opacity: 0.72, which lowered the contrast of every label inside below AA; unread is marked by tint instead */
 }
 
 .notif-icon {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(168, 85, 247, 0.12);
+  background: rgba(var(--biro-rgb), 0.12);
   color: var(--purple-soft);
   display: flex;
   align-items: center;
@@ -208,7 +208,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
-  background: rgba(168, 85, 247, 0.12);
+  background: rgba(var(--biro-rgb), 0.12);
   color: var(--purple-soft);
   border: none;
   font-family: inherit;
@@ -224,7 +224,7 @@
   height: 14px;
 }
 .btn-review:hover {
-  background: rgba(168, 85, 247, 0.22);
+  background: rgba(var(--biro-rgb), 0.22);
 }
 
 /* ---- Quick review modal: full-review link in sticky bar ---- */

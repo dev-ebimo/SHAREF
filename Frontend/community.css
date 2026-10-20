@@ -84,8 +84,8 @@
   color: var(--text-faint);
   font-size: 0.78rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  text-transform: none;
+  letter-spacing: 0;
   z-index: 1;
 }
 
@@ -114,8 +114,8 @@
 }
 .suggestion-card:hover {
   transform: translateY(-5px);
-  border-color: rgba(168, 85, 247, 0.35);
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  border-color: rgba(var(--biro-rgb), 0.35);
+  box-shadow: 0 10px 30px -10px rgba(var(--shadow-rgb), calc(0.5 * var(--sh)));
   background: var(--surface-02);
 }
 
@@ -123,7 +123,7 @@
   width: 42px;
   height: 42px;
   border-radius: 11px;
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   display: flex;
   align-items: center;

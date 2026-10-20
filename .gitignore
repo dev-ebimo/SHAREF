@@ -1,5 +1,7 @@
 node_modules/
 .wrangler/
+tools/
+previews/
 
 # Local-only secrets for `wrangler dev` — never commit
 .dev.vars

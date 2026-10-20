@@ -2,20 +2,20 @@
    1. COLOR SCHEME, TOKEN MATRIX & RESET
    ========================================================================== */
 :root {
-  --bg-dark: #070510;
-  --panel-bg: rgba(255, 255, 255, 0.03);
-  --panel-hover: rgba(255, 255, 255, 0.05);
-  --input-bg: rgba(255, 255, 255, 0.02);
-  --border-light: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(168, 85, 247, 0.55);
+  --bg-dark: var(--paper);
+  --panel-bg: rgba(var(--ink-rgb), 0.03);
+  --panel-hover: rgba(var(--ink-rgb), 0.05);
+  --input-bg: rgba(var(--ink-rgb), 0.02);
+  --border-light: rgba(var(--ink-rgb), 0.08);
+  --border-hover: rgba(var(--biro-rgb), 0.55);
   
   --text-pure: #ffffff;
-  --text-muted: #94a3b8;
-  --text-lead: #cbd5e1;
+  --text-muted: var(--text-muted);
+  --text-lead: var(--text-lead);
   
-  --primary-gradient: linear-gradient(135deg, #6366f1, #a855f7, #6366f1);
-  --accent-purple: #8b5cf6;
-  --accent-pink: #d946ef;
+  --primary-gradient: linear-gradient(var(--biro-fill), var(--biro-fill));
+  --accent-purple: var(--biro);
+  --accent-pink: var(--biro);
 }
 
 * {
@@ -76,7 +76,7 @@ body {
 /* Left Display Panel */
 .visual-panel {
   position: relative;
-  background: linear-gradient(180deg, rgba(26, 16, 60, 0.3) 0%, rgba(7, 5, 16, 0.8) 100%);
+  background: linear-gradient(180deg, rgba(var(--sheet-rgb), 0.3) 0%, rgba(var(--paper-rgb), 0.8) 100%);
   border-right: 1px solid var(--border-light);
   padding: 3rem 4rem;
   display: flex;
@@ -98,7 +98,7 @@ body {
   font-size: 2.2rem;
   letter-spacing: -0.04em;
 }
-.panel-header .logo span { color: #a855f7; }
+.panel-header .logo span { color: var(--biro); }
 
 .panel-content {
   animation: heroFloat 8s ease-in-out infinite;
@@ -106,9 +106,9 @@ body {
 
 .eyebrow {
   display: inline-block;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: #c084fc;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--biro);
   font-size: 0.8rem;
   font-weight: 700;
   margin-bottom: 1rem;
@@ -119,7 +119,7 @@ body {
   font-weight: 800;
   line-height: 1.25;
   letter-spacing: -0.02em;
-  background: linear-gradient(to right, #ffffff, #e2e8f0);
+  background: linear-gradient(to right, var(--ink), var(--text-lead));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 1.25rem;
@@ -151,7 +151,7 @@ body {
   position: absolute;
   width: 420px; /* Scaled higher */
   height: 420px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.18) 0%, transparent 75%);
+  background: radial-gradient(circle, rgba(var(--biro-rgb), 0.18) 0%, transparent 75%);
   transform: rotateX(60deg) rotateZ(-45deg) translateZ(-60px);
   border-radius: 50%;
 }
@@ -161,14 +161,14 @@ body {
   position: absolute;
   width: 210px;  /* Scaled up from 150px */
   height: 150px; /* Scaled up from 110px */
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   backdrop-filter: blur(16px);
   border-radius: 16px;
   padding: 20px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  box-shadow: -18px 18px 35px rgba(0, 0, 0, 0.55);
+  box-shadow: -18px 18px 35px rgba(var(--shadow-rgb), calc(0.55 * var(--sh)));
   transform: rotateX(60deg) rotateZ(-45deg);
   transform-style: preserve-3d;
 }
@@ -181,12 +181,12 @@ body {
   width: max-content;
   letter-spacing: 0.05em;
 }
-.font-pdf { background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-.font-docx { background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
-.font-notes { background: rgba(16, 185, 129, 0.15); color: #10b85d; border: 1px solid rgba(16, 185, 129, 0.3); }
+.font-pdf { background: rgba(var(--red-rgb), 0.15); color: var(--red); border: 1px solid rgba(var(--red-rgb), 0.3); }
+.font-docx { background: rgba(var(--info-rgb), 0.15); color: var(--info); border: 1px solid rgba(var(--info-rgb), 0.3); }
+.font-notes { background: rgba(var(--ok-rgb), 0.15); color: var(--ok); border: 1px solid rgba(var(--ok-rgb), 0.3); }
 
 .card-lines { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
-.line { height: 5px; background: rgba(255, 255, 255, 0.14); border-radius: 2.5px; }
+.line { height: 5px; background: rgba(var(--ink-rgb), 0.14); border-radius: 2.5px; }
 .line.long { width: 95%; }
 .line.short { width: 55%; }
 
@@ -196,14 +196,14 @@ body {
   color: var(--text-pure);
   position: absolute;
   padding: 5px 10px;
-  background: rgba(7, 5, 16, 0.85);
+  background: rgba(var(--paper-rgb), 0.85);
   border-radius: 8px;
-  box-shadow: 0 6px 14px rgba(0,0,0,0.35);
+  box-shadow: 0 6px 14px rgba(var(--shadow-rgb), calc(0.35 * var(--sh)));
   transform: translateZ(16px);
 }
-.tag-purple { border: 1px solid rgba(168, 85, 247, 0.4); top: -12px; right: -20px; }
-.tag-pink { border: 1px solid rgba(219, 70, 239, 0.4); bottom: 20px; left: -35px; }
-.tag-blue { border: 1px solid rgba(59, 130, 246, 0.4); top: 20px; left: -40px; }
+.tag-purple { border: 1px solid rgba(var(--biro-rgb), 0.4); top: -12px; right: -20px; }
+.tag-pink { border: 1px solid rgba(var(--biro-rgb), 0.4); bottom: 20px; left: -35px; }
+.tag-blue { border: 1px solid rgba(var(--info-rgb), 0.4); top: 20px; left: -40px; }
 
 .indicator-arrow {
   position: absolute;
@@ -212,22 +212,22 @@ body {
   font-size: 1.1rem;
   font-weight: bold;
 }
-.indicator-arrow.up { color: #10b85d; text-shadow: 0 0 12px rgba(16,185,93,0.5); }
-.indicator-arrow.down { color: #a855f7; text-shadow: 0 0 12px rgba(168,85,247,0.5); }
+.indicator-arrow.up { color: var(--ok); text-shadow: 0 0 12px rgba(var(--ok-rgb), 0.5); }
+.indicator-arrow.down { color: var(--biro); text-shadow: 0 0 12px rgba(var(--biro-rgb), 0.5); }
 
 /* Layer Float Multipliers */
 .layer-alpha {
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   transform: rotateX(60deg) rotateZ(-45deg) translateZ(50px) translateX(-50px);
   animation: layeredFloat1 6s ease-in-out infinite alternate;
 }
 .layer-beta {
-  border: 1px solid rgba(219, 70, 239, 0.2);
+  border: 1px solid rgba(var(--biro-rgb), 0.2);
   transform: rotateX(60deg) rotateZ(-45deg) translateZ(-10px) translateX(65px) translateY(50px);
   animation: layeredFloat2 7s ease-in-out infinite alternate;
 }
 .layer-gamma {
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(var(--info-rgb), 0.2);
   transform: rotateX(60deg) rotateZ(-45deg) translateZ(110px) translateX(30px) translateY(-60px);
   animation: layeredFloat3 5.5s ease-in-out infinite alternate;
 }
@@ -261,7 +261,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 4rem 3rem;
-  background: rgba(7, 5, 16, 0.2);
+  background: rgba(var(--paper-rgb), 0.2);
   backdrop-filter: blur(20px);
 }
 
@@ -296,7 +296,7 @@ body {
   letter-spacing: -0.04em;
   margin-bottom: 1.5rem;
 }
-.mobile-logo span { color: #a855f7; }
+.mobile-logo span { color: var(--biro); }
 
 .form-header h1 {
   font-size: 2.2rem;
@@ -306,8 +306,8 @@ body {
 }
 
 .form-header p { color: var(--text-muted); font-size: 0.95rem; }
-.link-btn { color: #a855f7; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
-.link-btn:hover { color: #c084fc; text-decoration: underline; }
+.link-btn { color: var(--biro); text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
+.link-btn:hover { color: var(--biro); text-decoration: underline; }
 
 /* Fieldsets & Dynamic Line Extensions */
 .form-section {
@@ -318,8 +318,8 @@ body {
 .form-section legend {
   font-size: 0.85rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
   margin-bottom: 1.75rem;
   width: 100%;
@@ -334,7 +334,7 @@ body {
   bottom: -4px;
   width: 0;
   height: 2px;
-  background: #8b5cf6;
+  background: var(--biro-fill);
   animation: growLine 0.8s 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
@@ -357,7 +357,7 @@ label {
 }
 
 .input-group:focus-within label {
-  color: #c084fc;
+  color: var(--biro);
 }
 
 /* ==========================================================================
@@ -382,19 +382,19 @@ select {
 }
 
 select option {
-  background-color: #0f0c22;
+  background-color: var(--sheet);
   color: var(--text-pure);
 }
 
 input:hover, select:hover {
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
 }
 
 input:focus, select:focus {
   outline: none;
   border-color: var(--border-hover);
-  background-color: rgba(255, 255, 255, 0.04);
-  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.15);
+  background-color: rgba(var(--ink-rgb), 0.04);
+  box-shadow: 0 0 0 4px rgba(var(--biro-rgb), 0.15);
   transform: translateY(-2px);
 }
 
@@ -407,7 +407,7 @@ input:focus, select:focus {
 }
 
 .consent-group input[type="checkbox"] {
-  accent-color: #a855f7;
+  accent-color: var(--biro);
   width: 18px;
   height: 18px;
   margin-top: 2px;
@@ -446,7 +446,7 @@ input:focus, select:focus {
   background: var(--primary-gradient);
   background-size: 220%;
   color: var(--text-pure);
-  box-shadow: 0 8px 24px -6px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px -6px rgba(var(--biro-rgb), 0.4);
   animation: gradientFlow 8s linear infinite;
 }
 
@@ -478,7 +478,7 @@ input:focus, select:focus {
 }
 
 .primary:hover {
-  box-shadow: 0 16px 35px -4px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 16px 35px -4px rgba(var(--biro-rgb), 0.6);
 }
 
 .btn-submit { width: 100%; }
@@ -495,4 +495,19 @@ input:focus, select:focus {
 
 @media (max-width: 480px) {
   .form-header h1 { font-size: 1.8rem; }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.primary {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

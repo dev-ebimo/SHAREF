@@ -6,8 +6,8 @@
    ========================================================================== */
 
 :root {
-  --success: #10b981;
-  --danger: #ef4444;
+  --success: var(--ok);
+  --danger: var(--red);
 }
 
 /* Tighter "inbox" reading column, narrower than the dashboard's default. */
@@ -29,7 +29,7 @@
 
 .icon-btn-badge.is-current {
   color: var(--purple-soft);
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
 }
 
 .btn-secondary {
@@ -52,7 +52,7 @@
 }
 .btn-secondary:hover {
   background: var(--surface-02);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(var(--ink-rgb), 0.15);
   color: var(--text-pure);
 }
 .btn-secondary svg {
@@ -114,9 +114,9 @@
 }
 .date-group-title {
   font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.4);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-muted);
   margin-bottom: 1rem;
   font-weight: 700;
 }
@@ -145,7 +145,7 @@
   background: var(--surface-02);
 }
 .notification-card.unread {
-  background: rgba(168, 85, 247, 0.05);
+  background: rgba(var(--biro-rgb), 0.05);
   border-color: var(--border-hover);
 }
 .notification-card.unread::before {
@@ -173,13 +173,13 @@
 }
 .notif-icon-wrapper.success {
   color: var(--success);
-  border-color: rgba(16, 185, 129, 0.3);
-  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(var(--ok-rgb), 0.3);
+  background: rgba(var(--ok-rgb), 0.06);
 }
 .notif-icon-wrapper.danger {
   color: var(--danger);
-  border-color: rgba(239, 68, 68, 0.3);
-  background: rgba(239, 68, 68, 0.06);
+  border-color: rgba(var(--red-rgb), 0.3);
+  background: rgba(var(--red-rgb), 0.06);
 }
 .notif-icon-wrapper svg {
   width: 18px;
@@ -220,7 +220,7 @@
 
 .notif-time {
   font-size: 0.75rem;
-  color: var(--text-faint);
+  color: var(--text-muted);
   white-space: nowrap;
   flex-shrink: 0;
 }

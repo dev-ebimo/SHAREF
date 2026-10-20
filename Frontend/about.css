@@ -2,19 +2,19 @@
    1. SYSTEM DESIGN TOKENS & RESET
    ========================================================================== */
 :root {
-  --bg-dark: #070510;
-  --panel-bg: rgba(255, 255, 255, 0.03);
-  --panel-hover: rgba(255, 255, 255, 0.05);
-  --border-light: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(168, 85, 247, 0.3); /* Premium glow accent color token */
+  --bg-dark: var(--paper);
+  --panel-bg: rgba(var(--ink-rgb), 0.03);
+  --panel-hover: rgba(var(--ink-rgb), 0.05);
+  --border-light: rgba(var(--ink-rgb), 0.08);
+  --border-hover: rgba(var(--biro-rgb), 0.3); /* Premium glow accent color token */
   
   --text-pure: #ffffff;
-  --text-muted: #94a3b8;
-  --text-lead: #cbd5e1;
+  --text-muted: var(--text-muted);
+  --text-lead: var(--text-lead);
   
-  --primary-gradient: linear-gradient(135deg, #6366f1, #a855f7);
-  --accent-purple: #8b5cf6;
-  --accent-pink: #d946ef;
+  --primary-gradient: linear-gradient(var(--biro-fill), var(--biro-fill));
+  --accent-purple: var(--biro);
+  --accent-pink: var(--biro);
 }
 
 * {
@@ -26,7 +26,7 @@
 body {
   font-family: 'Poppins', sans-serif;
   background-color: var(--bg-dark);
-  background-image: radial-gradient(circle at 50% 0%, #1a103c 0%, var(--bg-dark) 70%);
+  background-image: radial-gradient(circle at 50% 0%, var(--sheet) 0%, var(--bg-dark) 70%);
   color: var(--text-pure);
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
@@ -88,7 +88,7 @@ header {
 }
 
 .logo span {
-  color: #a855f7;
+  color: var(--biro);
 }
 
 header nav {
@@ -122,9 +122,9 @@ header nav a:hover {
 
 .eyebrow {
   display: inline-block;
-  text-transform: uppercase;
-  letter-spacing: 0.15em;
-  color: #c084fc;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--biro);
   font-size: 0.8rem;
   font-weight: 700;
   margin-bottom: 1rem;
@@ -135,7 +135,7 @@ h1 {
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.03em;
-  background: linear-gradient(to right, #ffffff, #cbd5e1);
+  background: linear-gradient(to right, var(--ink), var(--text-lead));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
@@ -176,7 +176,7 @@ h1 {
 .primary, .nav-btn {
   background: var(--primary-gradient);
   color: var(--text-pure);
-  box-shadow: 0 8px 24px -6px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 8px 24px -6px rgba(var(--biro-rgb), 0.4);
 }
 
 .secondary {
@@ -191,12 +191,12 @@ h1 {
 }
 
 .primary:hover, .nav-btn:hover {
-  box-shadow: 0 16px 35px -4px rgba(139, 92, 246, 0.6);
+  box-shadow: 0 16px 35px -4px rgba(var(--biro-rgb), 0.6);
 }
 
 .secondary:hover {
   background: var(--panel-hover);
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(var(--ink-rgb), 0.2);
 }
 
 /* Statistics Setup */
@@ -242,7 +242,7 @@ h1 {
   position: absolute;
   width: 220px;
   height: 220px;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(var(--scrim-rgb), 0.7);
   filter: blur(30px);
   transform: translateZ(-40px) translate(-20px, 0px);
   border-radius: 16px;
@@ -259,12 +259,12 @@ h1 {
   flex-direction: column;
   gap: 14px;
   transform-style: preserve-3d;
-  box-shadow: -10px 10px 25px rgba(0, 0, 0, 0.4);
+  box-shadow: -10px 10px 25px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
 }
 
 .line {
   height: 6px;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(var(--ink-rgb), 0.18);
   border-radius: 3px;
 }
 .line.long { width: 100%; }
@@ -274,39 +274,39 @@ h1 {
 .floating-tag {
   position: absolute;
   padding: 6px 12px;
-  background: rgba(15, 12, 30, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--sheet);
+  border: 1px solid rgba(var(--ink-rgb), 0.18);
   border-radius: 8px;
   font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 12px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
   transform: translateZ(15px);
 }
 
-.tag1 { bottom: 20px; right: -30px; border-color: rgba(99, 102, 241, 0.5); }
-.tag2 { top: 40px; left: -40px; border-color: rgba(168, 85, 247, 0.5); }
-.tag3 { top: 20px; right: -50px; border-color: rgba(217, 70, 239, 0.5); }
+.tag1 { bottom: 20px; right: -30px; border-color: rgba(var(--biro-rgb), 0.5); }
+.tag2 { top: 40px; left: -40px; border-color: rgba(var(--biro-rgb), 0.5); }
+.tag3 { top: 20px; right: -50px; border-color: rgba(var(--biro-rgb), 0.5); }
 
 /* Horizontal Drift Mapping */
 .layer-1 {
   transform: translateZ(30px) translateX(-40px) translateY(40px);
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(255, 255, 255, 0.03));
-  border: 1px solid rgba(99, 102, 241, 0.3);
+  background: linear-gradient(135deg, rgba(var(--biro-rgb), 0.25), rgba(var(--ink-rgb), 0.03));
+  border: 1px solid rgba(var(--biro-rgb), 0.3);
   animation: horizontalSpread1 4.5s ease-in-out infinite alternate;
 }
 
 .layer-2 {
   transform: translateZ(60px) translateX(0px) translateY(0px);
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.18), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: linear-gradient(135deg, rgba(var(--biro-rgb), 0.18), rgba(var(--ink-rgb), 0.02));
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   animation: horizontalSpread2 4.5s ease-in-out infinite alternate;
 }
 
 .layer-3 {
   transform: translateZ(90px) translateX(40px) translateY(-40px);
-  background: linear-gradient(135deg, rgba(217, 70, 239, 0.18), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(217, 70, 239, 0.25);
+  background: linear-gradient(135deg, rgba(var(--biro-rgb), 0.18), rgba(var(--ink-rgb), 0.02));
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   animation: horizontalSpread3 4.5s ease-in-out infinite alternate;
 }
 
@@ -325,8 +325,8 @@ h1 {
 .trust p {
   color: var(--text-muted);
   font-size: 0.85rem;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
+  text-transform: none;
+  letter-spacing: 0;
   margin-bottom: 1.5rem;
 }
 
@@ -346,10 +346,10 @@ h1 {
 }
 
 .track span {
-  color: var(--text-lead);
+  color: var(--text-muted);
   font-size: 1.1rem;
   font-weight: 500;
-  opacity: 0.6;
+  /* was opacity: 0.6, which pushed the department names below AA contrast */
 }
 
 @keyframes continuousScroll {
@@ -383,14 +383,14 @@ h1 {
   transform: translateY(-6px);
   border-color: var(--border-hover);
   background: var(--panel-hover);
-  box-shadow: 0 20px 40px -20px rgba(168, 85, 247, 0.15);
+  box-shadow: 0 20px 40px -20px rgba(var(--biro-rgb), 0.15);
 }
 
 .icon-holder {
   width: 48px;
   height: 48px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--ink-rgb), 0.04);
   display: grid;
   place-items: center;
   margin-bottom: 1.5rem;
@@ -421,13 +421,13 @@ h1 {
 }
 
 .cta-inner {
-  background: linear-gradient(135deg, rgba(99, 102, 241, 0.08), rgba(168, 85, 247, 0.03));
-  border: 1px solid rgba(139, 92, 246, 0.25);
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   border-radius: 32px;
   padding: 5rem 2rem;
   text-align: center;
   backdrop-filter: blur(12px);
-  box-shadow: 0 30px 60px -20px rgba(0,0,0,0.4);
+  box-shadow: 0 30px 60px -20px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
 }
 
 .cta-inner h2 {
@@ -519,4 +519,21 @@ footer a:hover {
     gap: 1.5rem;
     text-align: center;
   }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.primary,
+.nav-btn,
+.cta-inner {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

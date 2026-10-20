@@ -14,7 +14,7 @@
 
 /* ---- Status badge variant ---- */
 .status-badge.rejected {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 
@@ -22,8 +22,8 @@
 .rejection-callout {
   display: flex;
   gap: 0.75rem;
-  background: rgba(248, 113, 113, 0.08);
-  border: 1px solid rgba(248, 113, 113, 0.25);
+  background: rgba(var(--red-rgb), 0.08);
+  border: 1px solid rgba(var(--red-rgb), 0.25);
   border-radius: var(--radius-md);
   padding: 1rem;
   margin: 1.25rem 0;
@@ -40,8 +40,8 @@
   font-size: 0.68rem;
   font-weight: 700;
   color: var(--red);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .callout-reason {
   display: block;
@@ -59,7 +59,7 @@
 
 /* ---- Lifecycle icon variant for rejection ---- */
 .history-icon.danger {
-  background: rgba(248, 113, 113, 0.14);
+  background: rgba(var(--red-rgb), 0.14);
   color: var(--red);
 }
 
@@ -73,7 +73,7 @@
   flex: 1;
 }
 .btn-warning {
-  background: rgba(245, 185, 66, 0.14);
+  background: rgba(var(--amber-rgb), 0.14);
   color: var(--amber);
 }
 .btn-warning:hover {

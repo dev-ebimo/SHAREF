@@ -40,9 +40,9 @@
 }
 .pq-search-bar input:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
   background: var(--surface-02);
-  box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 0 3px rgba(var(--biro-rgb), 0.1);
 }
 
 /* --------------------------------------------------------------------------
@@ -66,8 +66,8 @@
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  text-transform: none;
+  letter-spacing: 0;
 }
 .filter-field select {
   height: 42px;
@@ -84,10 +84,10 @@
 }
 .filter-field select:focus {
   outline: none;
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
 }
 .filter-field select option {
-  background: #0f0e17;
+  background: var(--sheet);
   color: var(--text-pure);
 }
 
@@ -135,7 +135,7 @@
   height: 9px;
   background: var(--purple);
   border-radius: 50%;
-  box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.15);
+  box-shadow: 0 0 0 4px rgba(var(--biro-rgb), 0.15);
 }
 
 .pq-card {
@@ -150,7 +150,7 @@
   transition: all 0.2s ease;
 }
 .pq-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
   transform: translateX(3px);
 }
@@ -168,8 +168,8 @@
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  background: rgba(var(--red-rgb), 0.08);
+  border: 1px solid rgba(var(--red-rgb), 0.2);
   color: var(--red);
   display: flex;
   align-items: center;
@@ -205,7 +205,7 @@
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--purple-soft);
-  background: rgba(168, 85, 247, 0.08);
+  background: rgba(var(--biro-rgb), 0.08);
   padding: 0.35rem 0.7rem;
   border-radius: 6px;
   white-space: nowrap;
@@ -236,8 +236,8 @@
 .btn-download-icon {
   width: 36px;
   height: 36px;
-  background: rgba(168, 85, 247, 0.1);
-  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(var(--biro-rgb), 0.1);
+  border: 1px solid rgba(var(--biro-rgb), 0.25);
   color: var(--purple-soft);
   border-radius: 8px;
   display: flex;
@@ -247,7 +247,7 @@
   transition: all 0.2s ease;
 }
 .btn-download-icon:hover {
-  background: rgba(168, 85, 247, 0.18);
+  background: rgba(var(--biro-rgb), 0.18);
 }
 .btn-download-icon svg {
   width: 16px;
@@ -272,8 +272,8 @@
   height: 44px;
   margin: 0 auto 0.85rem;
   border-radius: 50%;
-  background: rgba(168, 85, 247, 0.08);
-  border: 1px solid rgba(168, 85, 247, 0.2);
+  background: rgba(var(--biro-rgb), 0.08);
+  border: 1px solid rgba(var(--biro-rgb), 0.2);
   color: var(--purple-soft);
   display: flex;
   align-items: center;
@@ -314,7 +314,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.65);
+  background: rgba(var(--scrim-rgb), 0.65);
   backdrop-filter: blur(3px);
   z-index: 300;
   opacity: 0;
@@ -334,10 +334,10 @@
   width: min(92vw, 540px);
   max-height: 85vh;
   overflow-y: auto;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-lg);
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 30px 60px rgba(var(--shadow-rgb), calc(0.55 * var(--sh)));
   padding: 1.5rem;
   z-index: 301;
 }
@@ -406,8 +406,8 @@
 }
 .info-item .label {
   font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-faint);
 }
 .info-item .val {
@@ -500,7 +500,7 @@
   transition: background 0.2s ease;
 }
 .modal-save-btn:hover {
-  background: #b55fe6;
+  background: var(--biro-fill);
 }
 
 /* --------------------------------------------------------------------------
@@ -511,13 +511,13 @@
   left: 50%;
   bottom: 2rem;
   transform: translate(-50%, 20px);
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: 10px;
   padding: 0.75rem 1.25rem;
   font-size: 0.85rem;
   color: var(--text-pure);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
   opacity: 0;
   pointer-events: none;
   transition: all 0.25s ease;
@@ -561,7 +561,7 @@
     height: 16px;
   }
   .filter-toggle-btn.is-active {
-    border-color: rgba(168, 85, 247, 0.55);
+    border-color: rgba(var(--biro-rgb), 0.55);
     background: var(--surface-02);
     color: var(--purple-soft);
   }
@@ -593,4 +593,19 @@
   .pq-filter-bar {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* ==========================================================================
+   ON-FILL SCOPE (generated). Containers in this file that are painted with a solid colour hold text that must be
+   white in both themes. Re-declaring the text tokens makes every descendant that uses var(--text-*) or
+   rgba(var(--ink-rgb), x) follow. Rules that already set a literal white text colour are left out.
+   ========================================================================== */
+.modal-save-btn:hover {
+  --ink: #ffffff;
+  --ink-rgb: 255, 255, 255;
+  --text-pure: #ffffff;
+  --text-lead: rgba(255, 255, 255, 0.96);
+  --text-muted: rgba(255, 255, 255, 0.92);
+  --text-faint: rgba(255, 255, 255, 0.88);
+  color: #ffffff;
 }

@@ -3,24 +3,24 @@
    ========================================================================== */
 :root {
   color-scheme: dark;
-  --bg-void: #07060d;
+  --bg-void: var(--paper);
   --surface-01: rgba(255, 255, 255, 0.02);
   --surface-02: rgba(255, 255, 255, 0.04);
-  --border-hair: rgba(255, 255, 255, 0.07);
-  --border-hover: rgba(168, 85, 247, 0.35);
+  --border-hair: rgba(var(--ink-rgb), 0.07);
+  --border-hover: rgba(var(--biro-rgb), 0.35);
 
   --text-pure: #ffffff;
-  --text-lead: #cbd5e1;
-  --text-muted: #8b93a7;
-  --text-faint: rgba(255, 255, 255, 0.35);
+  --text-lead: var(--text-lead);
+  --text-muted: var(--text-muted);
+  --text-faint: rgba(var(--ink-rgb), 0.35);
 
-  --purple: #a855f7;
-  --purple-soft: #c084fc;
-  --indigo: #6366f1;
-  --pink: #d946ef;
-  --amber: #f5b942;
-  --red: #f87171;
-  --teal: #2dd4bf;
+  --purple: var(--biro);
+  --purple-soft: var(--biro);
+  --indigo: var(--biro);
+  --pink: var(--biro);
+  --amber: var(--amber);
+  --red: var(--red);
+  --teal: var(--teal);
 
   --sidebar-width: 252px;
   --topnav-height: 68px;
@@ -127,7 +127,7 @@ button {
 }
 
 .sidebar-panel {
-  background: rgba(9, 9, 11, 0.6);
+  background: rgba(var(--paper-rgb), 0.6);
   border-right: 1px solid var(--border-hair);
   backdrop-filter: blur(20px);
   padding: 1.75rem 1.1rem;
@@ -150,7 +150,7 @@ button {
   padding-left: 0.4rem;
 }
 .sidebar-panel .logo span {
-  color: var(--purple);
+  color: var(--biro);
 }
 .sidebar-panel .logo .admin-tag {
   font-size: 0.65rem;
@@ -183,19 +183,19 @@ button {
   background: transparent;
 }
 .menu-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--ink-rgb), 0.05);
   border-radius: 10px;
 }
 .menu-list:hover::-webkit-scrollbar-thumb {
-  background: rgba(168, 85, 247, 0.2);
+  background: rgba(var(--biro-rgb), 0.2);
 }
 
 .menu-section-label {
   font-size: 0.65rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  color: rgba(255, 255, 255, 0.25);
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--ink-rgb), 0.25);
   margin: 1.1rem 0 0.4rem 0.6rem;
 }
 .menu-section-label:first-child {
@@ -221,7 +221,7 @@ button {
   background: var(--surface-02);
 }
 .menu-link[aria-current="page"] {
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
   font-weight: 600;
 }
@@ -244,7 +244,7 @@ button {
 }
 .menu-link.danger-link:hover {
   color: var(--red);
-  background: rgba(248, 113, 113, 0.08);
+  background: rgba(var(--red-rgb), 0.08);
 }
 
 /* Queue health widget (sidebar footer) */
@@ -269,7 +269,7 @@ button {
   justify-content: center;
   background: conic-gradient(
     var(--amber) calc(var(--pct, 0) * 1%),
-    rgba(255, 255, 255, 0.06) 0%
+    rgba(var(--ink-rgb), 0.06) 0%
   );
   position: relative;
 }
@@ -278,7 +278,7 @@ button {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  background: #0c0a14;
+  background: var(--sheet);
 }
 .queue-health-ring span {
   position: relative;
@@ -301,7 +301,7 @@ button {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.6);
+  background: rgba(var(--scrim-rgb), 0.6);
   backdrop-filter: blur(2px);
   z-index: 150;
   opacity: 0;
@@ -327,7 +327,7 @@ button {
   align-items: center;
   gap: 1rem;
   padding: 0 1.75rem;
-  background: rgba(9, 9, 11, 0.5);
+  background: rgba(var(--paper-rgb), 0.5);
   border-bottom: 1px solid var(--border-hair);
   backdrop-filter: blur(20px);
   position: sticky;
@@ -370,7 +370,7 @@ button {
   display: none;
 }
 .mobile-logo span {
-  color: var(--purple);
+  color: var(--biro);
 }
 
 .top-nav-heading {
@@ -425,7 +425,7 @@ button {
   height: 6px;
   background: var(--red);
   border-radius: 50%;
-  box-shadow: 0 0 0 2px rgba(9, 9, 11, 0.8);
+  box-shadow: 0 0 0 2px rgba(var(--paper-rgb), 0.8);
   display: none; /* shown only by admin-shared.js, once it confirms a genuine unread notification exists */
 }
 .badge-dot.is-visible {
@@ -436,8 +436,8 @@ button {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
-  border: 2px solid rgba(255, 255, 255, 0.1);
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
+  border: 2px solid rgba(var(--ink-rgb), 0.1);
   padding: 0;
   cursor: pointer;
   display: flex;
@@ -452,7 +452,7 @@ button {
     transform 0.2s ease;
 }
 .avatar-frame:hover {
-  border-color: rgba(168, 85, 247, 0.5);
+  border-color: rgba(var(--biro-rgb), 0.5);
 }
 
 /* Account menu (shared markup/behaviour with dashboard.js) */
@@ -464,12 +464,12 @@ button {
   top: calc(100% + 10px);
   right: 0;
   width: 230px;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   border-radius: var(--radius-md);
   box-shadow:
-    0 20px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(168, 85, 247, 0.1);
+    0 20px 40px rgba(var(--shadow-rgb), calc(0.5 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.1);
   padding: 0.6rem;
   display: none;
   flex-direction: column;
@@ -480,7 +480,7 @@ button {
   display: flex;
 }
 .account-menu-wrapper.is-open .avatar-frame {
-  border-color: rgba(168, 85, 247, 0.6);
+  border-color: rgba(var(--biro-rgb), 0.6);
 }
 .account-dropdown-header {
   display: flex;
@@ -492,7 +492,7 @@ button {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--purple), var(--indigo));
+  background: linear-gradient(var(--biro-fill), var(--biro-fill));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -598,7 +598,7 @@ button {
   transition: all 0.2s ease;
 }
 .stat-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--ink-rgb), 0.14);
   background: var(--surface-02);
 }
 .stat-card .stat-icon {
@@ -609,7 +609,7 @@ button {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  background: rgba(168, 85, 247, 0.1);
+  background: rgba(var(--biro-rgb), 0.1);
   color: var(--purple-soft);
 }
 .stat-card .stat-icon svg {
@@ -619,8 +619,8 @@ button {
 .stat-card h3 {
   font-size: 0.7rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  text-transform: none;
+  letter-spacing: 0;
   color: var(--text-muted);
   margin-bottom: 0.15rem;
 }
@@ -630,19 +630,19 @@ button {
   color: var(--text-pure);
 }
 .stat-card.pending-stat {
-  border-color: rgba(168, 85, 247, 0.3);
+  border-color: rgba(var(--biro-rgb), 0.3);
   background: linear-gradient(
     135deg,
-    rgba(168, 85, 247, 0.08) 0%,
-    rgba(255, 255, 255, 0.01) 100%
+    rgba(var(--biro-rgb), 0.08) 0%,
+    rgba(var(--ink-rgb), 0.01) 100%
   );
 }
 .stat-card.approved-stat .stat-icon {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(var(--teal-rgb), 0.12);
   color: var(--teal);
 }
 .stat-card.rejected-stat .stat-icon {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 
@@ -652,9 +652,9 @@ button {
 .section-title {
   font-size: 0.78rem;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.4);
+  text-transform: none;
+  letter-spacing: 0;
+  color: rgba(var(--ink-rgb), 0.4);
   margin-bottom: 1rem;
   display: flex;
   align-items: center;
@@ -667,7 +667,7 @@ button {
 }
 .queue-filters select {
   appearance: none;
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   color: var(--text-lead);
   font-family: inherit;
@@ -681,7 +681,7 @@ button {
   transition: all 0.2s ease;
 }
 .queue-filters select option {
-  background: #0f0e17;
+  background: var(--sheet);
   color: var(--text-lead);
 }
 .queue-filters select:hover {
@@ -708,7 +708,7 @@ button {
 .queue-card {
   background: var(--surface-01);
   border: 1px solid var(--border-hair);
-  border-left: 3px solid var(--purple);
+  border-left: 3px solid var(--biro);
   border-radius: var(--radius-md);
   padding: 1.1rem 1.3rem;
   display: flex;
@@ -718,22 +718,22 @@ button {
   transition: all 0.2s ease;
 }
 .queue-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  border-left-color: var(--purple);
+  border-color: rgba(var(--ink-rgb), 0.14);
+  border-left-color: var(--biro);
   background: var(--surface-02);
 }
 .queue-card.aged-warning {
   border-left-color: var(--amber);
-  background: rgba(245, 185, 66, 0.05);
+  background: rgba(var(--amber-rgb), 0.05);
 }
 .queue-card.aged-warning:hover {
-  background: rgba(245, 185, 66, 0.08);
+  background: rgba(var(--amber-rgb), 0.08);
 }
 .aged-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  background: rgba(245, 185, 66, 0.14);
+  background: rgba(var(--amber-rgb), 0.14);
   color: var(--amber);
   font-size: 0.65rem;
   font-weight: 700;
@@ -830,18 +830,18 @@ button {
   color: var(--text-pure);
 }
 .btn-approve {
-  background: rgba(45, 212, 191, 0.12);
+  background: rgba(var(--teal-rgb), 0.12);
   color: var(--teal);
 }
 .btn-approve:hover {
-  background: rgba(45, 212, 191, 0.2);
+  background: rgba(var(--teal-rgb), 0.2);
 }
 .btn-reject {
-  background: rgba(248, 113, 113, 0.12);
+  background: rgba(var(--red-rgb), 0.12);
   color: var(--red);
 }
 .btn-reject:hover {
-  background: rgba(248, 113, 113, 0.2);
+  background: rgba(var(--red-rgb), 0.2);
 }
 
 .btn-lg {
@@ -864,7 +864,7 @@ button {
 }
 .btn-success {
   background: var(--teal);
-  color: #08281f;
+  color: var(--sheet);
 }
 .btn-success:hover {
   filter: brightness(1.08);
@@ -872,7 +872,7 @@ button {
 }
 .btn-danger {
   background: var(--red);
-  color: #2c0d0d;
+  color: var(--sheet);
 }
 .btn-danger:hover {
   filter: brightness(1.08);
@@ -953,7 +953,7 @@ button {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(4, 3, 8, 0.75);
+  background: rgba(var(--scrim-rgb), 0.75);
   backdrop-filter: blur(6px);
   display: flex;
   justify-content: center;
@@ -962,11 +962,11 @@ button {
   padding: 1rem;
 }
 .modal-surface {
-  background: #0f0e17;
+  background: var(--sheet);
   border: 1px solid var(--border-hair);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(168, 85, 247, 0.08);
+    0 20px 50px rgba(var(--shadow-rgb), calc(0.5 * var(--sh))),
+    0 0 0 1px rgba(var(--biro-rgb), 0.08);
   width: 100%;
   max-width: 500px;
   border-radius: var(--radius-lg);
@@ -1123,7 +1123,7 @@ button {
 }
 .btn-download-review:hover {
   background: var(--surface-02);
-  border-color: var(--purple-accent, #a855f7);
+  border-color: var(--purple-accent, var(--biro));
 }
 .btn-download-review svg {
   width: 16px;
@@ -1136,7 +1136,7 @@ button {
 
 /* Sticky Action Bar */
 .sticky-action-bar {
-  background: rgba(15, 14, 23, 0.9);
+  background: var(--sheet);
   border-top: 1px solid var(--border-hair);
   padding: 1.1rem 1.75rem;
   display: flex;
@@ -1192,7 +1192,7 @@ button {
   background: var(--surface-02);
 }
 .radio-label input[type="radio"] {
-  accent-color: var(--purple);
+  accent-color: var(--biro);
   width: 15px;
   height: 15px;
 }
@@ -1209,7 +1209,7 @@ button {
   outline: none;
 }
 .other-reason:focus {
-  border-color: rgba(168, 85, 247, 0.55);
+  border-color: rgba(var(--biro-rgb), 0.55);
 }
 .hidden {
   display: none !important;
@@ -1241,7 +1241,7 @@ button {
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.28s var(--ease-snap);
-    box-shadow: 20px 0 50px rgba(0, 0, 0, 0.4);
+    box-shadow: 20px 0 50px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
   }
   .sidebar-panel.is-open {
     transform: translateX(0);
@@ -1342,7 +1342,7 @@ button {
 }
 .review-pages-row input:focus {
   outline: none;
-  border-color: var(--purple);
+  border-color: var(--biro);
 }
 .review-pages-row input:disabled {
   opacity: 0.5;
@@ -1360,7 +1360,7 @@ button {
 }
 .review-pages-row select:focus {
   outline: none;
-  border-color: var(--purple);
+  border-color: var(--biro);
 }
 .review-pages-note {
   font-size: 0.78rem;
@@ -1378,12 +1378,12 @@ button {
 .rw-admin-panel.hidden, .rw-admin-risk.hidden { display: none; }
 .rw-admin-panel label { font-size: 0.8rem; font-weight: 600; color: var(--text-lead); }
 .rw-admin-panel select, .rw-admin-panel input, .rw-form input, .rw-form select { width: 100%; padding: 10px 12px; border-radius: var(--radius-md); border: 1px solid var(--border-hair); background: var(--surface-02); color: var(--text-pure); font: inherit; font-size: 0.88rem; }
-.rw-admin-panel select option, .rw-form select option { background: #0f0e17; }
+.rw-admin-panel select option, .rw-form select option { background: var(--sheet); }
 .rw-admin-hint { font-size: 0.78rem !important; color: var(--text-muted); line-height: 1.5; }
-.rw-admin-risk { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(248, 113, 113, 0.08); border: 1px solid rgba(248, 113, 113, 0.28); color: var(--red); font-size: 0.8rem; }
+.rw-admin-risk { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(var(--red-rgb), 0.08); border: 1px solid rgba(var(--red-rgb), 0.28); color: var(--red); font-size: 0.8rem; }
 .rw-admin-risk span { color: var(--text-lead); }
-.rw-q-badge { display: inline-block; margin: 0 8px 8px 0; padding: 4px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 600; background: rgba(168, 85, 247, 0.14); color: var(--purple-soft); }
-.rw-q-badge.risk { background: rgba(248, 113, 113, 0.12); color: var(--red); }
+.rw-q-badge { display: inline-block; margin: 0 8px 8px 0; padding: 4px 10px; border-radius: 99px; font-size: 0.72rem; font-weight: 600; background: rgba(var(--biro-rgb), 0.14); color: var(--purple-soft); }
+.rw-q-badge.risk { background: rgba(var(--red-rgb), 0.12); color: var(--red); }
 #sidebarFlagCount { background: var(--red); }
 
 /* --- Rewards: message shown after approving (what happened with the reward) --- */
@@ -1399,7 +1399,7 @@ button {
     color: #fff;
     font-size: 0.9rem;
     line-height: 1.4;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 8px 28px rgba(var(--shadow-rgb), calc(0.25 * var(--sh)));
     z-index: 10000;
 }
 .rw-approval-note.warn { background: #7a4b00; }

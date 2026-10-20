@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script src="theme.js"></script>
     <title>Terms of Service | Sharef</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Instrument+Sans:wght@400..700&display=swap" rel="stylesheet">
     <!-- Reuses entire unified palette configuration styles -->
     <link rel="stylesheet" href="verify.css">
     <link rel="stylesheet" href="responsive.css" />
+    <link rel="stylesheet" href="sharef-theme.css" />
     <style>
         /* Reusing exact same layout classes structural logic from privacy context */
         .legal-container {
@@ -36,14 +38,14 @@
             display: inline-block;
             margin-bottom: 1.5rem;
         }
-        .legal-header .logo span { color: #a855f7; }
+        .legal-header .logo span { color: var(--biro); }
 
         .legal-header h1 {
             font-size: 2.5rem;
             font-weight: 800;
             letter-spacing: -0.03em;
             margin-bottom: 0.75rem;
-            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            background: linear-gradient(to right, var(--ink), var(--text-lead));
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -56,14 +58,14 @@
         }
 
         .legal-card {
-            background: rgba(255, 255, 255, 0.02);
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: rgba(var(--ink-rgb), 0.02);
+            border: 1px solid rgba(var(--ink-rgb), 0.05);
             backdrop-filter: blur(20px);
             padding: 3.5rem;
             border-radius: 20px;
             width: 100%;
             max-width: 800px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 20px 40px rgba(var(--shadow-rgb), calc(0.4 * var(--sh)));
         }
 
         .legal-section {
@@ -90,9 +92,9 @@
             display: inline-block;
             width: 6px;
             height: 6px;
-            background: #d946ef; /* Accent shift to Pink to separate personality slightly */
+            background: var(--biro-fill); /* Accent shift to Pink to separate personality slightly */
             border-radius: 50%;
-            box-shadow: 0 0 8px #d946ef;
+            box-shadow: 0 0 8px var(--biro);
         }
 
         .legal-section p {
